@@ -149,6 +149,7 @@ function appendTradeToCsv(trade) {
 }
 
 // Binance Veri Çekici
+let lastBinanceErrTime = 0;
 async function fetchBinance(url) {
   try {
     const controller = new AbortController();
@@ -161,9 +162,19 @@ async function fetchBinance(url) {
       }
     });
     clearTimeout(timeoutId);
-    if (!res.ok) return null;
+    if (!res.ok) {
+      if (Date.now() - lastBinanceErrTime > 15000) {
+        lastBinanceErrTime = Date.now();
+        addLog(`⚠️ Binance HTTP ${res.status} (${res.statusText}) [${url.slice(0, 45)}]`, 'WARN');
+      }
+      return null;
+    }
     return await res.json();
   } catch (err) {
+    if (Date.now() - lastBinanceErrTime > 15000) {
+      lastBinanceErrTime = Date.now();
+      addLog(`⚠️ Binance Bağlantı Hatası: ${err.message}`, 'WARN');
+    }
     return null;
   }
 }
@@ -1217,6 +1228,31 @@ const server = http.createServer((req, res) => {
 
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+
+  if (pathname === '/api/test-fetch') {
+    const results = {};
+    const urls = [
+      "https://fapi.binance.com/fapi/v1/ticker/price?symbol=BTCUSDT",
+      "https://fapi1.binance.com/fapi/v1/ticker/price?symbol=BTCUSDT",
+      "https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT",
+      "https://data-api.binance.vision/api/v3/ticker/price?symbol=BTCUSDT"
+    ];
+    for (const u of urls) {
+      try {
+        const t0 = Date.now();
+        const r = await fetch(u, {
+          headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36' }
+        });
+        const txt = await r.text();
+        results[u] = { status: r.status, statusText: r.statusText, ms: Date.now() - t0, sample: txt.slice(0, 100) };
+      } catch (err) {
+        results[u] = { error: err.message };
+      }
+    }
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(results, null, 2));
+    return;
+  }
 
   if (pathname === '/ping') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
