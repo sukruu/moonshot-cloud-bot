@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: moonshot-cloud-bot
+    runtime: node
+    plan: free
+    region: frankfurt
+    buildCommand: ""
+    startCommand: node server.js
+    autoDeploy: true
