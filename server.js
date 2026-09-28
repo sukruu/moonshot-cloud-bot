@@ -19,7 +19,7 @@ const STATE_FILE = path.join(DATA_DIR, 'bot_state.json');
 
 // --- EKRAN 1 BİREBİR AYARLARI ---
 let CONFIG = {
-  initialBalance: 100.0,     // Bakiye 100 Dolar
+  initialBalance: 1000.0,    // Bakiye 1000 Dolar
   marginPerTrade: 10.0,      // Teminat 10$
   leverage: 20,              // Kaldıraç 20x
   maxSlots: 4,               // Max Slot 4 Adet
@@ -77,12 +77,15 @@ function addLog(msg, type = "INFO") {
   console.log(`[${time}] [${type}] ${msg}`);
 }
 
-// Depolamayı Başlat & Sıfırla (Bakiye 100$)
+// Depolamayı Başlat & Bakiye Eşitle ($1000)
 function initStorage() {
   try {
     if (fs.existsSync(STATE_FILE)) {
       const saved = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
       balance = (saved.balance !== undefined && !isNaN(saved.balance)) ? saved.balance : CONFIG.initialBalance;
+      if (balance < 500 && CONFIG.initialBalance >= 1000) {
+        balance = CONFIG.initialBalance + (balance - 100.0);
+      }
       activePositions = saved.activePositions || [];
       coinCooldowns = saved.coinCooldowns || {};
     } else {
@@ -483,6 +486,7 @@ async function scanLoop() {
         if (activePositions.length >= CONFIG.maxSlots || signalFound) break;
 
         const { sym, lastP, k3m, chg, isVip } = data;
+        if (activePositions.some(x => x.symbol === sym) || activeSyms.has(sym) || (coinCooldowns[sym] && coinCooldowns[sym] > Date.now())) continue;
         const lastIdx = k3m.length - 1;
 
         const curP = parseFloat(k3m[lastIdx][4]);
@@ -701,13 +705,10 @@ async function fastRiskLoop() {
       if (!exitReason && ((isLong && curP <= pos.stopPrice) || (!isLong && curP >= pos.stopPrice))) {
         if ((isLong && pos.stopPrice > pos.entryPrice * 1.005) || (!isLong && pos.stopPrice < pos.entryPrice * 0.995)) {
           exitReason = `🔒 Garanti Kilitli Kâr Çıkışı (+%${pos.roi.toFixed(1)} ROI)`;
-          coinCooldowns[pos.symbol] = now + (10 * 60 * 1000);
         } else if (pos.beLocked) {
           exitReason = `🛡️ Başabaş Koruma Çıkışı ($0.00 Risk / Zirve: +%${mfe.toFixed(2)})`;
-          coinCooldowns[pos.symbol] = now + (15 * 60 * 1000);
         } else {
           exitReason = `🛑 Moonshot Stop Loss (-%${CONFIG.slPct.toFixed(2)})`;
-          coinCooldowns[pos.symbol] = now + (30 * 60 * 1000);
         }
       }
 
@@ -729,6 +730,16 @@ function closeTrade(pos, exitReason) {
   const now = Date.now();
   const durMin = Math.round((now - pos.entryTime) / 60000);
   balance += pos.pnl;
+
+  // 🛡️ ÇOKLAMA / YENİDEN GİRİŞ TUZAĞI ENGELİ (COOLDOWN KORUMASI)
+  // Pozisyon nasıl kapanırsa kapansın (kâr, stop, başabaş, manuel), aynı koine hemen tekrar girmesini engelle!
+  if (exitReason.includes("Stop Loss")) {
+    coinCooldowns[pos.symbol] = now + (30 * 60 * 1000); // Stop olduysa 30 dk dinlenme cezası
+  } else if (exitReason.includes("Zirveden") || exitReason.includes("MEGA") || exitReason.includes("Kâr")) {
+    coinCooldowns[pos.symbol] = now + (20 * 60 * 1000); // Kâr alındıysa 20 dk dinlenme (düzeltmeden tekrar alıp terse düşmesin!)
+  } else {
+    coinCooldowns[pos.symbol] = now + (15 * 60 * 1000); // Başabaş, manuel veya diğer çıkışlar için 15 dk
+  }
 
   const tradeRecord = {
     id: history.length + 1,
@@ -1207,7 +1218,7 @@ function serveDashboardHtml() {
           <a href="/api/download-csv" class="btn-action btn-secondary">📊 CSV İNDİR</a>
           <a href="/api/backup-json" class="btn-action btn-secondary" style="color:var(--blue);">💾 YEDEK AL</a>
           <button onclick="document.getElementById('importFile').click()" class="btn-action btn-secondary" style="color:var(--purple);">📂 YEDEK YÜKLE</button>
-          <button onclick="resetBalance()" class="btn-action btn-reset">🧹 SIFIRLA ($100)</button>
+          <button onclick="resetBalance()" class="btn-action btn-reset">🧹 SIFIRLA ($1000)</button>
           <input type="file" id="importFile" accept=".json" style="display:none" onchange="handleImportBackup(event)">
         </div>
       </div>
@@ -1309,7 +1320,7 @@ function serveDashboardHtml() {
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 history: localSavedHist,
-                balance: localSavedBal ? parseFloat(localSavedBal) : 100.0
+                balance: localSavedBal ? (parseFloat(localSavedBal) < 500 ? (1000.0 + parseFloat(localSavedBal) - 100.0) : parseFloat(localSavedBal)) : 1000.0
               })
             });
             const restData = await restRes.json();
@@ -1427,7 +1438,7 @@ function serveDashboardHtml() {
     }
 
     async function resetBalance() {
-      if (!confirm("DİKKAT: Bakiye $100.00 olarak sıfırlanacak ve hem sunucudaki hem tarayıcınızdaki tüm geçmiş silinecektir. Emin misiniz?")) return;
+      if (!confirm("DİKKAT: Bakiye $1000.00 olarak sıfırlanacak ve hem sunucudaki hem tarayıcınızdaki tüm geçmiş silinecektir. Emin misiniz?")) return;
       localStorage.removeItem(LS_HIST);
       localStorage.removeItem(LS_BAL);
       await fetch('/api/reset-balance');
