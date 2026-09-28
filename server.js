@@ -114,6 +114,32 @@ function persistState() {
   } catch (e) {}
 }
 
+function getTradeRadarFields(trade) {
+  let chg3h = (trade.chg3h !== undefined && trade.chg3h !== null) ? trade.chg3h : null;
+  let vol3hM = (trade.vol3hM !== undefined && trade.vol3hM !== null) ? trade.vol3hM : null;
+  let chg24h = (trade.chg24h !== undefined && trade.chg24h !== null) ? trade.chg24h : null;
+  let range3h = trade.range3h || "";
+  let taker = (trade.takerBuyRatio !== undefined && trade.takerBuyRatio !== null) ? trade.takerBuyRatio : null;
+  let signal = trade.signal || "";
+
+  // Fallback: radarTag içerisinden regex ile ayrıştır
+  if ((chg3h === null || taker === null) && trade.radarTag) {
+    const chgMatch = trade.radarTag.match(/3s:\s*%?([+-]?[\d\.]+)/i);
+    if (chgMatch) chg3h = parseFloat(chgMatch[1]);
+    
+    const takerMatch = trade.radarTag.match(/%([\d\.]+)\s*(Alıcı|Satıcı)/i);
+    if (takerMatch) {
+      const num = parseFloat(takerMatch[1]);
+      taker = takerMatch[2] === 'Alıcı' ? num : (100 - num);
+    }
+
+    const sigMatch = trade.radarTag.match(/-\s*([^\s\]]+(?:\s+[^\s\]]+)?)/);
+    if (sigMatch) signal = sigMatch[1];
+  }
+
+  return { chg3h, vol3hM, chg24h, range3h, taker, signal };
+}
+
 function rewriteCsvFile() {
   try {
     const csvHeader = '\uFEFF' + [
@@ -128,12 +154,26 @@ function rewriteCsvFile() {
       'Net Kâr ($)',
       'ROI (%)',
       'Çıkış Nedeni',
+      '3s Değişim (%)',
+      '3s Hacim ($M)',
+      '24s Değişim (%)',
+      '3s Fiyat Aralığı',
+      'Alıcı Baskısı (%)',
+      'Radar Sinyali',
       'Radar Teyidi'
     ].join(';') + '\n';
 
     let content = csvHeader;
     const rows = history.slice().reverse();
     rows.forEach(trade => {
+      const r = getTradeRadarFields(trade);
+      const chg3hStr = (r.chg3h !== null && r.chg3h !== undefined) ? `"%${parseFloat(r.chg3h).toFixed(2)}"` : `"-"`;
+      const vol3hStr = (r.vol3hM !== null && r.vol3hM !== undefined) ? `"$${parseFloat(r.vol3hM).toFixed(1)}M"` : `"-"`;
+      const chg24hStr = (r.chg24h !== null && r.chg24h !== undefined) ? `"%${parseFloat(r.chg24h).toFixed(2)}"` : `"-"`;
+      const range3hStr = `"${(r.range3h || '-').replace(/"/g, '""')}"`;
+      const takerStr = (r.taker !== null && r.taker !== undefined) ? `"%${parseFloat(r.taker).toFixed(1)}"` : `"-"`;
+      const signalStr = `"${(r.signal || '-').replace(/"/g, '""')}"`;
+
       content += [
         trade.id,
         `"${trade.time || trade.dateFullStr || ''}"`,
@@ -146,6 +186,12 @@ function rewriteCsvFile() {
         `"$${(trade.pnl || 0).toFixed(2)}"`,
         `"%${(trade.roi || 0).toFixed(2)}"`,
         `"${(trade.exitReason || '').replace(/"/g, '""')}"`,
+        chg3hStr,
+        vol3hStr,
+        chg24hStr,
+        range3hStr,
+        takerStr,
+        signalStr,
         `"${(trade.radarTag || '').replace(/"/g, '""')}"`
       ].join(';') + '\n';
     });
@@ -161,6 +207,14 @@ function appendTradeToCsv(trade) {
       rewriteCsvFile();
       return;
     }
+    const r = getTradeRadarFields(trade);
+    const chg3hStr = (r.chg3h !== null && r.chg3h !== undefined) ? `"%${parseFloat(r.chg3h).toFixed(2)}"` : `"-"`;
+    const vol3hStr = (r.vol3hM !== null && r.vol3hM !== undefined) ? `"$${parseFloat(r.vol3hM).toFixed(1)}M"` : `"-"`;
+    const chg24hStr = (r.chg24h !== null && r.chg24h !== undefined) ? `"%${parseFloat(r.chg24h).toFixed(2)}"` : `"-"`;
+    const range3hStr = `"${(r.range3h || '-').replace(/"/g, '""')}"`;
+    const takerStr = (r.taker !== null && r.taker !== undefined) ? `"%${parseFloat(r.taker).toFixed(1)}"` : `"-"`;
+    const signalStr = `"${(r.signal || '-').replace(/"/g, '""')}"`;
+
     const row = [
       trade.id,
       `"${trade.time}"`,
@@ -173,6 +227,12 @@ function appendTradeToCsv(trade) {
       `"$${(trade.pnl || 0).toFixed(2)}"`,
       `"%${(trade.roi || 0).toFixed(2)}"`,
       `"${(trade.exitReason || '').replace(/"/g, '""')}"`,
+      chg3hStr,
+      vol3hStr,
+      chg24hStr,
+      range3hStr,
+      takerStr,
+      signalStr,
       `"${(trade.radarTag || '').replace(/"/g, '""')}"`
     ].join(';') + '\n';
     fs.appendFileSync(CSV_FILE, row, 'utf8');
@@ -511,7 +571,13 @@ async function scanLoop() {
             entryRsi: 50,
             margin: CONFIG.marginPerTrade,
             leverage: CONFIG.leverage,
-            radarTag: radarTag
+            radarTag: radarTag,
+            chg3h: rInfo ? rInfo.chg3h : null,
+            vol3hM: rInfo ? rInfo.vol3hM : null,
+            chg24h: rInfo ? rInfo.chg24h : chg,
+            range3h: rInfo ? rInfo.range3h : "",
+            takerBuyRatio: rInfo ? rInfo.takerBuyRatio : null,
+            signal: (rInfo && rInfo.signal) ? rInfo.signal : (side === "LONG" ? "🟢 BOĞA MOMENTUM" : "🔴 AYI MOMENTUM")
           };
 
           activePositions.push(position);
@@ -677,7 +743,13 @@ function closeTrade(pos, exitReason) {
     pnl: pos.pnl,
     roi: pos.roi,
     exitReason: exitReason,
-    radarTag: pos.radarTag || ""
+    radarTag: pos.radarTag || "",
+    chg3h: pos.chg3h !== undefined ? pos.chg3h : null,
+    vol3hM: pos.vol3hM !== undefined ? pos.vol3hM : null,
+    chg24h: pos.chg24h !== undefined ? pos.chg24h : null,
+    range3h: pos.range3h || "",
+    takerBuyRatio: pos.takerBuyRatio !== undefined ? pos.takerBuyRatio : null,
+    signal: pos.signal || ""
   };
 
   history.unshift(tradeRecord);
@@ -1194,6 +1266,7 @@ function serveDashboardHtml() {
                 <th>Zaman</th>
                 <th>Sembol</th>
                 <th>Yön</th>
+                <th>Sinyal & Alıcı Baskısı</th>
                 <th>Süre</th>
                 <th>Çıkış Nedeni</th>
                 <th>MFE</th>
@@ -1323,16 +1396,18 @@ function serveDashboardHtml() {
         // Geçmiş Tablosu
         const histTbody = document.getElementById("historyTbody");
         if (data.history.length === 0) {
-          histTbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--muted);padding:18px;">Henüz tamamlanan işlem geçmişi bulunmuyor.</td></tr>';
+          histTbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:var(--muted);padding:18px;">Henüz tamamlanan işlem geçmişi bulunmuyor.</td></tr>';
         } else {
           histTbody.innerHTML = data.history.slice(0, 50).map((h, idx) => {
             const isWin = (h.pnl || 0) >= 0;
+            const rTag = h.radarTag || (h.signal ? ('[' + h.signal + ']') : '-');
             return \`
               <tr>
                 <td style="color:var(--muted);font-weight:700;">\${idx+1}</td>
                 <td style="color:var(--muted);font-size:10.5px;">\${h.time}</td>
                 <td style="font-weight:800;color:#fff;">\${h.symbol}</td>
                 <td><span class="\${h.side === 'LONG' ? 'badge-side-long' : 'badge-side-short'}">\${h.side}</span></td>
+                <td><span style="font-size:10px;color:#c084fc;font-weight:700;">\${rTag}</span></td>
                 <td>\${h.durationMin} dk</td>
                 <td style="font-size:11px;color:var(--muted);">\${h.exitReason}</td>
                 <td style="color:var(--green);font-weight:800;">+%\${(h.mfe || 0).toFixed(2)}</td>
@@ -1457,16 +1532,18 @@ function renderActiveRows(positions) {
 
 function renderHistoryRows(hist) {
   if (!hist || hist.length === 0) {
-    return '<tr><td colspan="9" style="text-align:center;color:var(--muted);padding:18px;">Henüz tamamlanan işlem geçmişi bulunmuyor.</td></tr>';
+    return '<tr><td colspan="10" style="text-align:center;color:var(--muted);padding:18px;">Henüz tamamlanan işlem geçmişi bulunmuyor.</td></tr>';
   }
   return hist.slice(0, 50).map((h, idx) => {
     const isWin = (h.pnl || 0) >= 0;
+    const rTag = h.radarTag || (h.signal ? `[${h.signal}]` : '-');
     return `
       <tr>
         <td style="color:var(--muted);font-weight:700;">${idx+1}</td>
         <td style="color:var(--muted);font-size:10.5px;">${h.time}</td>
         <td style="font-weight:800;color:#fff;">${h.symbol}</td>
         <td><span class="${h.side === 'LONG' ? 'badge-side-long' : 'badge-side-short'}">${h.side}</span></td>
+        <td><span style="font-size:10px;color:#c084fc;font-weight:700;">${rTag}</span></td>
         <td>${h.durationMin} dk</td>
         <td style="font-size:11px;color:var(--muted);">${h.exitReason}</td>
         <td style="color:var(--green);font-weight:800;">+%${(h.mfe || 0).toFixed(2)}</td>
