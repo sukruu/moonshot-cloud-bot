@@ -80,24 +80,6 @@ function addLog(msg, type = "INFO") {
 // Depolamayı Başlat & Sıfırla (Bakiye 100$)
 function initStorage() {
   try {
-    if (!fs.existsSync(CSV_FILE)) {
-      const csvHeader = '\uFEFF' + [
-        'ID',
-        'Tarih & Saat',
-        'Koin',
-        'Yön',
-        'Giriş Fiyatı',
-        'Çıkış Fiyatı',
-        'Süre (Dk)',
-        'MFE (Max Kâr %)',
-        'Net Kâr ($)',
-        'ROI (%)',
-        'Çıkış Nedeni',
-        'Radar Teyidi'
-      ].join(';') + '\n';
-      fs.writeFileSync(CSV_FILE, csvHeader, 'utf8');
-    }
-
     if (fs.existsSync(STATE_FILE)) {
       const saved = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
       balance = (saved.balance !== undefined && !isNaN(saved.balance)) ? saved.balance : CONFIG.initialBalance;
@@ -109,7 +91,13 @@ function initStorage() {
 
     if (fs.existsSync(HISTORY_FILE)) {
       history = JSON.parse(fs.readFileSync(HISTORY_FILE, 'utf8'));
+      if (Array.isArray(history) && history.length > 0) {
+        const totalPnl = history.reduce((acc, h) => acc + (h.pnl || 0), 0);
+        balance = CONFIG.initialBalance + totalPnl;
+      }
     }
+
+    rewriteCsvFile();
   } catch (err) {
     addLog(`Dosya okuma: ${err.message}`, 'WARN');
   }
@@ -126,8 +114,53 @@ function persistState() {
   } catch (e) {}
 }
 
+function rewriteCsvFile() {
+  try {
+    const csvHeader = '\uFEFF' + [
+      'ID',
+      'Tarih & Saat',
+      'Koin',
+      'Yön',
+      'Giriş Fiyatı',
+      'Çıkış Fiyatı',
+      'Süre (Dk)',
+      'MFE (Max Kâr %)',
+      'Net Kâr ($)',
+      'ROI (%)',
+      'Çıkış Nedeni',
+      'Radar Teyidi'
+    ].join(';') + '\n';
+
+    let content = csvHeader;
+    const rows = history.slice().reverse();
+    rows.forEach(trade => {
+      content += [
+        trade.id,
+        `"${trade.time || trade.dateFullStr || ''}"`,
+        trade.symbol,
+        trade.side,
+        trade.entryPrice,
+        trade.exitPrice,
+        trade.durationMin,
+        `"%${(trade.mfe || 0).toFixed(2)}"`,
+        `"$${(trade.pnl || 0).toFixed(2)}"`,
+        `"%${(trade.roi || 0).toFixed(2)}"`,
+        `"${(trade.exitReason || '').replace(/"/g, '""')}"`,
+        `"${(trade.radarTag || '').replace(/"/g, '""')}"`
+      ].join(';') + '\n';
+    });
+    fs.writeFileSync(CSV_FILE, content, 'utf8');
+  } catch (err) {
+    addLog(`CSV Hatası: ${err.message}`, 'ERROR');
+  }
+}
+
 function appendTradeToCsv(trade) {
   try {
+    if (!fs.existsSync(CSV_FILE)) {
+      rewriteCsvFile();
+      return;
+    }
     const row = [
       trade.id,
       `"${trade.time}"`,
@@ -414,9 +447,6 @@ async function scanLoop() {
         const isDailyTrending = chg >= 2.0 && chg <= 80.0;
         const hasMomentum = (curMovePct >= minJump && curP > curO) || (twoCandleMovePct >= (minJump + 0.25) && curP >= curO * 0.998);
 
-        const noWickLong = curP >= curH * 0.991; // Zirveden %0.9'dan fazla satış yememiş
-        const noWickShort = curP <= curL * 1.009; // Dipten %0.9'dan fazla sekmemiş
-
         const rInfo = radarMap[sym];
         let radarOkLong = true;
         let radarOkShort = true;
@@ -430,27 +460,31 @@ async function scanLoop() {
           const chg3 = rInfo.chg3h || 0;
           const sig = rInfo.signal || "";
 
-          // 1. YÜKSELİRKEN VUR-KAÇ (LONG): 3s Değişim >= %2 VEYA Alıcı Baskısı >= %52 + Boğa/Roket
-          if ((chg3 >= 1.8 || curMovePct >= 0.70) && taker >= 51.5 && (sig.includes("ROKET") || sig.includes("BOĞA"))) {
+          // 1. YÜKSELİRKEN VUR-KAÇ (LONG): 3s Değişim >= %1.8 VEYA Alıcı Baskısı >= %51.5 + Boğa/Roket
+          if ((chg3 >= 1.8 || curMovePct >= 0.65) && taker >= 51.5 && (sig.includes("ROKET") || sig.includes("BOĞA"))) {
             isDirectRadarLong = true;
             radarTag = `[3s: +%${chg3.toFixed(1)} / %${taker.toFixed(0)} Alıcı - ${sig}]`;
           }
 
-          // 2. DÜŞERKEN VUR-KAÇ (SHORT): 3s Değişim <= -%2 VEYA Satıcı Baskısı >= %52 + Ayı/Şelale
-          if ((chg3 <= -1.8 || curMovePct <= -0.70) && taker <= 48.5 && (sig.includes("ŞELALE") || sig.includes("AYI"))) {
+          // 2. DÜŞERKEN VUR-KAÇ (SHORT): 3s Değişim <= -%1.8 VEYA Satıcı Baskısı >= %51.5 + Ayı/Şelale
+          if ((chg3 <= -1.8 || curMovePct <= -0.65) && taker <= 48.5 && (sig.includes("ŞELALE") || sig.includes("AYI"))) {
             isDirectRadarShort = true;
             radarTag = `[3s: %${chg3.toFixed(1)} / %${(100 - taker).toFixed(0)} Satıcı - ${sig}]`;
           }
 
-          if (taker < 49.0 && chg3 < -0.5) radarOkLong = false;
-          if (taker > 51.0 && chg3 > 0.5) radarOkShort = false;
+          if (taker < 48.5 && chg3 < -0.5) radarOkLong = false;
+          if (taker > 51.5 && chg3 > 0.5) radarOkShort = false;
         }
 
-        const isLongPump = (isDirectRadarLong || (hasMomentum && isWhaleVol) || (isDailyTrending && curMovePct >= 0.60 && isWhaleVol)) && noWickLong && radarOkLong;
+        // İğne tuzağı kontrolü: Doğrudan Radar Roket/Şelale sinyallerinde %3 tolerans tanı
+        const validWickLong = isDirectRadarLong ? (curP >= curH * 0.970) : (curP >= curH * 0.991);
+        const validWickShort = isDirectRadarShort ? (curP <= curL * 1.030) : (curP <= curL * 1.009);
+
+        const isLongPump = (isDirectRadarLong || (hasMomentum && isWhaleVol) || (isDailyTrending && curMovePct >= 0.60 && isWhaleVol)) && validWickLong && radarOkLong;
         
         const isDailyOverbought = chg >= 12.0;
         const hasDownMomentum = (curMovePct <= -minJump && curP < curO) || (twoCandleMovePct <= -(minJump + 0.25) && curP < curO);
-        const isShortDump = (isDirectRadarShort || (hasDownMomentum && isWhaleVol) || (isDailyOverbought && curMovePct <= -0.80 && isWhaleVol)) && noWickShort && radarOkShort;
+        const isShortDump = (isDirectRadarShort || (hasDownMomentum && isWhaleVol) || (isDailyOverbought && curMovePct <= -0.80 && isWhaleVol)) && validWickShort && radarOkShort;
 
         if (isLongPump || isShortDump) {
           const side = isLongPump ? "LONG" : "SHORT";
@@ -1012,7 +1046,15 @@ function serveDashboardHtml() {
           </div>
         </div>
 
+        <div style="background:rgba(16,185,129,0.06);border:1px solid rgba(16,185,129,0.25);border-radius:6px;padding:6px 8px;margin-bottom:10px;display:flex;align-items:center;gap:6px;font-size:10px;color:var(--green);font-weight:700;">
+          <span>⚡</span>
+          <span>7/24 Kesintisiz Hafıza & Otomatik Eşitleme Aktif</span>
+        </div>
+
         <a href="/api/download-csv" class="btn-action btn-secondary" style="font-size:11px;">📊 EXCEL / CSV İNDİR</a>
+        <a href="/api/backup-json" class="btn-action btn-secondary" style="font-size:11px;color:var(--blue);">💾 YEDEĞİ İNDİR (JSON)</a>
+        <button onclick="document.getElementById('importFile').click()" class="btn-action btn-secondary" style="font-size:11px;color:var(--purple);">📂 YEDEK YÜKLE (JSON)</button>
+        <input type="file" id="importFile" accept=".json" style="display:none" onchange="handleImportBackup(event)">
         <button onclick="resetBalance()" class="btn-action btn-secondary" style="font-size:11px;color:var(--red);">🧹 BAKİYEYİ $100'A SIFIRLA</button>
       </div>
 
@@ -1112,11 +1154,52 @@ function serveDashboardHtml() {
   </div>
 
   <script>
+    const LS_HIST = "moon_cloud_history";
+    const LS_BAL = "moon_cloud_balance";
+    let isRestoring = false;
+
     async function updateDashboard() {
       try {
         const res = await fetch('/api/status');
         if (!res.ok) return;
         const data = await res.json();
+
+        // 🛡️ İki Yönlü Dayanıklı Hafıza (Auto Self-Healing)
+        const localHistStr = localStorage.getItem(LS_HIST);
+        const localSavedHist = localHistStr ? JSON.parse(localHistStr) : [];
+        const localSavedBal = localStorage.getItem(LS_BAL);
+
+        // Durum A: Render yeniden başlamış (Sunucu geçmişi 0, ama tarayıcıda kayıt var)
+        if ((!data.history || data.history.length === 0) && localSavedHist.length > 0 && !isRestoring) {
+          isRestoring = true;
+          console.log("Sunucu belleği Render yeniden başlatması sonrası temizlenmiş. Tarayıcıdan geri yükleniyor...");
+          try {
+            const restRes = await fetch('/api/restore-state', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                history: localSavedHist,
+                balance: localSavedBal ? parseFloat(localSavedBal) : 100.0
+              })
+            });
+            const restData = await restRes.json();
+            if (restData.ok) {
+              console.log("Sunucu durumu başarıyla kurtarıldı:", restData);
+              isRestoring = false;
+              setTimeout(updateDashboard, 400);
+              return;
+            }
+          } catch (err) {
+            console.error("Geri yükleme hatası:", err);
+          }
+          isRestoring = false;
+        }
+
+        // Durum B: Sunucuda işlemler var -> Tarayıcı hafızasını güncelle
+        if (data.history && data.history.length > 0) {
+          localStorage.setItem(LS_HIST, JSON.stringify(data.history));
+          localStorage.setItem(LS_BAL, data.stats.balance);
+        }
 
         // Performans & İstatistikler
         document.getElementById("stBalance").innerText = '$' + data.stats.balance;
@@ -1251,9 +1334,43 @@ function serveDashboardHtml() {
     }
 
     async function resetBalance() {
-      if (!confirm("Bakiye $100.00 olarak sıfırlansın ve tüm geçmiş temizlensin mi?")) return;
+      if (!confirm("DİKKAT: Bakiye $100.00 olarak sıfırlanacak ve hem sunucudaki hem tarayıcınızdaki tüm geçmiş silinecektir. Emin misiniz?")) return;
+      localStorage.removeItem(LS_HIST);
+      localStorage.removeItem(LS_BAL);
       await fetch('/api/reset-balance');
       location.reload();
+    }
+
+    async function handleImportBackup(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = async (evt) => {
+        try {
+          const json = JSON.parse(evt.target.result);
+          if (!json.history || !Array.isArray(json.history)) {
+            alert("Hata: Geçersiz yedek dosyası formatı!");
+            return;
+          }
+          localStorage.setItem(LS_HIST, JSON.stringify(json.history));
+          if (json.balance) localStorage.setItem(LS_BAL, json.balance);
+          const res = await fetch('/api/import-backup', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(json)
+          });
+          const d = await res.json();
+          if (d.ok) {
+            alert("✅ Yedek başarıyla yüklendi! (" + d.restored + " adet işlem kurtarıldı, Bakiye: $" + d.balance + ")");
+            location.reload();
+          } else {
+            alert("Yükleme başarısız: " + (d.error || "Bilinmeyen hata"));
+          }
+        } catch(err) {
+          alert("Dosya okunamadı: " + err.message);
+        }
+      };
+      reader.readAsText(file);
     }
 
     // Parametreleri Dinamik Güncelleme
@@ -1342,13 +1459,38 @@ function renderHistoryRows(hist) {
   }).join('');
 }
 
+function parseJsonBody(req) {
+  return new Promise((resolve, reject) => {
+    let body = '';
+    req.on('data', chunk => {
+      body += chunk.toString();
+      if (body.length > 5 * 1024 * 1024) req.destroy();
+    });
+    req.on('end', () => {
+      try {
+        resolve(body ? JSON.parse(body) : {});
+      } catch (e) {
+        reject(e);
+      }
+    });
+    req.on('error', reject);
+  });
+}
+
 // 5. HTTP SUNUCUSU
 const server = http.createServer(async (req, res) => {
   const parsedUrl = new URL(req.url, `http://${req.headers.host}`);
   const pathname = parsedUrl.pathname;
 
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+  if (req.method === 'OPTIONS') {
+    res.writeHead(204);
+    res.end();
+    return;
+  }
 
   if (pathname === '/api/test-fetch') {
     const results = {};
@@ -1391,6 +1533,101 @@ const server = http.createServer(async (req, res) => {
       radar: radarList.slice(0, 30)
     }));
     return;
+  }
+
+  // 🛡️ TARAYICIDAN OTOMATİK DURUM VE GEÇMİŞ KURTARMA (RENDER YENİDEN BAŞLAMASINA KARŞI)
+  if (pathname === '/api/restore-state' && req.method === 'POST') {
+    try {
+      const body = await parseJsonBody(req);
+      if (body && Array.isArray(body.history) && body.history.length > 0) {
+        const existingIds = new Set(history.map(h => h.id));
+        let addedCount = 0;
+        body.history.forEach(t => {
+          if (!existingIds.has(t.id)) {
+            history.push(t);
+            existingIds.add(t.id);
+            addedCount++;
+          }
+        });
+        history.sort((a, b) => (b.id || 0) - (a.id || 0));
+        if (history.length > 500) history = history.slice(0, 500);
+
+        const totalPnl = history.reduce((acc, h) => acc + (h.pnl || 0), 0);
+        balance = CONFIG.initialBalance + totalPnl;
+
+        rewriteCsvFile();
+        persistState();
+        try {
+          fs.writeFileSync(HISTORY_FILE, JSON.stringify(history.slice(0, 100), null, 2), 'utf8');
+        } catch(e) {}
+
+        addLog(`💾 Tarayıcı Hafızasından (LocalStorage) Bakiye ($${balance.toFixed(2)}) ve ${history.length} Adet İşlem Başarıyla Kurtarıldı! (+${addedCount} yeni)`, 'RESTORE');
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, restored: history.length, balance, added: addedCount }));
+        return;
+      }
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, error: "Geçersiz geçmiş verisi" }));
+      return;
+    } catch(err) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, error: err.message }));
+      return;
+    }
+  }
+
+  // 💾 JSON YEDEK İNDİRME
+  if (pathname === '/api/backup-json') {
+    const backupData = {
+      appName: "Moonshot 7/24 Cloud Bot",
+      version: "2.1",
+      exportDate: new Date().toISOString(),
+      balance,
+      initialBalance: CONFIG.initialBalance,
+      config: CONFIG,
+      stats: getStats(),
+      activePositions,
+      history
+    };
+    const jsonStr = JSON.stringify(backupData, null, 2);
+    res.writeHead(200, {
+      'Content-Type': 'application/json; charset=utf-8',
+      'Content-Disposition': 'attachment; filename="moonshot_bot_backup.json"'
+    });
+    res.end(jsonStr);
+    return;
+  }
+
+  // 📂 JSON YEDEK YÜKLEME
+  if (pathname === '/api/import-backup' && req.method === 'POST') {
+    try {
+      const body = await parseJsonBody(req);
+      if (body && Array.isArray(body.history)) {
+        history = body.history;
+        if (body.balance && !isNaN(body.balance)) {
+          balance = parseFloat(body.balance);
+        } else {
+          const totalPnl = history.reduce((acc, h) => acc + (h.pnl || 0), 0);
+          balance = (body.initialBalance || CONFIG.initialBalance) + totalPnl;
+        }
+        rewriteCsvFile();
+        persistState();
+        try {
+          fs.writeFileSync(HISTORY_FILE, JSON.stringify(history.slice(0, 100), null, 2), 'utf8');
+        } catch(e) {}
+        addLog(`📂 Yedek Dosyası Yüklendi: $${balance.toFixed(2)} Bakiye, ${history.length} Adet İşlem!`, 'RESTORE');
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, restored: history.length, balance }));
+        return;
+      }
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, error: "Geçersiz yedek formatı" }));
+      return;
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, error: err.message }));
+      return;
+    }
   }
 
   if (pathname === '/api/close-position') {
@@ -1444,9 +1681,7 @@ const server = http.createServer(async (req, res) => {
 
   if (pathname === '/api/download-csv') {
     if (!fs.existsSync(CSV_FILE)) {
-      res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
-      res.end("Henüz CSV kayıt dosyası oluşmadı.");
-      return;
+      rewriteCsvFile();
     }
     const stat = fs.statSync(CSV_FILE);
     res.writeHead(200, {
@@ -1477,4 +1712,12 @@ server.listen(PORT, () => {
   setInterval(scanLoop, CONFIG.scanIntervalMs);
   setInterval(fastRiskLoop, CONFIG.riskIntervalMs);
   setInterval(updateRadar, CONFIG.radarIntervalMs);
+
+  // 🛡️ Otomatik Uyku Önleyici (Keep-Alive Self Ping)
+  const KEEP_ALIVE_URL = process.env.RENDER_EXTERNAL_URL || "https://moonshot-cloud-bot.onrender.com";
+  setInterval(async () => {
+    try {
+      await fetch(`${KEEP_ALIVE_URL}/ping`);
+    } catch(e) {}
+  }, 8 * 60 * 1000);
 });
