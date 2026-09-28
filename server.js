@@ -148,35 +148,47 @@ function appendTradeToCsv(trade) {
   }
 }
 
-// Binance Veri Çekici
-let lastBinanceErrTime = 0;
+// BİNANCE RESMİ API & ISP/DPI/BULUT ENGELİNE KARŞI ÇOKLU AYNA SİSTEMİ
+const BINANCE_FAPI_MIRRORS = [
+  "https://www.binance.info",
+  "https://fapi.binance.com",
+  "https://fapi1.binance.com",
+  "https://fapi2.binance.com",
+  "https://fapi3.binance.com"
+];
+
 async function fetchBinance(url) {
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 7000);
-    const res = await fetch(url, {
-      signal: controller.signal,
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'application/json'
-      }
-    });
-    clearTimeout(timeoutId);
-    if (!res.ok) {
-      if (Date.now() - lastBinanceErrTime > 15000) {
-        lastBinanceErrTime = Date.now();
-        addLog(`⚠️ Binance HTTP ${res.status} (${res.statusText}) [${url.slice(0, 45)}]`, 'WARN');
-      }
-      return null;
+  let relativePath = url;
+  if (url.startsWith("http")) {
+    try {
+      const parsed = new URL(url);
+      relativePath = parsed.pathname + parsed.search;
+    } catch(e) {
+      relativePath = url.replace(/^https?:\/\/[^\/]+/, "");
     }
-    return await res.json();
-  } catch (err) {
-    if (Date.now() - lastBinanceErrTime > 15000) {
-      lastBinanceErrTime = Date.now();
-      addLog(`⚠️ Binance Bağlantı Hatası: ${err.message}`, 'WARN');
-    }
-    return null;
   }
+
+  for (const base of BINANCE_FAPI_MIRRORS) {
+    try {
+      const targetUrl = base + relativePath;
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 6000);
+      const res = await fetch(targetUrl, {
+        signal: controller.signal,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'application/json'
+        }
+      });
+      clearTimeout(timeoutId);
+      if (!res.ok) continue;
+      const data = await res.json();
+      if (data) return data;
+    } catch(e) {
+      // Bir sonraki aynaya otomatik geç
+    }
+  }
+  return null;
 }
 
 // 1. RADAR (15DK ÇOKLU ZAMAN & ALICI BASKISI)
@@ -1222,7 +1234,7 @@ function renderHistoryRows(hist) {
 }
 
 // 5. HTTP SUNUCUSU
-const server = http.createServer((req, res) => {
+const server = http.createServer(async (req, res) => {
   const parsedUrl = new URL(req.url, `http://${req.headers.host}`);
   const pathname = parsedUrl.pathname;
 
