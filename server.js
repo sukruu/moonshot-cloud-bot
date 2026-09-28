@@ -1,12 +1,9 @@
 /**
  * ============================================================================
- * 🚀 MOONSHOT 7/24 BULUT TEST LABORATUVARI (SCREEN 1 HEADLESS MOTORU)
+ * 🚀 MOONSHOT 7/24 BULUT TEST LABORATUVARI (SCREEN 1 - BİREBİR EKRAN MOTORU)
  * ============================================================================
- * Tamamen ücretsiz (0 TL), kredi kartsız bulutta (Render / Koyeb / Vps) 
- * veya yerel bilgisayarda 7/24 kesintisiz çalışarak Binance verilerini tarar,
- * alım-satım simülasyonunu yürütür ve tüm test sonuçlarını CSV/Excel'e kaydeder.
- * 
- * Sıfır NPM Bağımlılığı - Node.js yerel kütüphaneleri (http, fs, path) ile çalışır.
+ * Bakiye: $100.00 | Max Slot: 4 | Teminat: $10 | Kaldıraç: 20x | SL: %2.50 | BE: %1.80
+ * HTML Ekran 1 tasarımı, renkleri, panelleri ve kuralları ile 1-e-1 aynı.
  * ============================================================================
  */
 
@@ -20,28 +17,44 @@ const HISTORY_FILE = path.join(DATA_DIR, 'trades_history.json');
 const CSV_FILE = path.join(DATA_DIR, 'trades_history.csv');
 const STATE_FILE = path.join(DATA_DIR, 'bot_state.json');
 
-// --- BOT AYARLARI (HTML EKRAN 1 İLE BİREBİR AYNI) ---
-const CONFIG = {
-  initialBalance: 1000.0,
-  marginPerTrade: 10.0,       // İşlem Başı Teminat ($)
-  leverage: 20,              // Kaldıraç (20x)
-  maxSlots: 3,               // Eşzamanlı Maksimum Pozisyon
-  slPct: 1.20,               // Stop Loss (% spot = %24 ROI)
-  bePct: 1.50,               // Erken Başabaş Kilidi (% spot)
-  moonPct: 15.00,            // Mega Moonshot Hedefi (% spot = %300 ROI)
-  feeRate: 0.0008,           // Giriş + Çıkış Taker Komisyonu (%0.08)
-  scanIntervalMs: 3500,      // Tarama Döngüsü (3.5 saniye)
-  riskIntervalMs: 2000,      // Risk & Stop Döngüsü (2 saniye)
-  radarIntervalMs: 60000     // 15dk/1s Radar Confluence Döngüsü (60 saniye)
+// --- EKRAN 1 BİREBİR AYARLARI ---
+let CONFIG = {
+  initialBalance: 100.0,     // Bakiye 100 Dolar
+  marginPerTrade: 10.0,      // Teminat 10$
+  leverage: 20,              // Kaldıraç 20x
+  maxSlots: 4,               // Max Slot 4 Adet
+  slPct: 2.50,               // Stop Loss %2.50
+  bePct: 1.80,               // Otomatik Başabaş %1.80 ($0 Risk)
+  moonPct: 15.00,            // Vur-Kaç Moonshot %15.00
+  feeRate: 0.0008,           // 0.04% Giriş + 0.04% Çıkış Taker
+  scanIntervalMs: 3500,
+  riskIntervalMs: 2000,
+  radarIntervalMs: 60000
 };
 
-// Yasaklı koinler & stabil pariteler
+// ŞAMPİYON ÖNCELİKLİ KOİNLER (Ekran 1 VIP Listesi)
+const DEFAULT_VIP_TARGETS = {
+  "ONEUSDT":   { minVol: 50,  label: "🎯 Lazer Sniper ($400M+ Hacim)" },
+  "SAGAUSDT":  { minVol: 50,  label: "🎯 Roket Kırılım ($200M Hacim)" },
+  "BULLAUSDT": { minVol: 30,  label: "🚀 Güçlü İvme" },
+  "ENAUSDT":   { minVol: 50,  label: "💎 Hacim Lideri ($540M Hacim)" },
+  "NEARUSDT":  { minVol: 100, label: "💎 Dev Trendci ($1.2B Hacim)" },
+  "SEIUSDT":   { minVol: 40,  label: "🚀 Hızlı Sıçrayan ($110M Hacim)" },
+  "TIAUSDT":   { minVol: 50,  label: "🚀 Trend Lideri ($300M+ Hacim)" },
+  "SUIUSDT":   { minVol: 100, label: "⚡ Likidite Canavarı ($900M+ Hacim)" },
+  "PLUMEUSDT": { minVol: 20,  label: "⚡ Yeni Ralli" },
+  "BERAUSDT":  { minVol: 20,  label: "🔥 Hızlı Hareket" },
+  "PEOPLEUSDT":{ minVol: 30,  label: "🎯 Yüksek Volatilite" }
+};
+
+let VIP_TARGETS = { ...DEFAULT_VIP_TARGETS };
+
 const BANNED_SYMBOLS = new Set([
   'BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT',
   'USDCUSDT', 'FDUSDUSDT', 'TUSDUSDT', 'EURUSDT'
 ]);
 
-// --- DURUM YÖNETİMİ ---
+// --- DURUM DEĞİŞKENLERİ ---
 let balance = CONFIG.initialBalance;
 let activePositions = [];
 let history = [];
@@ -50,27 +63,24 @@ let rollingTickerPrices = {};
 let radarMap = {};
 let logs = [];
 let startTime = Date.now();
-let lastScanTime = 0;
-let lastScanLogTime = 0;
-let lastRiskTime = 0;
+let btc15mTrend = "+0.00%";
+let btc15mIsGreen = true;
 let isScanRunning = false;
 let isRiskRunning = false;
 let isRadarRunning = false;
+let isBotActive = true;
 
-// --- GÜNLÜK KAYITLARI (LOGGING) ---
 function addLog(msg, type = "INFO") {
   const time = new Date().toLocaleTimeString('tr-TR');
-  const entry = { time, type, msg };
-  logs.unshift(entry);
+  logs.unshift({ time, type, msg });
   if (logs.length > 150) logs.pop();
   console.log(`[${time}] [${type}] ${msg}`);
 }
 
-// --- CSV BAŞLIĞI VE DOSYA BAŞLATMA ---
+// Depolamayı Başlat & Sıfırla (Bakiye 100$)
 function initStorage() {
   try {
     if (!fs.existsSync(CSV_FILE)) {
-      // Excel Türkçe karakter ve sütun uyumu için UTF-8 BOM ve noktalı virgül
       const csvHeader = '\uFEFF' + [
         'ID',
         'Tarih & Saat',
@@ -79,31 +89,29 @@ function initStorage() {
         'Giriş Fiyatı',
         'Çıkış Fiyatı',
         'Süre (Dk)',
-        'MFE (En Yüksek %)',
+        'MFE (Max Kâr %)',
         'Net Kâr ($)',
         'ROI (%)',
         'Çıkış Nedeni',
-        'Radar / Teyit Notu'
+        'Radar Teyidi'
       ].join(';') + '\n';
       fs.writeFileSync(CSV_FILE, csvHeader, 'utf8');
-      addLog("📁 Yeni CSV işlem kayıt dosyası oluşturuldu: trades_history.csv");
-    }
-
-    if (fs.existsSync(HISTORY_FILE)) {
-      const data = fs.readFileSync(HISTORY_FILE, 'utf8');
-      history = JSON.parse(data);
-      addLog(`📁 ${history.length} adet geçmiş işlem dosyadan yüklendi.`);
     }
 
     if (fs.existsSync(STATE_FILE)) {
-      const state = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
-      balance = state.balance || CONFIG.initialBalance;
-      activePositions = state.activePositions || [];
-      coinCooldowns = state.coinCooldowns || {};
-      addLog(`📁 Önceki durum yüklendi: Bakiye $${balance.toFixed(2)}, Açık: ${activePositions.length}`);
+      const saved = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
+      balance = (saved.balance !== undefined && !isNaN(saved.balance)) ? saved.balance : CONFIG.initialBalance;
+      activePositions = saved.activePositions || [];
+      coinCooldowns = saved.coinCooldowns || {};
+    } else {
+      balance = CONFIG.initialBalance;
+    }
+
+    if (fs.existsSync(HISTORY_FILE)) {
+      history = JSON.parse(fs.readFileSync(HISTORY_FILE, 'utf8'));
     }
   } catch (err) {
-    addLog(`Dosya okuma uyarısı: ${err.message}`, 'WARN');
+    addLog(`Dosya okuma: ${err.message}`, 'WARN');
   }
 }
 
@@ -115,9 +123,7 @@ function persistState() {
       coinCooldowns,
       savedAt: Date.now()
     }, null, 2), 'utf8');
-  } catch (err) {
-    console.error("Durum kaydedilemedi:", err.message);
-  }
+  } catch (e) {}
 }
 
 function appendTradeToCsv(trade) {
@@ -136,15 +142,13 @@ function appendTradeToCsv(trade) {
       `"${(trade.exitReason || '').replace(/"/g, '""')}"`,
       `"${(trade.radarTag || '').replace(/"/g, '""')}"`
     ].join(';') + '\n';
-    
     fs.appendFileSync(CSV_FILE, row, 'utf8');
   } catch (err) {
-    addLog(`CSV yazma hatası: ${err.message}`, 'ERROR');
+    addLog(`CSV Hatası: ${err.message}`, 'ERROR');
   }
 }
 
-// --- BİNANCE API YARDIMCISI ---
-let lastApiErrorLog = 0;
+// Binance Veri Çekici
 async function fetchBinance(url) {
   try {
     const controller = new AbortController();
@@ -157,39 +161,39 @@ async function fetchBinance(url) {
       }
     });
     clearTimeout(timeoutId);
-    if (!res.ok) {
-      if (Date.now() - lastApiErrorLog > 15000) {
-        lastApiErrorLog = Date.now();
-        addLog(`⚠️ Binance HTTP ${res.status} (${res.statusText}) [${url.slice(0, 45)}]`, 'WARN');
-      }
-      return null;
-    }
+    if (!res.ok) return null;
     return await res.json();
   } catch (err) {
-    if (Date.now() - lastApiErrorLog > 15000) {
-      lastApiErrorLog = Date.now();
-      addLog(`⚠️ Binance Bağlantı Hatası: ${err.message}`, 'WARN');
-    }
     return null;
   }
 }
 
-// --- 1. RADAR MODÜLÜ (15DK ÇOKLU ZAMAN VE ALICI BASKISI) ---
+// 1. RADAR (15DK ÇOKLU ZAMAN & ALICI BASKISI)
 async function updateRadar() {
   if (isRadarRunning) return;
   isRadarRunning = true;
   try {
-    const tickers = await fetchBinance("https://fapi.binance.com/fapi/v1/ticker/24hr");
+    const [btcKlines, tickers] = await Promise.all([
+      fetchBinance("https://fapi.binance.com/fapi/v1/klines?symbol=BTCUSDT&interval=15m&limit=2"),
+      fetchBinance("https://fapi.binance.com/fapi/v1/ticker/24hr")
+    ]);
+
+    if (btcKlines && btcKlines.length >= 2) {
+      const o = parseFloat(btcKlines[btcKlines.length - 1][1]);
+      const c = parseFloat(btcKlines[btcKlines.length - 1][4]);
+      const btcMove = ((c - o) / o) * 100;
+      btc15mTrend = `${btcMove >= 0 ? '+' : ''}${btcMove.toFixed(2)}%`;
+      btc15mIsGreen = btcMove >= 0;
+    }
+
     if (!tickers || !Array.isArray(tickers)) return;
 
-    // Hacmi $5M+ olan USDT paritelerini filtrele
     const valid = tickers.filter(t => {
       if (!t.symbol.endsWith("USDT") || t.symbol.startsWith("USDC") || BANNED_SYMBOLS.has(t.symbol)) return false;
       const volM = (parseFloat(t.quoteVolume) || 0) / 1e6;
       return volM >= 4.0;
     });
 
-    // 20'li paralel gruplarla 15m mumlarını çek
     const chunkSize = 20;
     for (let i = 0; i < Math.min(valid.length, 60); i += chunkSize) {
       const chunk = valid.slice(i, i + chunkSize);
@@ -199,8 +203,6 @@ async function updateRadar() {
         if (klines && klines.length > 0) {
           const c = klines[klines.length - 1];
           const openP = parseFloat(c[1]);
-          const highP = parseFloat(c[2]);
-          const lowP = parseFloat(c[3]);
           const closeP = parseFloat(c[4]);
           const volUsdt = parseFloat(c[7]) || 0;
           const takerBuyUsdt = parseFloat(c[10]) || 0;
@@ -224,22 +226,19 @@ async function updateRadar() {
         }
       }));
     }
-    addLog(`📡 15dk/1s Radar güncellendi: ${Object.keys(radarMap).length} koin alıcı/satıcı baskısı analiz edildi.`);
   } catch (err) {
-    // Sessiz hata yakalama
   } finally {
     isRadarRunning = false;
   }
 }
 
-// --- 2. CANLI TARAYICI MOTORU (SCAN LOOP) ---
+// 2. CANLI TARAMA (350+ KOİN BALİNA & MOONSHOT AVCISI)
+let lastScanHeartbeat = 0;
 async function scanLoop() {
-  if (isScanRunning) return;
+  if (isScanRunning || !isBotActive) return;
   isScanRunning = true;
-  lastScanTime = Date.now();
   try {
     if (activePositions.length >= CONFIG.maxSlots) {
-      // Slotlar doluysa ve uyuyan coin varsa rotasyon kontrolü
       checkSlotRotation();
       return;
     }
@@ -248,32 +247,32 @@ async function scanLoop() {
     if (!tickers || !Array.isArray(tickers)) return;
 
     const now = Date.now();
+    const vipSyms = Object.keys(VIP_TARGETS).filter(s => !BANNED_SYMBOLS.has(s));
 
-    // Rolling momentum takibi (3 dakikalık hafıza)
+    // Rolling momentum
     tickers.forEach(t => {
       const sym = t.symbol;
       const p = parseFloat(t.lastPrice);
       if (!rollingTickerPrices[sym]) rollingTickerPrices[sym] = [];
       const hist = rollingTickerPrices[sym];
       hist.push({ t: now, p });
-      while (hist.length > 0 && now - hist[0].t > 180000) {
-        hist.shift();
-      }
+      while (hist.length > 0 && now - hist[0].t > 180000) hist.shift();
     });
 
-    const activeSymbols = new Set(activePositions.map(p => p.symbol));
+    const activeSyms = new Set(activePositions.map(x => x.symbol));
 
-    const candidates = tickers.filter(t => {
+    const validTickers = tickers.filter(t => {
       if (!t.symbol.endsWith("USDT") || t.symbol.startsWith("USDC") || BANNED_SYMBOLS.has(t.symbol)) return false;
-      if (activeSymbols.has(t.symbol)) return false;
-      if (coinCooldowns[t.symbol] && coinCooldowns[t.symbol] > now) return false;
       const p = parseFloat(t.lastPrice);
       return p >= 0.0001;
-    }).map(t => {
+    });
+
+    const topCandidates = validTickers.map(t => {
       const sym = t.symbol;
       const volM = (parseFloat(t.quoteVolume) || 0) / 1e6;
       const rawChg = parseFloat(t.priceChangePercent) || 0;
-      
+      const isVip = vipSyms.includes(sym);
+
       const hist = rollingTickerPrices[sym];
       let rollMovePct = 0;
       if (hist && hist.length >= 2) {
@@ -282,59 +281,63 @@ async function scanLoop() {
         if (oldest.p > 0) rollMovePct = ((newest.p - oldest.p) / oldest.p) * 100;
       }
 
-      // Radar Puanı Katlayıcısı
       const rInfo = radarMap[sym];
       let radarBoost = 0;
       if (rInfo) {
         if (rInfo.chg15m >= 1.0 && rInfo.takerBuyRatio >= 50) {
           radarBoost = (rInfo.chg15m * 20) + ((rInfo.takerBuyRatio - 50) * 4.0);
-          if (rInfo.signal.includes("ROKET") || rInfo.signal.includes("BOĞA")) radarBoost += 30;
+          if (rInfo.signal && (rInfo.signal.includes("ROKET") || rInfo.signal.includes("BOĞA"))) radarBoost += 30;
         } else if (rInfo.chg15m <= -1.0 && rInfo.takerBuyRatio <= 50) {
           radarBoost = (Math.abs(rInfo.chg15m) * 16) + ((50 - rInfo.takerBuyRatio) * 3.5);
-          if (rInfo.signal.includes("ŞELALE") || rInfo.signal.includes("AYI")) radarBoost += 30;
+          if (rInfo.signal && (rInfo.signal.includes("ŞELALE") || rInfo.signal.includes("AYI"))) radarBoost += 30;
         }
       }
 
       const instantScore = rollMovePct > 0 ? rollMovePct * 12 : Math.abs(rollMovePct) * 8;
-      const hotScore = instantScore + Math.abs(rawChg > 0 ? Math.min(rawChg, 25) : Math.max(rawChg, -25)) + (Math.sqrt(volM) * 1.8) + radarBoost;
+      const hotScore = instantScore + Math.abs(rawChg > 0 ? Math.min(rawChg, 25) : Math.max(rawChg, -25)) + (Math.sqrt(volM) * 1.8) + (isVip ? 20 : 0) + radarBoost;
 
       return {
-        symbol: sym,
-        lastPrice: parseFloat(t.lastPrice),
+        ...t,
         volM,
         chg: rawChg,
         rollMovePct,
-        hotScore
+        hotScore,
+        isVip
       };
     })
-    .filter(t => t.volM >= 3.0)
+    .filter(t => t.isVip || t.volM >= 4.0)
     .sort((a, b) => b.hotScore - a.hotScore)
-    .slice(0, 30);
+    .slice(0, 80);
 
-    if (now - lastScanLogTime > 40000 && candidates.length > 0) {
-      lastScanLogTime = now;
-      const top1 = candidates[0];
-      addLog(`🔍 Piyasa taranıyor (350+ vadeli koin). Lider ivme: ${top1.symbol} (24s: %${top1.chg.toFixed(1)}, Puan: ${top1.hotScore.toFixed(0)}) | Slot: ${activePositions.length}/${CONFIG.maxSlots}`);
+    if (now - lastScanHeartbeat > 45000 && topCandidates.length > 0) {
+      lastScanHeartbeat = now;
+      addLog(`🔍 350+ Koin Taranıyor | Lider: ${topCandidates[0].symbol} (%${topCandidates[0].chg.toFixed(1)}, Puan: ${topCandidates[0].hotScore.toFixed(0)}) | Slot: ${activePositions.length}/${CONFIG.maxSlots}`);
     }
 
-    // 5'li paralel kline incelemesi
+    // 5'li paralel kline taraması
     const chunkSize = 5;
-    let opened = false;
-    for (let ci = 0; ci < candidates.length && !opened; ci += chunkSize) {
+    let signalFound = false;
+
+    for (let ci = 0; ci < topCandidates.length && !signalFound; ci += chunkSize) {
       if (activePositions.length >= CONFIG.maxSlots) break;
-      const chunk = candidates.slice(ci, ci + chunkSize);
+      const chunk = topCandidates.slice(ci, ci + chunkSize);
 
       const chunkData = await Promise.all(chunk.map(async item => {
-        const k3m = await fetchBinance(`https://fapi.binance.com/fapi/v1/klines?symbol=${item.symbol}&interval=3m&limit=30`);
-        return { item, k3m };
+        const sym = item.symbol;
+        if (activeSyms.has(sym)) return null;
+        if (activePositions.some(x => x.symbol === sym)) return null;
+        if (coinCooldowns[sym] && coinCooldowns[sym] > Date.now()) return null;
+        const lastP = parseFloat(item.lastPrice);
+        if (lastP < 0.0001) return null;
+        const k3m = await fetchBinance(`https://fapi.binance.com/fapi/v1/klines?symbol=${sym}&interval=3m&limit=30`);
+        return { sym, lastP, k3m, chg: parseFloat(item.priceChangePercent) || 0, isVip: item.isVip };
       }));
 
-      for (const res of chunkData) {
-        if (!res || !res.k3m || res.k3m.length < 22) continue;
-        if (activePositions.length >= CONFIG.maxSlots) break;
+      for (const data of chunkData) {
+        if (!data || !data.k3m || data.k3m.length < 22) continue;
+        if (activePositions.length >= CONFIG.maxSlots || signalFound) break;
 
-        const { item, k3m } = res;
-        const sym = item.symbol;
+        const { sym, lastP, k3m, chg, isVip } = data;
         const lastIdx = k3m.length - 1;
 
         const curP = parseFloat(k3m[lastIdx][4]);
@@ -343,32 +346,29 @@ async function scanLoop() {
         const curL = parseFloat(k3m[lastIdx][3]);
         const curV = parseFloat(k3m[lastIdx][5]);
 
-        const prevO = parseFloat(k3m[lastIdx - 1][1]);
         const prevC = parseFloat(k3m[lastIdx - 1][4]);
+        const prevO = parseFloat(k3m[lastIdx - 1][1]);
         const prevV = parseFloat(k3m[lastIdx - 1][5]);
 
-        // 20 mumluk hacim ortalaması
         let sumVol20 = 0;
-        for (let m = lastIdx - 20; m < lastIdx; m++) {
-          sumVol20 += parseFloat(k3m[m][5]);
-        }
+        for (let m = lastIdx - 20; m < lastIdx; m++) sumVol20 += parseFloat(k3m[m][5]);
         const avgVol20 = (sumVol20 / 20) || 1;
 
         const curMovePct = ((curP - curO) / curO) * 100;
         const twoCandleMovePct = ((curP - prevO) / prevO) * 100;
+        const minJump = isVip ? 0.80 : 1.00;
 
-        const isWhaleVol = curV >= avgVol20 * 2.0 || (curV + prevV) >= avgVol20 * 3.0;
-        const isDailyTrending = item.chg >= 2.0 && item.chg <= 80.0;
-        const hasMomentum = (curMovePct >= 1.00 && curP > curO) || (twoCandleMovePct >= 1.30 && curP >= curO * 0.998);
+        const isWhaleVol = curV >= avgVol20 * 2.0 || (curV + prevV) >= avgVol20 * 3.0 || prevV >= avgVol20 * 2.0;
+        const isDailyTrending = chg >= 2.0 && chg <= 80.0;
+        const hasMomentum = (curMovePct >= minJump && curP > curO) || (twoCandleMovePct >= (minJump + 0.30) && curP >= curO * 0.998);
 
-        // İğne / Tuzak Filtresi: Tepeden %0.8'den fazla satış yememiş olmalı
         const noWickLong = curP >= curH * 0.992;
 
-        // Radar Teyidi
         const rInfo = radarMap[sym];
         let radarOkLong = true;
         let radarOkShort = true;
         let radarTag = "";
+
         if (rInfo) {
           if (rInfo.takerBuyRatio < 50 || rInfo.chg15m < -0.20) radarOkLong = false;
           if (rInfo.takerBuyRatio > 50 || rInfo.chg15m > 0.20) radarOkShort = false;
@@ -381,9 +381,8 @@ async function scanLoop() {
 
         const isLongPump = ((hasMomentum && isWhaleVol) || (isDailyTrending && curMovePct >= 0.70 && isWhaleVol)) && noWickLong && radarOkLong;
         
-        // SHORT Kuralları
-        const isDailyOverbought = item.chg >= 15.0;
-        const hasDownMomentum = (curMovePct <= -1.00 && curP < curO) || (twoCandleMovePct <= -1.30 && curP < curO);
+        const isDailyOverbought = chg >= 15.0;
+        const hasDownMomentum = (curMovePct <= -minJump && curP < curO) || (twoCandleMovePct <= -(minJump + 0.30) && curP < curO);
         const noWickShort = curP <= curL * 1.008;
         const isShortDump = ((hasDownMomentum && isWhaleVol) || (isDailyOverbought && curMovePct <= -0.90 && isWhaleVol)) && noWickShort && radarOkShort;
 
@@ -402,32 +401,35 @@ async function scanLoop() {
             entryTime: Date.now(),
             stopPrice: stopPrice,
             beLocked: false,
+            tier1Locked: false,
+            tp1Taken: false,
+            tp2Taken: false,
             mfe: 0.0,
             mae: 0.0,
             pnl: 0.0,
             roi: 0.0,
+            entryRsi: 50,
             margin: CONFIG.marginPerTrade,
             leverage: CONFIG.leverage,
             radarTag: radarTag
           };
 
           activePositions.push(position);
-          opened = true;
+          activeSyms.add(sym);
+          signalFound = true;
           persistState();
 
-          addLog(`🚀 POZİSYON AÇILDI: [${side}] ${sym} @ ${curP} (SL: ${stopPrice.toFixed(4)}) ${radarTag}`, 'TRADE');
+          addLog(`🚀 POZİSYON AÇILDI: [${side}] ${sym} @ $${curP.toFixed(4)} (SL: $${stopPrice.toFixed(4)}) ${radarTag}`, 'TRADE');
           break;
         }
       }
     }
   } catch (err) {
-    addLog(`Tarama hatası: ${err.message}`, 'WARN');
   } finally {
     isScanRunning = false;
   }
 }
 
-// Slot Doluysa Uyuyan Coini Kapatıp Yeni Fırsata Yer Aç
 function checkSlotRotation() {
   if (activePositions.length < CONFIG.maxSlots) return;
   const now = Date.now();
@@ -436,7 +438,6 @@ function checkSlotRotation() {
 
   activePositions.forEach((pos, idx) => {
     const durMin = (now - pos.entryTime) / 60000;
-    // 25 dakikadır açık ve kâr/zararı %0.30'u geçememişse "uykucu" sayılır
     if (durMin >= 25 && Math.abs(pos.mfe || 0) < 0.60 && Math.abs(pos.roi || 0) < 5.0) {
       if (durMin > maxDuration) {
         maxDuration = durMin;
@@ -452,11 +453,10 @@ function checkSlotRotation() {
   }
 }
 
-// --- 3. HIZLI RİSK & KÂR KİLİTLEME MOTORU (FAST RISK LOOP) ---
+// 3. LAZER RİSK & KÂR KİLİTLEME (FAST RISK LOOP)
 async function fastRiskLoop() {
   if (isRiskRunning || activePositions.length === 0) return;
   isRiskRunning = true;
-  lastRiskTime = Date.now();
   try {
     const prices = await fetchBinance("https://fapi.binance.com/fapi/v1/ticker/price");
     if (!prices || !Array.isArray(prices)) return;
@@ -488,7 +488,7 @@ async function fastRiskLoop() {
 
       let exitReason = null;
 
-      // 1. AŞAMA: ERKEN BAŞABAŞ KİLİDİ (+%1.50)
+      // 1. ERKEN BAŞABAŞ KİLİDİ (%1.80)
       if (!pos.beLocked && pos.mfe >= CONFIG.bePct) {
         pos.beLocked = true;
         pos.stopPrice = isLong ? pos.entryPrice * 1.002 : pos.entryPrice * 0.998;
@@ -496,7 +496,7 @@ async function fastRiskLoop() {
         addLog(`🛡️ ${pos.symbol} +%${pos.mfe.toFixed(2)} Kâra Ulaştı! Stop Girişe Çekildi ($0 RİSK)`);
       }
 
-      // 2. AŞAMA: GARANTİ KÂR KİLİTLERİ (Kârı Masada Bırakma!)
+      // 2. GARANTİ KÂR KİLİTLERİ
       if (pos.mfe >= 2.50) {
         const guaranteedStop = isLong ? pos.entryPrice * 1.0120 : pos.entryPrice * 0.9880;
         if (!pos.stopPrice || (isLong && guaranteedStop > pos.stopPrice) || (!isLong && guaranteedStop < pos.stopPrice)) {
@@ -519,19 +519,19 @@ async function fastRiskLoop() {
         }
       }
 
-      // 3. AŞAMA: DİNAMİK TRAILING STOP (Genişletilmiş Moonshot Toleransı)
+      // 3. DİNAMİK İZSÜREN TRAILING STOP
       const mfe = pos.mfe || 0;
       const pullbackLimit = mfe >= 20.0 ? 6.00 : (mfe >= 12.0 ? 4.50 : (mfe >= 7.0 ? 3.00 : 2.00));
       if (!exitReason && mfe >= CONFIG.bePct && (mfe - move) >= pullbackLimit) {
         exitReason = `🏆 Zirveden Takip Kârı Alındı (+%${pos.roi.toFixed(1)} ROI / Zirve: +%${mfe.toFixed(2)} Spot)`;
       }
 
-      // 4. AŞAMA: MEGA MOONSHOT HEDEFİ (+%15 Spot = +%300 ROI)
+      // 4. MEGA MOONSHOT HEDEFİ (+%15 Spot = +%300 ROI)
       if (!exitReason && move >= CONFIG.moonPct) {
-        exitReason = `🏆 MEGA MOONSHOT HEDEFİ ALINDI (+%${pos.roi.toFixed(0)} ROI / +%${mfe.toFixed(1)} Spot)`;
+        exitReason = `🏆 MEGA VUR-KAÇ HEDEFİ ALINDI (+%${pos.roi.toFixed(0)} ROI / +%${mfe.toFixed(1)} Spot)`;
       }
 
-      // 5. AŞAMA: STOP LOSS / KİLİTLİ STOP TETİKLENMESİ
+      // 5. STOP LOSS VEYA KİLİTLİ STOP TETİKLENMESİ
       if (!exitReason && ((isLong && curP <= pos.stopPrice) || (!isLong && curP >= pos.stopPrice))) {
         if ((isLong && pos.stopPrice > pos.entryPrice * 1.005) || (!isLong && pos.stopPrice < pos.entryPrice * 0.995)) {
           exitReason = `🔒 Garanti Kilitli Kâr Çıkışı (+%${pos.roi.toFixed(1)} ROI)`;
@@ -545,7 +545,6 @@ async function fastRiskLoop() {
         }
       }
 
-      // ÇIKIŞ İŞLEMİ
       if (exitReason) {
         activePositions.splice(i, 1);
         closeTrade(pos, exitReason);
@@ -553,11 +552,8 @@ async function fastRiskLoop() {
       }
     }
 
-    if (stateChanged) {
-      persistState();
-    }
+    if (stateChanged) persistState();
   } catch (err) {
-    addLog(`Risk motoru hatası: ${err.message}`, 'WARN');
   } finally {
     isRiskRunning = false;
   }
@@ -566,12 +562,12 @@ async function fastRiskLoop() {
 function closeTrade(pos, exitReason) {
   const now = Date.now();
   const durMin = Math.round((now - pos.entryTime) / 60000);
-  
   balance += pos.pnl;
 
   const tradeRecord = {
     id: history.length + 1,
-    time: new Date().toLocaleString('tr-TR'),
+    time: new Date().toLocaleTimeString('tr-TR'),
+    dateFullStr: new Date().toLocaleString('tr-TR'),
     symbol: pos.symbol,
     side: pos.side,
     entryPrice: pos.entryPrice,
@@ -592,10 +588,10 @@ function closeTrade(pos, exitReason) {
     fs.writeFileSync(HISTORY_FILE, JSON.stringify(history.slice(0, 100), null, 2), 'utf8');
   } catch (e) {}
 
-  addLog(`🏁 POZİSYON KAPANDI: [${pos.side}] ${pos.symbol} | Net PnL: ${pos.pnl >= 0 ? '+' : ''}$${pos.pnl.toFixed(2)} (%${pos.roi.toFixed(1)} ROI) | ${exitReason}`, pos.pnl >= 0 ? 'WIN' : 'LOSS');
+  addLog(`🏁 KAPANDI: [${pos.side}] ${pos.symbol} | PnL: ${pos.pnl >= 0 ? '+' : ''}$${pos.pnl.toFixed(2)} (%${pos.roi.toFixed(1)} ROI) | ${exitReason}`, pos.pnl >= 0 ? 'WIN' : 'LOSS');
 }
 
-// --- 4. WEB SUNUCUSU VE CANLI DASHBOARD ---
+// 4. HTML VE WEBSİTESİ (BİREBİR EKRAN 1 TASARIMI)
 function getStats() {
   const totalTrades = history.length;
   const wins = history.filter(h => (h.pnl || 0) > 0.05).length;
@@ -604,6 +600,7 @@ function getStats() {
   const winRate = totalTrades > 0 ? ((wins / totalTrades) * 100).toFixed(1) : "0.0";
   const totalPnl = history.reduce((acc, h) => acc + (h.pnl || 0), 0);
   const totalRoi = (totalPnl / CONFIG.initialBalance) * 100;
+  const megaWins = history.filter(h => (h.mfe || 0) >= 15.0).length;
 
   return {
     balance: balance.toFixed(2),
@@ -614,13 +611,18 @@ function getStats() {
     losses,
     breakevens,
     winRate,
+    megaWins,
     activeCount: activePositions.length,
-    uptimeMin: Math.floor((Date.now() - startTime) / 60000)
+    uptimeMin: Math.floor((Date.now() - startTime) / 60000),
+    btcTrend: btc15mTrend,
+    btcIsGreen: btc15mIsGreen
   };
 }
 
 function serveDashboardHtml() {
   const stats = getStats();
+  const vipKeys = Object.keys(VIP_TARGETS);
+
   return `<!DOCTYPE html>
 <html lang="tr">
 <head>
@@ -628,285 +630,512 @@ function serveDashboardHtml() {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>🚀 Moonshot 7/24 Bulut Test Laboratuvarı</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220%22%22><text y=%2226%22 font-size=%2224%22>🚀</text></svg>">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700;800;900&display=swap" rel="stylesheet">
   <style>
     :root {
-      --bg: #090d16;
-      --card-bg: #121826;
-      --border: #1e293b;
-      --text: #f1f5f9;
-      --text-muted: #94a3b8;
+      --bg: #07090e;
+      --panel: #0e131f;
+      --panel2: #141b2d;
+      --panel-hover: #1a233a;
+      --border: rgba(255, 255, 255, 0.08);
+      --border-accent: rgba(168, 85, 247, 0.3);
+      --text: #f8fafc;
+      --muted: #94a3b8;
       --green: #10b981;
-      --green-glow: rgba(16, 185, 129, 0.2);
-      --red: #ef4444;
-      --red-glow: rgba(239, 68, 68, 0.2);
+      --red: #f43f5e;
       --amber: #f59e0b;
-      --cyan: #06b6d4;
-      --primary: #3b82f6;
+      --purple: #a855f7;
+      --blue: #38bdf8;
     }
-    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; }
-    body { background: var(--bg); color: var(--text); padding: 16px; font-size: 14px; min-height: 100vh; }
-    .container { max-width: 1200px; margin: 0 auto; }
-    
-    /* Header */
-    header { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1px solid var(--border); }
-    .logo-wrap { display: flex; align-items: center; gap: 10px; }
-    .logo-badge { background: linear-gradient(135deg, #2563eb, #7c3aed); padding: 8px 12px; border-radius: 8px; font-size: 18px; font-weight: bold; }
-    .title-sub { color: var(--text-muted); font-size: 12px; }
-    .status-live { display: flex; align-items: center; gap: 8px; background: rgba(16, 185, 129, 0.1); border: 1px solid var(--green); color: var(--green); padding: 6px 14px; border-radius: 20px; font-weight: 600; font-size: 12px; }
-    .pulse-dot { width: 8px; height: 8px; background: var(--green); border-radius: 50%; box-shadow: 0 0 10px var(--green); animation: pulse 1.5s infinite; }
-    @keyframes pulse { 0% { opacity: 0.4; } 50% { opacity: 1; } 100% { opacity: 0.4; } }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      padding: 12px 16px;
+      font-size: 13px;
+      min-height: 100vh;
+    }
+    .container { max-width: 1560px; margin: 0 auto; }
 
-    /* Action Bar */
-    .action-bar { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 20px; }
-    .btn { display: inline-flex; align-items: center; gap: 6px; padding: 10px 18px; border-radius: 8px; font-weight: 600; cursor: pointer; border: none; text-decoration: none; font-size: 13px; transition: 0.2s; }
-    .btn-green { background: #10b981; color: #fff; }
-    .btn-green:hover { background: #059669; transform: translateY(-1px); }
-    .btn-dark { background: #1e293b; color: var(--text); border: 1px solid var(--border); }
-    .btn-dark:hover { background: #334155; }
+    /* TABS */
+    .tabs {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 14px;
+      overflow-x: auto;
+    }
+    .tab-btn {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 800;
+      padding: 8px 16px;
+      border-radius: 8px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      white-space: nowrap;
+    }
+    .tab-btn.active {
+      background: var(--panel2);
+      color: #fff;
+      border-color: rgba(168, 85, 247, 0.5);
+      box-shadow: 0 0 15px rgba(168, 85, 247, 0.25);
+    }
 
-    /* Stats Grid */
-    .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 24px; }
-    .stat-card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; }
-    .stat-label { color: var(--text-muted); font-size: 12px; margin-bottom: 6px; }
-    .stat-val { font-size: 22px; font-weight: 700; letter-spacing: -0.5px; }
-    .stat-sub { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
+    /* GRID */
+    .dashboard {
+      display: grid;
+      grid-template-columns: 310px 1fr;
+      gap: 14px;
+      align-items: start;
+    }
+    @media (max-width: 1050px) {
+      .dashboard { grid-template-columns: 1fr; }
+    }
 
-    /* Sections */
-    .sec-title { font-size: 16px; font-weight: 600; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; }
-    .badge { font-size: 11px; padding: 3px 8px; border-radius: 12px; font-weight: 600; }
-    .badge-green { background: rgba(16, 185, 129, 0.15); color: var(--green); }
-    .badge-red { background: rgba(239, 68, 68, 0.15); color: var(--red); }
-    .badge-cyan { background: rgba(6, 182, 212, 0.15); color: var(--cyan); }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    }
+    .panel h2 {
+      font-size: 13px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
 
-    /* Positions Grid */
-    .pos-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 14px; margin-bottom: 24px; }
-    .pos-card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px; padding: 16px; border-left: 4px solid var(--cyan); }
-    .pos-card.pos-long { border-left-color: var(--green); }
-    .pos-card.pos-short { border-left-color: var(--red); }
-    .pos-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
-    .pos-sym { font-size: 16px; font-weight: bold; }
-    .pos-details { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 12px; color: var(--text-muted); }
-    .pos-details span b { color: var(--text); }
-    .pos-pnl { font-size: 18px; font-weight: bold; margin-top: 10px; text-align: right; }
+    /* STATUS BOX */
+    .status-box {
+      background: rgba(8, 11, 18, 0.7);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 8px;
+      padding: 10px 12px;
+      margin-bottom: 12px;
+    }
+    .status-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 11px;
+      margin-bottom: 6px;
+      font-weight: 600;
+      color: var(--muted);
+    }
+    .status-item:last-child { margin-bottom: 0; }
+    .status-pill {
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 800;
+      font-size: 10.5px;
+      padding: 2px 7px;
+      border-radius: 4px;
+      background: rgba(255,255,255,0.06);
+      color: #fff;
+    }
+    .status-pill.green { background: rgba(16,185,129,0.15); color: var(--green); border: 1px solid rgba(16,185,129,0.3); }
+    .status-pill.purple { background: rgba(168,85,247,0.15); color: var(--purple); border: 1px solid rgba(168,85,247,0.3); }
 
-    /* Tables */
-    .table-wrap { background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px; overflow-x: auto; margin-bottom: 24px; }
-    table { width: 100%; border-collapse: collapse; text-align: left; }
-    th { background: #0d121f; padding: 12px 14px; color: var(--text-muted); font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid var(--border); }
-    td { padding: 12px 14px; border-bottom: 1px solid rgba(30, 41, 59, 0.5); font-size: 13px; }
-    tr:last-child td { border-bottom: none; }
-    tr:hover td { background: rgba(255, 255, 255, 0.02); }
+    /* STRATEGY BANNER */
+    .strategy-banner-card {
+      background: linear-gradient(135deg, rgba(88,28,135,0.25), rgba(15,23,42,0.6));
+      border: 1px solid rgba(168,85,247,0.35);
+      border-radius: 8px;
+      padding: 10px 12px;
+      margin-bottom: 12px;
+    }
+    .strat-card-head { display: flex; justify-content: space-between; font-size: 10.5px; margin-bottom: 4px; }
+    .strat-badge-pill { background: var(--purple); color: #fff; font-weight: 900; font-size: 9px; padding: 2px 6px; border-radius: 4px; }
+    .strat-card-title { font-weight: 800; font-size: 13px; color: #fff; }
+    .strat-card-sub { font-size: 10px; color: var(--muted); margin-top: 2px; }
 
-    /* Console / Logs */
-    .log-box { background: #070a10; border: 1px solid var(--border); border-radius: 12px; padding: 14px; height: 200px; overflow-y: auto; font-family: monospace; font-size: 12px; line-height: 1.6; }
-    .log-row { margin-bottom: 4px; }
-    .log-time { color: var(--text-muted); margin-right: 6px; }
-    .log-TRADE { color: var(--cyan); font-weight: bold; }
-    .log-WIN { color: var(--green); font-weight: bold; }
-    .log-LOSS { color: var(--red); }
-    .log-WARN { color: var(--amber); }
+    /* PARAMETERS */
+    .sidebar-section-title { font-size: 10px; font-weight: 800; color: var(--muted); text-transform: uppercase; margin-bottom: 8px; letter-spacing: 0.5px; }
+    .param-grid-2x2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+    .param-card { background: rgba(8, 11, 18, 0.7); border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; padding: 6px 10px; }
+    .param-header { display: flex; justify-content: space-between; font-size: 10px; color: var(--muted); font-weight: 700; margin-bottom: 2px; }
+    .param-input-wrap { display: flex; align-items: baseline; justify-content: space-between; }
+    .param-input-wrap input { width: 65px; background: none; border: none; color: #fff; font-family: 'JetBrains Mono', monospace; font-size: 14px; font-weight: 800; outline: none; }
+    .param-unit { font-size: 10.5px; color: var(--muted); }
 
-    .empty-state { text-align: center; padding: 30px; color: var(--text-muted); }
+    /* HERO PERF */
+    .perf-hero-card {
+      background: linear-gradient(135deg, rgba(16,185,129,0.1), rgba(15,23,42,0.8));
+      border: 1px solid rgba(16,185,129,0.3);
+      border-radius: 8px;
+      padding: 10px 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+    .perf-hero-title { font-size: 10px; font-weight: 800; color: var(--muted); display: block; }
+    .perf-hero-sub { font-size: 11px; font-weight: 700; color: var(--green); }
+    .perf-hero-val { font-family: 'JetBrains Mono', monospace; font-size: 18px; font-weight: 900; color: #fff; }
+
+    .perf-grid-4 { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 12px; }
+    .perf-mini-card { background: rgba(8, 11, 18, 0.7); border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; padding: 6px 8px; }
+    .perf-mini-label { font-size: 9.5px; color: var(--muted); display: block; }
+    .perf-mini-val { font-family: 'JetBrains Mono', monospace; font-size: 12.5px; font-weight: 800; }
+
+    /* BUTTONS */
+    .btn-action { width: 100%; padding: 8px 12px; border-radius: 6px; font-weight: 800; font-size: 11px; cursor: pointer; border: none; margin-bottom: 6px; transition: 0.2s; text-align: center; text-decoration: none; display: flex; align-items: center; justify-content: center; gap: 6px; }
+    .btn-start { background: linear-gradient(135deg, #10b981, #059669); color: #fff; }
+    .btn-secondary { background: var(--panel2); color: var(--text); border: 1px solid var(--border); }
+    .btn-secondary:hover { background: var(--panel-hover); }
+
+    /* TABLES */
+    .table-container {
+      width: 100%;
+      overflow-x: auto;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: rgba(8, 11, 18, 0.4);
+      margin-bottom: 14px;
+    }
+    table { width: 100%; border-collapse: collapse; font-size: 11.5px; white-space: nowrap; }
+    th { position: sticky; top: 0; background: #111724; text-align: left; padding: 8px 10px; color: var(--muted); font-weight: 800; font-size: 10px; text-transform: uppercase; border-bottom: 1px solid var(--border); }
+    td { padding: 8px 10px; border-bottom: 1px solid rgba(255, 255, 255, 0.03); font-family: 'JetBrains Mono', monospace; }
+    tr:hover td { background: rgba(255, 255, 255, 0.03); }
+
+    /* BADGES */
+    .badge-moon { background: rgba(168,85,247,0.18); border: 1px solid rgba(168,85,247,0.4); color: #c084fc; padding: 2px 7px; border-radius: 4px; font-size: 10px; font-weight: 800; }
+    .badge-strat { background: rgba(250,204,21,0.12); border: 1px solid rgba(250,204,21,0.3); color: #facc15; font-size: 9.5px; padding: 2px 6px; border-radius: 3px; font-weight: 700; margin-left: 4px; }
+    .badge-side-long { background: rgba(16,185,129,0.2); border: 1px solid rgba(16,185,129,0.4); color: var(--green); font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: 800; }
+    .badge-side-short { background: rgba(244,63,94,0.2); border: 1px solid rgba(244,63,94,0.4); color: var(--red); font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: 800; }
+    .badge-sl { color: var(--red); font-weight: 800; font-size: 11px; }
+    .badge-be { color: var(--green); font-weight: 800; font-size: 11px; }
+    .badge-pnl-pos { color: var(--green); font-weight: 800; font-size: 11.5px; }
+    .badge-pnl-neg { color: var(--red); font-weight: 800; font-size: 11.5px; }
+    .btn-close-pos { background: rgba(244,63,94,0.15); border: 1px solid rgba(244,63,94,0.35); color: var(--red); font-weight: 800; font-size: 10.5px; padding: 3px 8px; border-radius: 4px; cursor: pointer; transition: 0.2s; }
+    .btn-close-pos:hover { background: var(--red); color: #fff; }
+
+    /* CHIPS */
+    .chip { font-size: 10px; padding: 2px 6px; border-radius: 4px; background: rgba(16,185,129,0.15); border: 1px solid rgba(16,185,129,0.3); color: var(--green); font-family: 'JetBrains Mono', monospace; font-weight: 700; }
   </style>
 </head>
 <body>
   <div class="container">
-    <header>
-      <div class="logo-wrap">
-        <div class="logo-badge">🚀 MS</div>
-        <div>
-          <h2>Moonshot 7/24 Bulut Test Laboratuvarı</h2>
-          <div class="title-sub">Binance Vadeli Piyasalar 15dk/1s Radar & Şimşek Balina Avcısı (Screen 1)</div>
+    <!-- TABS -->
+    <div class="tabs">
+      <div class="tab-btn active">⚡ 1. CANLI SİMÜLASYON (TEST LAB)</div>
+      <div class="tab-btn" onclick="alert('Gerçek Binance API modu bulut test sürümünde güvenlik için pasiftir. Test Lab 7/24 çalışmaktadır.')">⚡ 2. GERÇEK BINANCE İŞLEMLERİ (CANLI API)</div>
+      <a href="/api/download-csv" class="tab-btn" style="text-decoration:none;">🔍 3. 15DK RADAR & EXCEL AKTARICI</a>
+    </div>
+
+    <div class="dashboard">
+      <!-- SOL PANEL: MOTOR KONTROLÜ -->
+      <div class="panel">
+        <h2>
+          <span>🎛️ MOTOR KONTROLÜ</span>
+        </h2>
+
+        <div class="status-box">
+          <div class="status-item">
+            <span>⚡ Sistem Durumu</span>
+            <span class="status-pill green" id="liveStatus">ÇALIŞIYOR</span>
+          </div>
+          <div class="status-item">
+            <span>🛡️ 1s Lazer Motor</span>
+            <span class="status-pill green">AKTİF (2s Lazer)</span>
+          </div>
+          <div class="status-item">
+            <span>🐋 Balina Radarı</span>
+            <span class="status-pill green">⚡ SAF BALİNA (Canlı 3m)</span>
+          </div>
+          <div class="status-item">
+            <span>📡 Likit Radar</span>
+            <span class="status-pill green">Aktif ($50M+ Likit: 25L/20S)</span>
+          </div>
+          <div class="status-item">
+            <span>📊 BTC 15m Trend</span>
+            <span class="status-pill" id="btcVal" style="color:${stats.btcIsGreen ? 'var(--green)' : 'var(--red)'};">${stats.btcTrend}</span>
+          </div>
+          <div class="status-item">
+            <span>🎯 Slot Kullanımı</span>
+            <span class="status-pill purple" id="posCount">${stats.activeCount} / ${CONFIG.maxSlots} (Sniper Slot)</span>
+          </div>
+        </div>
+
+        <div class="strategy-banner-card">
+          <div class="strat-card-head">
+            <span class="strat-badge-pill">AKTİF MOTOR</span>
+            <span style="font-size:10px; color:#c084fc;">⚡ Vur-Kaç Sniper</span>
+          </div>
+          <div class="strat-card-title">🐋 Balina Avcısı (3m Hızlı Vur-Kaç)</div>
+          <div class="strat-card-sub">Dakikalar İçinde Kâr Al • 3m Hacim Patlaması & %100 Çıkış</div>
+        </div>
+
+        <div class="sidebar-section-title">⚙️ TEMEL RİSK & POZİSYON</div>
+        <div class="param-grid-2x2">
+          <div class="param-card">
+            <div class="param-header"><span>MAX SLOT</span><span>Sniper</span></div>
+            <div class="param-input-wrap"><input type="number" id="inpSlots" value="${CONFIG.maxSlots}"><span class="param-unit">adet</span></div>
+          </div>
+          <div class="param-card">
+            <div class="param-header"><span>TEMİNAT</span><span>İzole</span></div>
+            <div class="param-input-wrap"><input type="number" id="inpMargin" value="${CONFIG.marginPerTrade}"><span class="param-unit">$</span></div>
+          </div>
+          <div class="param-card">
+            <div class="param-header"><span>KALDIRAÇ</span><span>Büyüme</span></div>
+            <div class="param-input-wrap"><input type="number" id="inpLev" value="${CONFIG.leverage}"><span class="param-unit">x</span></div>
+          </div>
+          <div class="param-card">
+            <div class="param-header"><span>STOP LOSS</span><span>Nefes</span></div>
+            <div class="param-input-wrap"><input type="number" id="inpSl" value="${CONFIG.slPct.toFixed(2)}" step="0.1"><span class="param-unit">%</span></div>
+          </div>
+        </div>
+
+        <div class="sidebar-section-title">🛡️ SIFIR RİSK VE KADEMELİ HEDEFLER</div>
+        <div style="background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.3);border-radius:6px;padding:8px 10px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;">
+          <div>
+            <div style="font-size:10.5px;font-weight:800;color:var(--green)">🛡️ Otomatik Başabaş ($0 Risk)</div>
+            <div style="font-size:9.5px;color:var(--muted)">Koin girilen kâra ulaşınca stop maliyete çekilir ($0 Risk)</div>
+          </div>
+          <div style="display:flex;align-items:baseline;gap:3px;">
+            <input type="number" id="inpBe" value="${CONFIG.bePct.toFixed(2)}" step="0.1" style="width:48px;background:none;border:none;color:var(--green);font-family:'JetBrains Mono';font-size:13px;font-weight:800;text-align:right;outline:none;">
+            <span style="font-size:10px;color:var(--muted)">%</span>
+          </div>
+        </div>
+
+        <div style="background:rgba(250,204,21,0.08);border:1px solid rgba(250,204,21,0.3);border-radius:6px;padding:8px 10px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;">
+          <div>
+            <div style="font-size:10.5px;font-weight:800;color:#facc15">🏆 VUR-KAÇ MOONSHOT</div>
+            <div style="font-size:9.5px;color:var(--muted)">Hedefe ulaşınca %100 pozisyon kapatılır</div>
+          </div>
+          <div style="display:flex;align-items:baseline;gap:3px;">
+            <input type="number" id="inpMoon" value="${CONFIG.moonPct.toFixed(2)}" step="1" style="width:48px;background:none;border:none;color:#facc15;font-family:'JetBrains Mono';font-size:13px;font-weight:800;text-align:right;outline:none;">
+            <span style="font-size:10px;color:var(--muted)">%</span>
+          </div>
+        </div>
+
+        <div class="sidebar-section-title">💰 SEANS PERFORMANSI</div>
+        <div class="perf-hero-card">
+          <div>
+            <span class="perf-hero-title">KASA BAKİYESİ</span>
+            <span class="perf-hero-sub" id="stPnl">${parseFloat(stats.totalPnl) >= 0 ? '+' : ''}$${stats.totalPnl} (%${stats.totalRoi})</span>
+          </div>
+          <div class="perf-hero-val" id="stBalance">$${stats.balance}</div>
+        </div>
+
+        <div class="perf-grid-4">
+          <div class="perf-mini-card">
+            <span class="perf-mini-label">Toplam İşlem</span>
+            <span class="perf-mini-val" id="stTotalTrades">${stats.totalTrades}</span>
+          </div>
+          <div class="perf-mini-card">
+            <span class="perf-mini-label">Kazanma %</span>
+            <span class="perf-mini-val" style="color:var(--green);" id="stWinRate">%${stats.winRate}</span>
+          </div>
+          <div class="perf-mini-card">
+            <span class="perf-mini-label">Kazan/Kaybet</span>
+            <span class="perf-mini-val" id="stWinsLosses">${stats.wins}K / ${stats.losses}Z</span>
+          </div>
+          <div class="perf-mini-card">
+            <span class="perf-mini-label">Mega-Win</span>
+            <span class="perf-mini-val" style="color:#facc15;" id="stMega">${stats.megaWins} Adet</span>
+          </div>
+        </div>
+
+        <a href="/api/download-csv" class="btn-action btn-secondary" style="font-size:11px;">📊 EXCEL / CSV İNDİR</a>
+        <button onclick="resetBalance()" class="btn-action btn-secondary" style="font-size:11px;color:var(--red);">🧹 BAKİYEYİ $100'A SIFIRLA</button>
+      </div>
+
+      <!-- SAĞ PANEL: İŞLEMLER -->
+      <div class="panel">
+        <h2>
+          <span>🎯 BEKLEYEN MOONSHOT POZİSYONLARI</span>
+          <span class="badge-moon">🚀 10X TREND MODU</span>
+        </h2>
+
+        <!-- ŞAMPİYON KOİNLER -->
+        <div style="background:var(--panel2);border:1px solid var(--border);border-radius:6px;padding:8px 12px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;">
+          <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+            <span style="font-size:10px;color:var(--muted);font-weight:700;">🎯 ÖNCELİKLİ ŞAMPİYONLAR (İLK TARANIR):</span>
+            <div id="vipChips" style="display:flex;flex-wrap:wrap;gap:5px;">
+              ${vipKeys.map(k => `<span class="chip">${k}</span>`).join('')}
+            </div>
+          </div>
+          <button onclick="location.reload()" style="font-size:10px;padding:3px 8px;background:none;border:1px solid var(--border);border-radius:4px;color:var(--muted);cursor:pointer;">Varsayılana Dön</button>
+        </div>
+
+        <!-- AKTİF POZİSYONLAR TABLOSU -->
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Sembol</th>
+                <th>Yön</th>
+                <th>Giriş / Fiyat</th>
+                <th>Stop / BE Durumu</th>
+                <th>MFE (Max Kâr)</th>
+                <th>Anlık ROI / PnL</th>
+                <th>İşlem</th>
+              </tr>
+            </thead>
+            <tbody id="activeTbody">
+              ${renderActiveRows(activePositions)}
+            </tbody>
+          </table>
+        </div>
+
+        <!-- TAMAMLANAN MOONSHOT GEÇMİŞİ -->
+        <h2 style="margin-top:16px;">
+          <span>📜 TAMAMLANAN MOONSHOT GEÇMİŞİ</span>
+          <span style="font-size:11px;color:var(--muted);font-weight:600;"><span id="histCount">${history.length}</span> KAYIT</span>
+        </h2>
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Zaman</th>
+                <th>Sembol</th>
+                <th>Yön</th>
+                <th>Süre</th>
+                <th>Çıkış Nedeni</th>
+                <th>MFE</th>
+                <th>Net PnL</th>
+                <th>Sonuç ROI</th>
+              </tr>
+            </thead>
+            <tbody id="historyTbody">
+              ${renderHistoryRows(history)}
+            </tbody>
+          </table>
         </div>
       </div>
-      <div class="status-live">
-        <div class="pulse-dot"></div>
-        <span>BULUTTA 7/24 AKTİF</span>
-      </div>
-    </header>
-
-    <div class="action-bar">
-      <a href="/api/download-csv" class="btn btn-green">
-        📥 Excel / CSV Olarak İndir (Tüm Geçmiş)
-      </a>
-      <button onclick="location.reload()" class="btn btn-dark">
-        🔄 Sayfayı Yenile
-      </button>
-      <a href="/ping" target="_blank" class="btn btn-dark" style="margin-left: auto;">
-        🩺 Health Check (/ping)
-      </a>
-    </div>
-
-    <!-- STATS -->
-    <div class="stats-grid" id="statsGrid">
-      <div class="stat-card">
-        <div class="stat-label">Toplam Kasa Bakiyesi</div>
-        <div class="stat-val" style="color:var(--cyan);">$<span id="stBalance">${stats.balance}</span></div>
-        <div class="stat-sub">Başlangıç: $${CONFIG.initialBalance.toFixed(2)}</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">Toplam Net Kâr</div>
-        <div class="stat-val" style="color:${parseFloat(stats.totalPnl) >= 0 ? 'var(--green)' : 'var(--red)'};">
-          <span id="stPnl">${parseFloat(stats.totalPnl) >= 0 ? '+' : ''}$${stats.totalPnl}</span>
-        </div>
-        <div class="stat-sub">Kasa ROI: <span id="stRoi">%${stats.totalRoi}</span></div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">Kazanma Oranı (Win Rate)</div>
-        <div class="stat-val" style="color:var(--green);">
-          %<span id="stWinRate">${stats.winRate}</span>
-        </div>
-        <div class="stat-sub">🟢 <span id="stWins">${stats.wins}</span> K | 🔴 <span id="stLosses">${stats.losses}</span> Z | 🛡️ <span id="stBes">${stats.breakevens}</span> B</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">Aktif Pozisyonlar</div>
-        <div class="stat-val" style="color:var(--text);"><span id="stActive">${stats.activeCount}</span> / ${CONFIG.maxSlots}</div>
-        <div class="stat-sub">Tamamlanan: <span id="stTotalTrades">${stats.totalTrades}</span> işlem</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">Çalışma Süresi</div>
-        <div class="stat-val" style="color:var(--text-muted);"><span id="stUptime">${stats.uptimeMin}</span> dk</div>
-        <div class="stat-sub">Motor 7/24 kesintisiz</div>
-      </div>
-    </div>
-
-    <!-- AKTİF POZİSYONLAR -->
-    <div class="sec-title">
-      <span>⚡ Aktif Pozisyonlar (<span id="activeBadge">${stats.activeCount}</span>)</span>
-      <span class="badge badge-cyan">${CONFIG.leverage}x Kaldıraç | $${CONFIG.marginPerTrade} Teminat</span>
-    </div>
-    <div class="pos-grid" id="posGrid">
-      ${renderActiveCards(activePositions)}
-    </div>
-
-    <!-- GEÇMİŞ İŞLEMLER -->
-    <div class="sec-title" style="margin-top: 10px;">
-      <span>📜 Son Tamamlanan Test İşlemleri</span>
-      <span class="badge badge-green">Otomatik CSV Kayıtlı</span>
-    </div>
-    <div class="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>#</th>
-            <th>Tarih</th>
-            <th>Koin</th>
-            <th>Yön</th>
-            <th>Giriş</th>
-            <th>Çıkış</th>
-            <th>Süre</th>
-            <th>Zirve (MFE)</th>
-            <th>Net Kâr ($)</th>
-            <th>ROI (%)</th>
-            <th>Çıkış Nedeni</th>
-          </tr>
-        </thead>
-        <tbody id="historyBody">
-          ${renderHistoryRows(history)}
-        </tbody>
-      </table>
-    </div>
-
-    <!-- CANLI TERMİNAL GÜNLÜĞÜ -->
-    <div class="sec-title">
-      <span>🖥️ Canlı Bot Konsolu</span>
-      <span style="font-size:11px; color:var(--text-muted);">Son 150 olay</span>
-    </div>
-    <div class="log-box" id="logBox">
-      ${renderLogRows(logs)}
     </div>
   </div>
 
   <script>
-    // 2 SANİYEDE BİR CANLI DURUM GÜNCELLEMESİ (AJAX POLLING)
     async function updateDashboard() {
       try {
         const res = await fetch('/api/status');
         if (!res.ok) return;
         const data = await res.json();
 
-        // İstatistikler
-        document.getElementById("stBalance").innerText = data.stats.balance;
+        // Performans & İstatistikler
+        document.getElementById("stBalance").innerText = '$' + data.stats.balance;
         const pnlEl = document.getElementById("stPnl");
-        pnlEl.innerText = (parseFloat(data.stats.totalPnl) >= 0 ? '+' : '') + '$' + data.stats.totalPnl;
+        pnlEl.innerText = (parseFloat(data.stats.totalPnl) >= 0 ? '+' : '') + '$' + data.stats.totalPnl + ' (%' + data.stats.totalRoi + ')';
         pnlEl.style.color = parseFloat(data.stats.totalPnl) >= 0 ? 'var(--green)' : 'var(--red)';
-        document.getElementById("stRoi").innerText = '%' + data.stats.totalRoi;
-        document.getElementById("stWinRate").innerText = data.stats.winRate;
-        document.getElementById("stWins").innerText = data.stats.wins;
-        document.getElementById("stLosses").innerText = data.stats.losses;
-        document.getElementById("stBes").innerText = data.stats.breakevens;
-        document.getElementById("stActive").innerText = data.stats.activeCount;
-        document.getElementById("activeBadge").innerText = data.stats.activeCount;
         document.getElementById("stTotalTrades").innerText = data.stats.totalTrades;
-        document.getElementById("stUptime").innerText = data.stats.uptimeMin;
+        document.getElementById("stWinRate").innerText = '%' + data.stats.winRate;
+        document.getElementById("stWinsLosses").innerText = data.stats.wins + 'K / ' + data.stats.losses + 'Z';
+        document.getElementById("stMega").innerText = data.stats.megaWins + ' Adet';
+        document.getElementById("posCount").innerText = data.stats.activeCount + ' / ' + ${CONFIG.maxSlots} + ' (Sniper Slot)';
+        document.getElementById("histCount").innerText = data.history.length;
 
-        // Pozisyonlar
-        const posGrid = document.getElementById("posGrid");
+        const btcEl = document.getElementById("btcVal");
+        btcEl.innerText = data.stats.btcTrend;
+        btcEl.style.color = data.stats.btcIsGreen ? 'var(--green)' : 'var(--red)';
+
+        // Aktif Pozisyonlar Tablosu
+        const tbody = document.getElementById("activeTbody");
         if (data.positions.length === 0) {
-          posGrid.innerHTML = '<div class="empty-state" style="grid-column:1/-1;">Şu anda açık pozisyon yok. Tarayıcı 7/24 balina patlamalarını izliyor...</div>';
+          tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:24px;font-size:12px;">🔍 350+ Vadeli Koinlerde 3m Balina & Moonshot Kırılımları Taranıyor...</td></tr>';
         } else {
-          posGrid.innerHTML = data.positions.map(p => {
+          tbody.innerHTML = data.positions.map((p, idx) => {
             const isLong = p.side === 'LONG';
             const isWin = (p.pnl || 0) >= 0;
-            return \`
-              <div class="pos-card \${isLong ? 'pos-long' : 'pos-short'}">
-                <div class="pos-header">
-                  <div class="pos-sym">\${p.symbol} <span class="badge \${isLong ? 'badge-green' : 'badge-red'}">\${p.side} \${p.leverage}x</span></div>
-                  <div class="badge \${p.beLocked ? 'badge-green' : 'badge-cyan'}">\${p.beLocked ? '🛡️ BE KİLİTLİ' : 'TAKİPTE'}</div>
-                </div>
-                <div class="pos-details">
-                  <span>Giriş: <b>\${p.entryPrice}</b></span>
-                  <span>Anlık: <b>\${p.currentPrice}</b></span>
-                  <span>Stop: <b>\${p.stopPrice.toFixed(4)}</b></span>
-                  <span>Zirve (MFE): <b style="color:var(--green)">+%\${(p.mfe || 0).toFixed(2)}</b></span>
-                </div>
-                <div class="pos-pnl" style="color: \${isWin ? 'var(--green)' : 'var(--red)'}">
-                  \${isWin ? '+' : ''}$\${(p.pnl || 0).toFixed(2)} (%\${(p.roi || 0).toFixed(1)} ROI)
-                </div>
-              </div>
-            \`;
-          }).join('');
-        }
+            const stopText = p.beLocked 
+              ? '<span class="badge-be">🛡️ BAŞABAŞ ($0 RİSK)</span>' 
+              : '<span class="badge-sl">🛑 STOP: -%${CONFIG.slPct.toFixed(2)}</span>';
 
-        // Geçmiş Tablosu
-        const historyBody = document.getElementById("historyBody");
-        if (data.history.length === 0) {
-          historyBody.innerHTML = '<tr><td colspan="11" class="empty-state">Henüz tamamlanan test işlemi yok.</td></tr>';
-        } else {
-          historyBody.innerHTML = data.history.slice(0, 50).map(h => {
-            const isWin = (h.pnl || 0) >= 0;
+            const roiStr = (p.roi >= 0 ? '+' : '') + (p.roi || 0).toFixed(1) + '%';
+            const pnlStr = (p.pnl >= 0 ? '+$' : '-$') + Math.abs(p.pnl || 0).toFixed(2);
+
             return \`
               <tr>
-                <td>\${h.id}</td>
-                <td style="color:var(--text-muted); font-size:11px;">\${h.time}</td>
-                <td><b>\${h.symbol}</b></td>
-                <td><span class="badge \${h.side === 'LONG' ? 'badge-green' : 'badge-red'}">\${h.side}</span></td>
-                <td>\${h.entryPrice}</td>
-                <td>\${h.exitPrice}</td>
-                <td>\${h.durationMin} dk</td>
-                <td style="color:var(--green)">+%\${(h.mfe || 0).toFixed(2)}</td>
-                <td style="color:\${isWin ? 'var(--green)' : 'var(--red)'}; font-weight:600;">\${isWin ? '+' : ''}$\${(h.pnl || 0).toFixed(2)}</td>
-                <td style="color:\${isWin ? 'var(--green)' : 'var(--red)'}; font-weight:600;">\${isWin ? '+' : ''}%\${(h.roi || 0).toFixed(2)}</td>
-                <td style="font-size:12px; color:var(--text-muted)">\${h.exitReason}</td>
+                <td style="color:var(--muted);font-weight:700;">\${idx+1}</td>
+                <td>
+                  <div style="display:flex;align-items:center;gap:4px;">
+                    <span style="font-weight:900;color:#fff;">\${p.symbol}</span>
+                    <span class="badge-strat">🚀 MOONSHOT TREND</span>
+                  </div>
+                </td>
+                <td>
+                  <span class="\${isLong ? 'badge-side-long' : 'badge-side-short'}">\${isLong ? '▲ LONG' : '▼ SHORT'}</span>
+                </td>
+                <td>
+                  <span style="color:var(--muted);">$ \${parseFloat(p.entryPrice).toFixed(4)}</span>
+                  <span style="color:var(--blue);margin:0 2px;">➔</span>
+                  <span style="color:#fff;font-weight:800;">$ \${parseFloat(p.currentPrice).toFixed(4)}</span>
+                  <div style="font-size:9.5px;color:var(--muted)">RSI: 50</div>
+                </td>
+                <td>\${stopText}</td>
+                <td><span style="color:var(--green);font-weight:800;">+%\${(p.mfe || 0).toFixed(2)}</span></td>
+                <td>
+                  <span class="\${isWin ? 'badge-pnl-pos' : 'badge-pnl-neg'}">\${roiStr} (\${pnlStr})</span>
+                </td>
+                <td>
+                  <button onclick="closePosition('\${p.id}')" class="btn-close-pos">Kapat</button>
+                </td>
               </tr>
             \`;
           }).join('');
         }
 
-        // Günlükler
-        const logBox = document.getElementById("logBox");
-        logBox.innerHTML = data.logs.map(l => \`
-          <div class="log-row">
-            <span class="log-time">[\${l.time}]</span>
-            <span class="log-\${l.type}">[\${l.type}]</span>
-            <span>\${l.msg}</span>
-          </div>
-        \`).join('');
-
-      } catch (e) {
-        console.error("Dashboard update failed:", e);
-      }
+        // Geçmiş Tablosu
+        const histTbody = document.getElementById("historyTbody");
+        if (data.history.length === 0) {
+          histTbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--muted);padding:18px;">Henüz tamamlanan işlem geçmişi bulunmuyor.</td></tr>';
+        } else {
+          histTbody.innerHTML = data.history.slice(0, 50).map((h, idx) => {
+            const isWin = (h.pnl || 0) >= 0;
+            return \`
+              <tr>
+                <td style="color:var(--muted);font-weight:700;">\${idx+1}</td>
+                <td style="color:var(--muted);font-size:10.5px;">\${h.time}</td>
+                <td style="font-weight:800;color:#fff;">\${h.symbol}</td>
+                <td><span class="\${h.side === 'LONG' ? 'badge-side-long' : 'badge-side-short'}">\${h.side}</span></td>
+                <td>\${h.durationMin} dk</td>
+                <td style="font-size:11px;color:var(--muted);">\${h.exitReason}</td>
+                <td style="color:var(--green);font-weight:800;">+%\${(h.mfe || 0).toFixed(2)}</td>
+                <td style="color:\${isWin ? 'var(--green)' : 'var(--red)'};font-weight:800;">\${isWin ? '+' : ''}$\${(h.pnl || 0).toFixed(2)}</td>
+                <td style="color:\${isWin ? 'var(--green)' : 'var(--red)'};font-weight:800;">\${isWin ? '+' : ''}%\${(h.roi || 0).toFixed(1)}</td>
+              </tr>
+            \`;
+          }).join('');
+        }
+      } catch (e) {}
     }
+
+    async function closePosition(id) {
+      if (!confirm("Bu pozisyonu manuel olarak kapatmak istiyor musunuz?")) return;
+      await fetch('/api/close-position?id=' + id);
+      updateDashboard();
+    }
+
+    async function resetBalance() {
+      if (!confirm("Bakiye $100.00 olarak sıfırlansın ve tüm geçmiş temizlensin mi?")) return;
+      await fetch('/api/reset-balance');
+      location.reload();
+    }
+
+    // Parametreleri Dinamik Güncelleme
+    ['inpSlots', 'inpMargin', 'inpLev', 'inpSl', 'inpBe', 'inpMoon'].forEach(id => {
+      document.getElementById(id).addEventListener('change', async () => {
+        const slots = document.getElementById('inpSlots').value;
+        const margin = document.getElementById('inpMargin').value;
+        const lev = document.getElementById('inpLev').value;
+        const sl = document.getElementById('inpSl').value;
+        const be = document.getElementById('inpBe').value;
+        const moon = document.getElementById('inpMoon').value;
+        await fetch(\`/api/update-settings?slots=\${slots}&margin=\${margin}&lev=\${lev}&sl=\${sl}&be=\${be}&moon=\${moon}\`);
+      });
+    });
 
     setInterval(updateDashboard, 2000);
   </script>
@@ -914,83 +1143,84 @@ function serveDashboardHtml() {
 </html>`;
 }
 
-function renderActiveCards(positions) {
+function renderActiveRows(positions) {
   if (!positions || positions.length === 0) {
-    return '<div class="empty-state" style="grid-column:1/-1;">Şu anda açık pozisyon yok. Tarayıcı 7/24 balina patlamalarını izliyor...</div>';
+    return '<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:24px;font-size:12px;">🔍 350+ Vadeli Koinlerde 3m Balina & Moonshot Kırılımları Taranıyor...</td></tr>';
   }
-  return positions.map(p => {
+  return positions.map((p, idx) => {
     const isLong = p.side === 'LONG';
     const isWin = (p.pnl || 0) >= 0;
+    const stopText = p.beLocked 
+      ? '<span class="badge-be">🛡️ BAŞABAŞ ($0 RİSK)</span>' 
+      : `<span class="badge-sl">🛑 STOP: -%${CONFIG.slPct.toFixed(2)}</span>`;
+
+    const roiStr = (p.roi >= 0 ? '+' : '') + (p.roi || 0).toFixed(1) + '%';
+    const pnlStr = (p.pnl >= 0 ? '+$' : '-$') + Math.abs(p.pnl || 0).toFixed(2);
+
     return `
-      <div class="pos-card ${isLong ? 'pos-long' : 'pos-short'}">
-        <div class="pos-header">
-          <div class="pos-sym">${p.symbol} <span class="badge ${isLong ? 'badge-green' : 'badge-red'}">${p.side} ${p.leverage}x</span></div>
-          <div class="badge ${p.beLocked ? 'badge-green' : 'badge-cyan'}">${p.beLocked ? '🛡️ BE KİLİTLİ' : 'TAKİPTE'}</div>
-        </div>
-        <div class="pos-details">
-          <span>Giriş: <b>${p.entryPrice}</b></span>
-          <span>Anlık: <b>${p.currentPrice}</b></span>
-          <span>Stop: <b>${p.stopPrice.toFixed(4)}</b></span>
-          <span>Zirve (MFE): <b style="color:var(--green)">+%${(p.mfe || 0).toFixed(2)}</b></span>
-        </div>
-        <div class="pos-pnl" style="color: ${isWin ? 'var(--green)' : 'var(--red)'}">
-          ${isWin ? '+' : ''}$${(p.pnl || 0).toFixed(2)} (%${(p.roi || 0).toFixed(1)} ROI)
-        </div>
-      </div>
+      <tr>
+        <td style="color:var(--muted);font-weight:700;">${idx+1}</td>
+        <td>
+          <div style="display:flex;align-items:center;gap:4px;">
+            <span style="font-weight:900;color:#fff;">${p.symbol}</span>
+            <span class="badge-strat">🚀 MOONSHOT TREND</span>
+          </div>
+        </td>
+        <td>
+          <span class="${isLong ? 'badge-side-long' : 'badge-side-short'}">${isLong ? '▲ LONG' : '▼ SHORT'}</span>
+        </td>
+        <td>
+          <span style="color:var(--muted);">$ ${parseFloat(p.entryPrice).toFixed(4)}</span>
+          <span style="color:var(--blue);margin:0 2px;">➔</span>
+          <span style="color:#fff;font-weight:800;">$ ${parseFloat(p.currentPrice).toFixed(4)}</span>
+          <div style="font-size:9.5px;color:var(--muted)">RSI: 50</div>
+        </td>
+        <td>${stopText}</td>
+        <td><span style="color:var(--green);font-weight:800;">+%${(p.mfe || 0).toFixed(2)}</span></td>
+        <td>
+          <span class="${isWin ? 'badge-pnl-pos' : 'badge-pnl-neg'}">${roiStr} (${pnlStr})</span>
+        </td>
+        <td>
+          <button onclick="closePosition('${p.id}')" class="btn-close-pos">Kapat</button>
+        </td>
+      </tr>
     `;
   }).join('');
 }
 
 function renderHistoryRows(hist) {
   if (!hist || hist.length === 0) {
-    return '<tr><td colspan="11" class="empty-state">Henüz tamamlanan test işlemi yok.</td></tr>';
+    return '<tr><td colspan="9" style="text-align:center;color:var(--muted);padding:18px;">Henüz tamamlanan işlem geçmişi bulunmuyor.</td></tr>';
   }
-  return hist.slice(0, 50).map(h => {
+  return hist.slice(0, 50).map((h, idx) => {
     const isWin = (h.pnl || 0) >= 0;
     return `
       <tr>
-        <td>${h.id}</td>
-        <td style="color:var(--text-muted); font-size:11px;">${h.time}</td>
-        <td><b>${h.symbol}</b></td>
-        <td><span class="badge ${h.side === 'LONG' ? 'badge-green' : 'badge-red'}">${h.side}</span></td>
-        <td>${h.entryPrice}</td>
-        <td>${h.exitPrice}</td>
+        <td style="color:var(--muted);font-weight:700;">${idx+1}</td>
+        <td style="color:var(--muted);font-size:10.5px;">${h.time}</td>
+        <td style="font-weight:800;color:#fff;">${h.symbol}</td>
+        <td><span class="${h.side === 'LONG' ? 'badge-side-long' : 'badge-side-short'}">${h.side}</span></td>
         <td>${h.durationMin} dk</td>
-        <td style="color:var(--green)">+%${(h.mfe || 0).toFixed(2)}</td>
-        <td style="color:${isWin ? 'var(--green)' : 'var(--red)'}; font-weight:600;">${isWin ? '+' : ''}$${(h.pnl || 0).toFixed(2)}</td>
-        <td style="color:${isWin ? 'var(--green)' : 'var(--red)'}; font-weight:600;">${isWin ? '+' : ''}%${(h.roi || 0).toFixed(2)}</td>
-        <td style="font-size:12px; color:var(--text-muted)">${h.exitReason}</td>
+        <td style="font-size:11px;color:var(--muted);">${h.exitReason}</td>
+        <td style="color:var(--green);font-weight:800;">+%${(h.mfe || 0).toFixed(2)}</td>
+        <td style="color:${isWin ? 'var(--green)' : 'var(--red)'};font-weight:800;">${isWin ? '+' : ''}$${(h.pnl || 0).toFixed(2)}</td>
+        <td style="color:${isWin ? 'var(--green)' : 'var(--red)'};font-weight:800;">${isWin ? '+' : ''}%${(h.roi || 0).toFixed(1)}</td>
       </tr>
     `;
   }).join('');
 }
 
-function renderLogRows(lgs) {
-  return lgs.map(l => `
-    <div class="log-row">
-      <span class="log-time">[${l.time}]</span>
-      <span class="log-${l.type}">[${l.type}]</span>
-      <span>${l.msg}</span>
-    </div>
-  `).join('');
-}
-
-// HTTP İSTEK YÖNLENDİRİCİSİ
+// 5. HTTP SUNUCUSU
 const server = http.createServer((req, res) => {
   const parsedUrl = new URL(req.url, `http://${req.headers.host}`);
   const pathname = parsedUrl.pathname;
 
-  // CORS başlıkları
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
 
   if (pathname === '/ping') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({
-      status: "online",
-      uptimeSeconds: Math.floor((Date.now() - startTime) / 1000),
-      timestamp: Date.now()
-    }));
+    res.end(JSON.stringify({ status: "online", uptimeSeconds: Math.floor((Date.now() - startTime) / 1000) }));
     return;
   }
 
@@ -1005,26 +1235,52 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  if (pathname === '/api/debug-binance') {
-    try {
-      const t0 = Date.now();
-      const res = await fetch("https://fapi.binance.com/fapi/v1/ticker/24hr", {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36'
-        }
-      });
-      const text = await res.text();
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({
-        status: res.status,
-        statusText: res.statusText,
-        durationMs: Date.now() - t0,
-        sample: text.slice(0, 200)
-      }));
-    } catch (e) {
-      res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: e.message }));
+  if (pathname === '/api/close-position') {
+    const id = parsedUrl.searchParams.get('id');
+    const idx = activePositions.findIndex(p => p.id === id);
+    if (idx !== -1) {
+      const closed = activePositions.splice(idx, 1)[0];
+      closeTrade(closed, "🛑 Manuel Kapatıldı");
+      persistState();
     }
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: true }));
+    return;
+  }
+
+  if (pathname === '/api/reset-balance') {
+    balance = CONFIG.initialBalance;
+    activePositions = [];
+    history = [];
+    try {
+      if (fs.existsSync(STATE_FILE)) fs.unlinkSync(STATE_FILE);
+      if (fs.existsSync(HISTORY_FILE)) fs.unlinkSync(HISTORY_FILE);
+      if (fs.existsSync(CSV_FILE)) fs.unlinkSync(CSV_FILE);
+    } catch (e) {}
+    initStorage();
+    persistState();
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: true, balance }));
+    return;
+  }
+
+  if (pathname === '/api/update-settings') {
+    const slots = parseInt(parsedUrl.searchParams.get('slots'));
+    const margin = parseFloat(parsedUrl.searchParams.get('margin'));
+    const lev = parseFloat(parsedUrl.searchParams.get('lev'));
+    const sl = parseFloat(parsedUrl.searchParams.get('sl'));
+    const be = parseFloat(parsedUrl.searchParams.get('be'));
+    const moon = parseFloat(parsedUrl.searchParams.get('moon'));
+
+    if (slots) CONFIG.maxSlots = slots;
+    if (margin) CONFIG.marginPerTrade = margin;
+    if (lev) CONFIG.leverage = lev;
+    if (sl) CONFIG.slPct = sl;
+    if (be) CONFIG.bePct = be;
+    if (moon) CONFIG.moonPct = moon;
+
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: true, config: CONFIG }));
     return;
   }
 
@@ -1040,12 +1296,10 @@ const server = http.createServer((req, res) => {
       'Content-Disposition': 'attachment; filename="moonshot_trades_history.csv"',
       'Content-Length': stat.size
     });
-    const readStream = fs.createReadStream(CSV_FILE);
-    readStream.pipe(res);
+    fs.createReadStream(CSV_FILE).pipe(res);
     return;
   }
 
-  // Ana Web Paneli
   if (pathname === '/' || pathname === '/index.html') {
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
     res.end(serveDashboardHtml());
@@ -1056,16 +1310,12 @@ const server = http.createServer((req, res) => {
   res.end("Not Found");
 });
 
-// --- SUNUCU VE DÖNGÜLERİ BAŞLAT ---
+// SUNUCUYU BAŞLAT
 initStorage();
 server.listen(PORT, () => {
   addLog(`🌐 Web Sunucusu hazır: http://localhost:${PORT}`);
-  addLog(`🚀 7/24 Moonshot & Balina Avcısı Test Motoru Başlatıldı!`);
-  
-  // İlk çalıştırmada radarı hemen güncelle
+  addLog(`🚀 Moonshot 7/24 Bulut Test Laboratuvarı Başlatıldı! (Bakiye: $${CONFIG.initialBalance})`);
   updateRadar();
-
-  // Döngüleri başlat
   setInterval(scanLoop, CONFIG.scanIntervalMs);
   setInterval(fastRiskLoop, CONFIG.riskIntervalMs);
   setInterval(updateRadar, CONFIG.radarIntervalMs);
