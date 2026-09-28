@@ -191,14 +191,15 @@ async function fetchBinance(url) {
   return null;
 }
 
-// 1. RADAR (15DK ÇOKLU ZAMAN & ALICI BASKISI)
+// 1. RADAR (3S & 15DK ÇOKLU ZAMAN, ALICI BASKISI VE SİNYAL MOTORU)
+let radarList = [];
 async function updateRadar() {
   if (isRadarRunning) return;
   isRadarRunning = true;
   try {
     const [btcKlines, tickers] = await Promise.all([
-      fetchBinance("https://fapi.binance.com/fapi/v1/klines?symbol=BTCUSDT&interval=15m&limit=2"),
-      fetchBinance("https://fapi.binance.com/fapi/v1/ticker/24hr")
+      fetchBinance("/fapi/v1/klines?symbol=BTCUSDT&interval=15m&limit=2"),
+      fetchBinance("/fapi/v1/ticker/24hr")
     ]);
 
     if (btcKlines && btcKlines.length >= 2) {
@@ -211,43 +212,71 @@ async function updateRadar() {
 
     if (!tickers || !Array.isArray(tickers)) return;
 
+    const tickerMap = {};
+    tickers.forEach(t => {
+      tickerMap[t.symbol] = {
+        lastPrice: parseFloat(t.lastPrice) || 0,
+        chg24h: parseFloat(t.priceChangePercent) || 0,
+        vol24hM: (parseFloat(t.quoteVolume) || 0) / 1e6
+      };
+    });
+
     const valid = tickers.filter(t => {
       if (!t.symbol.endsWith("USDT") || t.symbol.startsWith("USDC") || BANNED_SYMBOLS.has(t.symbol)) return false;
       const volM = (parseFloat(t.quoteVolume) || 0) / 1e6;
-      return volM >= 4.0;
-    });
+      return volM >= 3.0;
+    }).sort((a, b) => Math.abs(parseFloat(b.priceChangePercent) || 0) - Math.abs(parseFloat(a.priceChangePercent) || 0));
 
-    const chunkSize = 20;
-    for (let i = 0; i < Math.min(valid.length, 60); i += chunkSize) {
+    // Top 80 koinin 3 saatlik (3x 1h) kline ve alıcı baskısını çek
+    const chunkSize = 15;
+    const scanned = [];
+    for (let i = 0; i < Math.min(valid.length, 75); i += chunkSize) {
       const chunk = valid.slice(i, i + chunkSize);
       await Promise.all(chunk.map(async item => {
         const sym = item.symbol;
-        const klines = await fetchBinance(`https://fapi.binance.com/fapi/v1/klines?symbol=${sym}&interval=15m&limit=2`);
+        const klines = await fetchBinance(`/fapi/v1/klines?symbol=${sym}&interval=1h&limit=3`);
         if (klines && klines.length > 0) {
-          const c = klines[klines.length - 1];
-          const openP = parseFloat(c[1]);
-          const closeP = parseFloat(c[4]);
-          const volUsdt = parseFloat(c[7]) || 0;
-          const takerBuyUsdt = parseFloat(c[10]) || 0;
+          const open3h = parseFloat(klines[0][1]);
+          const close3h = parseFloat(klines[klines.length - 1][4]);
+          const high3h = Math.max(...klines.map(k => parseFloat(k[2])));
+          const low3h = Math.min(...klines.map(k => parseFloat(k[3])));
+          const volUsdt = klines.reduce((acc, k) => acc + (parseFloat(k[7]) || 0), 0);
+          const takerBuyUsdt = klines.reduce((acc, k) => acc + (parseFloat(k[10]) || 0), 0);
 
           const takerRatio = volUsdt > 0 ? (takerBuyUsdt / volUsdt) * 100 : 50;
-          const chg15m = openP > 0 ? ((closeP - openP) / openP) * 100 : 0;
+          const chg3h = open3h > 0 ? ((close3h - open3h) / open3h) * 100 : 0;
+          const tInfo = tickerMap[sym] || {};
 
           let signal = "⚖️ NÖTR";
-          if (chg15m >= 3.5) signal = "🚀 SÜPER ROKET";
-          else if (chg15m >= 1.4) signal = "🟢 GÜÇLÜ BOĞA";
-          else if (chg15m <= -3.5) signal = "🩸 ŞELALE";
-          else if (chg15m <= -1.4) signal = "🔴 GÜÇLÜ AYI";
+          if (chg3h >= 5.0) signal = "🚀 SÜPER ROKET";
+          else if (chg3h >= 2.0) signal = "🟢 GÜÇLÜ BOĞA";
+          else if (chg3h <= -5.0) signal = "🩸 ŞELALE";
+          else if (chg3h <= -2.0) signal = "🔴 GÜÇLÜ AYI";
 
-          radarMap[sym] = {
+          const rItem = {
             symbol: sym,
-            chg15m,
+            lastPrice: close3h,
+            chg3h,
+            chg15m: chg3h / 4, // Tahmini 15m alt momentum
+            vol3hM: volUsdt / 1e6,
+            range3h: `$${low3h.toFixed(4)} - $${high3h.toFixed(4)}`,
+            low3h,
+            high3h,
             takerBuyRatio: takerRatio,
+            chg24h: tInfo.chg24h || 0,
+            vol24hM: tInfo.vol24hM || 0,
             signal,
             lastUpdate: Date.now()
           };
+
+          radarMap[sym] = rItem;
+          scanned.push(rItem);
         }
       }));
+    }
+
+    if (scanned.length > 0) {
+      radarList = scanned.sort((a, b) => Math.abs(b.chg3h) - Math.abs(a.chg3h));
     }
   } catch (err) {
   } finally {
@@ -352,7 +381,7 @@ async function scanLoop() {
         if (coinCooldowns[sym] && coinCooldowns[sym] > Date.now()) return null;
         const lastP = parseFloat(item.lastPrice);
         if (lastP < 0.0001) return null;
-        const k3m = await fetchBinance(`https://fapi.binance.com/fapi/v1/klines?symbol=${sym}&interval=3m&limit=30`);
+        const k3m = await fetchBinance(`/fapi/v1/klines?symbol=${sym}&interval=3m&limit=30`);
         return { sym, lastP, k3m, chg: parseFloat(item.priceChangePercent) || 0, isVip: item.isVip };
       }));
 
@@ -379,35 +408,49 @@ async function scanLoop() {
 
         const curMovePct = ((curP - curO) / curO) * 100;
         const twoCandleMovePct = ((curP - prevO) / prevO) * 100;
-        const minJump = isVip ? 0.80 : 1.00;
+        const minJump = isVip ? 0.70 : 0.90;
 
-        const isWhaleVol = curV >= avgVol20 * 2.0 || (curV + prevV) >= avgVol20 * 3.0 || prevV >= avgVol20 * 2.0;
+        const isWhaleVol = curV >= avgVol20 * 1.8 || (curV + prevV) >= avgVol20 * 2.5 || prevV >= avgVol20 * 1.8;
         const isDailyTrending = chg >= 2.0 && chg <= 80.0;
-        const hasMomentum = (curMovePct >= minJump && curP > curO) || (twoCandleMovePct >= (minJump + 0.30) && curP >= curO * 0.998);
+        const hasMomentum = (curMovePct >= minJump && curP > curO) || (twoCandleMovePct >= (minJump + 0.25) && curP >= curO * 0.998);
 
-        const noWickLong = curP >= curH * 0.992;
+        const noWickLong = curP >= curH * 0.991; // Zirveden %0.9'dan fazla satış yememiş
+        const noWickShort = curP <= curL * 1.009; // Dipten %0.9'dan fazla sekmemiş
 
         const rInfo = radarMap[sym];
         let radarOkLong = true;
         let radarOkShort = true;
+        let isDirectRadarLong = false;
+        let isDirectRadarShort = false;
         let radarTag = "";
 
         if (rInfo) {
-          if (rInfo.takerBuyRatio < 50 || rInfo.chg15m < -0.20) radarOkLong = false;
-          if (rInfo.takerBuyRatio > 50 || rInfo.chg15m > 0.20) radarOkShort = false;
-          if (rInfo.chg15m >= 0.8 && rInfo.takerBuyRatio >= 52) {
-            radarTag = `[15m: +%${rInfo.chg15m.toFixed(1)} / %${rInfo.takerBuyRatio.toFixed(0)} Alıcı - ${rInfo.signal}]`;
-          } else if (rInfo.chg15m <= -0.8 && rInfo.takerBuyRatio <= 48) {
-            radarTag = `[15m: %${rInfo.chg15m.toFixed(1)} / %${(100 - rInfo.takerBuyRatio).toFixed(0)} Satıcı - ${rInfo.signal}]`;
+          // 🎯 RADAR DOĞRUDAN VUR-KAÇ TETİĞİ (YÜKSELİRKEN VE DÜŞERKEN ANINDA YAKALA)
+          const taker = rInfo.takerBuyRatio || 50;
+          const chg3 = rInfo.chg3h || 0;
+          const sig = rInfo.signal || "";
+
+          // 1. YÜKSELİRKEN VUR-KAÇ (LONG): 3s Değişim >= %2 VEYA Alıcı Baskısı >= %52 + Boğa/Roket
+          if ((chg3 >= 1.8 || curMovePct >= 0.70) && taker >= 51.5 && (sig.includes("ROKET") || sig.includes("BOĞA"))) {
+            isDirectRadarLong = true;
+            radarTag = `[3s: +%${chg3.toFixed(1)} / %${taker.toFixed(0)} Alıcı - ${sig}]`;
           }
+
+          // 2. DÜŞERKEN VUR-KAÇ (SHORT): 3s Değişim <= -%2 VEYA Satıcı Baskısı >= %52 + Ayı/Şelale
+          if ((chg3 <= -1.8 || curMovePct <= -0.70) && taker <= 48.5 && (sig.includes("ŞELALE") || sig.includes("AYI"))) {
+            isDirectRadarShort = true;
+            radarTag = `[3s: %${chg3.toFixed(1)} / %${(100 - taker).toFixed(0)} Satıcı - ${sig}]`;
+          }
+
+          if (taker < 49.0 && chg3 < -0.5) radarOkLong = false;
+          if (taker > 51.0 && chg3 > 0.5) radarOkShort = false;
         }
 
-        const isLongPump = ((hasMomentum && isWhaleVol) || (isDailyTrending && curMovePct >= 0.70 && isWhaleVol)) && noWickLong && radarOkLong;
+        const isLongPump = (isDirectRadarLong || (hasMomentum && isWhaleVol) || (isDailyTrending && curMovePct >= 0.60 && isWhaleVol)) && noWickLong && radarOkLong;
         
-        const isDailyOverbought = chg >= 15.0;
-        const hasDownMomentum = (curMovePct <= -minJump && curP < curO) || (twoCandleMovePct <= -(minJump + 0.30) && curP < curO);
-        const noWickShort = curP <= curL * 1.008;
-        const isShortDump = ((hasDownMomentum && isWhaleVol) || (isDailyOverbought && curMovePct <= -0.90 && isWhaleVol)) && noWickShort && radarOkShort;
+        const isDailyOverbought = chg >= 12.0;
+        const hasDownMomentum = (curMovePct <= -minJump && curP < curO) || (twoCandleMovePct <= -(minJump + 0.25) && curP < curO);
+        const isShortDump = (isDirectRadarShort || (hasDownMomentum && isWhaleVol) || (isDailyOverbought && curMovePct <= -0.80 && isWhaleVol)) && noWickShort && radarOkShort;
 
         if (isLongPump || isShortDump) {
           const side = isLongPump ? "LONG" : "SHORT";
@@ -1037,6 +1080,33 @@ function serveDashboardHtml() {
             </tbody>
           </table>
         </div>
+
+        <!-- 📡 3S / 15DK RADAR VE ALICI BASKISI CANLI PİYASA AKIŞI -->
+        <h2 style="margin-top:16px;">
+          <span>📡 3S / 15DK RADAR VE ALICI BASKISI CANLI PİYASA AKIŞI (TOP VUR-KAÇ ADAYLARI)</span>
+          <span style="font-size:11px;color:var(--muted);font-weight:600;"><span id="radarCount">0</span> KOİN ANALİZ EDİLDİ</span>
+        </h2>
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Sembol</th>
+                <th>Son Fiyat</th>
+                <th>3s Değişim</th>
+                <th>24s Değişim</th>
+                <th>3s Hacim</th>
+                <th>3s Fiyat Aralığı</th>
+                <th>Alıcı Baskısı</th>
+                <th>Sinyal</th>
+                <th>Bot Durumu</th>
+              </tr>
+            </thead>
+            <tbody id="radarTbody">
+              <tr><td colspan="10" style="text-align:center;color:var(--muted);padding:18px;">Radar verileri taranıyor...</td></tr>
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   </div>
@@ -1131,6 +1201,45 @@ function serveDashboardHtml() {
               </tr>
             \`;
           }).join('');
+        }
+
+        // 3s / 15dk Radar Tablosu
+        const radarTbody = document.getElementById("radarTbody");
+        if (radarTbody && data.radar) {
+          document.getElementById("radarCount").innerText = data.radar.length;
+          if (data.radar.length === 0) {
+            radarTbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:var(--muted);padding:18px;">Radar verileri taranıyor...</td></tr>';
+          } else {
+            const activeSyms = new Set((data.positions || []).map(p => p.symbol));
+            radarTbody.innerHTML = data.radar.map((r, idx) => {
+              const chgPos = r.chg3h >= 0;
+              const chg24Pos = r.chg24h >= 0;
+              const taker = r.takerBuyRatio || 50;
+              const takerColor = taker >= 52 ? 'var(--green)' : (taker <= 48 ? 'var(--red)' : 'var(--muted)');
+              const isActive = activeSyms.has(r.symbol);
+
+              return \`
+                <tr>
+                  <td style="color:var(--muted);font-weight:700;">\${idx+1}</td>
+                  <td style="font-weight:900;color:#fff;">\${r.symbol}</td>
+                  <td>$\${parseFloat(r.lastPrice).toFixed(4)}</td>
+                  <td style="color:\${chgPos ? 'var(--green)' : 'var(--red)'};font-weight:800;">\${chgPos ? '+' : ''}\${r.chg3h.toFixed(2)}%</td>
+                  <td style="color:\${chg24Pos ? 'var(--green)' : 'var(--red)'};font-weight:700;">\${chg24Pos ? '+' : ''}\${r.chg24h.toFixed(2)}%</td>
+                  <td>$\${(r.vol3hM || 0).toFixed(1)}M</td>
+                  <td style="color:var(--muted);font-size:11px;">\${r.range3h || '-'}</td>
+                  <td style="color:\${takerColor};font-weight:800;">
+                    %\${taker.toFixed(1)} \${taker >= 50 ? 'Alıcı' : 'Satıcı'}
+                  </td>
+                  <td style="font-weight:800;">\${r.signal || '⚖️ NÖTR'}</td>
+                  <td>
+                    \${isActive 
+                      ? '<span style="background:rgba(16,185,129,0.2);color:var(--green);padding:2px 6px;border-radius:4px;font-weight:800;">🟢 POZİSYONDA</span>' 
+                      : '<span style="background:rgba(168,85,247,0.15);color:#c084fc;padding:2px 6px;border-radius:4px;font-weight:700;">🎯 VUR-KAÇ HEDEFTE</span>'}
+                  </td>
+                </tr>
+              \`;
+            }).join('');
+          }
         }
       } catch (e) {}
     }
@@ -1278,7 +1387,8 @@ const server = http.createServer(async (req, res) => {
       stats: getStats(),
       positions: activePositions,
       history: history.slice(0, 50),
-      logs: logs.slice(0, 50)
+      logs: logs.slice(0, 50),
+      radar: radarList.slice(0, 30)
     }));
     return;
   }
