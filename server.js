@@ -144,6 +144,7 @@ function appendTradeToCsv(trade) {
 }
 
 // --- BİNANCE API YARDIMCISI ---
+let lastApiErrorLog = 0;
 async function fetchBinance(url) {
   try {
     const controller = new AbortController();
@@ -151,13 +152,24 @@ async function fetchBinance(url) {
     const res = await fetch(url, {
       signal: controller.signal,
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'application/json'
       }
     });
     clearTimeout(timeoutId);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    if (!res.ok) {
+      if (Date.now() - lastApiErrorLog > 15000) {
+        lastApiErrorLog = Date.now();
+        addLog(`⚠️ Binance HTTP ${res.status} (${res.statusText}) [${url.slice(0, 45)}]`, 'WARN');
+      }
+      return null;
+    }
     return await res.json();
   } catch (err) {
+    if (Date.now() - lastApiErrorLog > 15000) {
+      lastApiErrorLog = Date.now();
+      addLog(`⚠️ Binance Bağlantı Hatası: ${err.message}`, 'WARN');
+    }
     return null;
   }
 }
@@ -990,6 +1002,29 @@ const server = http.createServer((req, res) => {
       history: history.slice(0, 50),
       logs: logs.slice(0, 50)
     }));
+    return;
+  }
+
+  if (pathname === '/api/debug-binance') {
+    try {
+      const t0 = Date.now();
+      const res = await fetch("https://fapi.binance.com/fapi/v1/ticker/24hr", {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36'
+        }
+      });
+      const text = await res.text();
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        status: res.status,
+        statusText: res.statusText,
+        durationMs: Date.now() - t0,
+        sample: text.slice(0, 200)
+      }));
+    } catch (e) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: e.message }));
+    }
     return;
   }
 
