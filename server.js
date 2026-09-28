@@ -519,25 +519,49 @@ async function scanLoop() {
         let radarTag = "";
 
         if (rInfo) {
-          // 🎯 RADAR DOĞRUDAN VUR-KAÇ TETİĞİ (YÜKSELİRKEN VE DÜŞERKEN ANINDA YAKALA)
+          // 🎯 RADAR DOĞRUDAN VUR-KAÇ TETİĞİ (GECİKMELİ GİRİŞ ENGELLİ)
           const taker = rInfo.takerBuyRatio || 50;
           const chg3 = rInfo.chg3h || 0;
           const sig = rInfo.signal || "";
 
-          // 1. YÜKSELİRKEN VUR-KAÇ (LONG): 3s Değişim >= %1.8 VEYA Alıcı Baskısı >= %51.5 + Boğa/Roket
-          if ((chg3 >= 1.8 || curMovePct >= 0.65) && taker >= 51.5 && (sig.includes("ROKET") || sig.includes("BOĞA"))) {
+          // 1. YÜKSELİRKEN VUR-KAÇ (LONG): 3s Değişim >= %5.0 + Alıcı Baskısı >= %51.5 + Boğa/Roket
+          if ((chg3 >= 5.0 || curMovePct >= 0.65) && taker >= 51.5 && (sig.includes("ROKET") || sig.includes("BOĞA"))) {
             isDirectRadarLong = true;
             radarTag = `[3s: +%${chg3.toFixed(1)} / %${taker.toFixed(0)} Alıcı - ${sig}]`;
           }
 
-          // 2. DÜŞERKEN VUR-KAÇ (SHORT): 3s Değişim <= -%1.8 VEYA Satıcı Baskısı >= %51.5 + Ayı/Şelale
-          if ((chg3 <= -1.8 || curMovePct <= -0.65) && taker <= 48.5 && (sig.includes("ŞELALE") || sig.includes("AYI"))) {
+          // 2. DÜŞERKEN VUR-KAÇ (SHORT): 3s Değişim <= -%8.0 + Satıcı Baskısı >= %51.5 + Ayı/Şelale
+          if ((chg3 <= -8.0 || curMovePct <= -0.65) && taker <= 48.5 && (sig.includes("ŞELALE") || sig.includes("AYI"))) {
             isDirectRadarShort = true;
             radarTag = `[3s: %${chg3.toFixed(1)} / %${(100 - taker).toFixed(0)} Satıcı - ${sig}]`;
           }
 
           if (taker < 48.5 && chg3 < -0.5) radarOkLong = false;
           if (taker > 51.5 && chg3 > 0.5) radarOkShort = false;
+
+          // 🚫 24s-3s YÖN UYUMSUZLUĞU FİLTRESİ: Günlük trend işlem yönüne ters ise girme!
+          const chg24 = rInfo.chg24h || chg;
+          if (isDirectRadarShort && chg24 >= 10.0) {
+            // Günlükte +%10+ yükselmiş koine SHORT açma (geri çekilme düzeltmesi, ana trend LONG)
+            isDirectRadarShort = false;
+            radarOkShort = false;
+          }
+          if (isDirectRadarLong && chg24 <= -10.0) {
+            // Günlükte -%10+ düşmüş koine LONG açma (tepki rallisi, ana trend SHORT)
+            isDirectRadarLong = false;
+            radarOkLong = false;
+          }
+        }
+
+        // 🕐 SON MUM MOMENTUM TEYİDİ: Son 3dk mumun yönü işlem yönüyle aynı mı?
+        // Son mum yeşil (yukarı) ise SHORT açma, son mum kırmızı (aşağı) ise LONG açma
+        const lastCandleGreen = curP > curO;
+        const lastCandleRed = curP < curO;
+        if (isDirectRadarShort && lastCandleGreen && curMovePct > 0.15) {
+          isDirectRadarShort = false; // Son mum yeşil, düşüş durmuş, dönüş başlamış olabilir
+        }
+        if (isDirectRadarLong && lastCandleRed && curMovePct < -0.15) {
+          isDirectRadarLong = false; // Son mum kırmızı, yükseliş durmuş, dönüş başlamış olabilir
         }
 
         // İğne tuzağı kontrolü: Doğrudan Radar Roket/Şelale sinyallerinde %3 tolerans tanı
@@ -689,9 +713,9 @@ async function fastRiskLoop() {
         }
       }
 
-      // 3. DİNAMİK İZSÜREN TRAILING STOP
+      // 3. DİNAMİK İZSÜREN TRAILING STOP (GENİŞLETİLMİŞ — Güçlü Trendlerde Erken Çıkmayı Engelle)
       const mfe = pos.mfe || 0;
-      const pullbackLimit = mfe >= 20.0 ? 6.00 : (mfe >= 12.0 ? 4.50 : (mfe >= 7.0 ? 3.00 : 2.00));
+      const pullbackLimit = mfe >= 20.0 ? 7.00 : (mfe >= 12.0 ? 5.00 : (mfe >= 5.0 ? 3.50 : 2.50));
       if (!exitReason && mfe >= CONFIG.bePct && (mfe - move) >= pullbackLimit) {
         exitReason = `🏆 Zirveden Takip Kârı Alındı (+%${pos.roi.toFixed(1)} ROI / Zirve: +%${mfe.toFixed(2)} Spot)`;
       }
