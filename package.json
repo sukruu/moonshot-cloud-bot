@@ -1,0 +1,15 @@
+{
+  "name": "moonshot-cloud-bot",
+  "version": "1.0.0",
+  "description": "7/24 Kesintisiz Binance Moonshot & Balina Avcısı Test Laboratuvarı",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": ["binance", "trading-bot", "moonshot", "crypto"],
+  "author": "Sukru",
+  "license": "MIT"
+}
