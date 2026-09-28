@@ -727,7 +727,12 @@ function serveDashboardHtml() {
 <html lang="tr">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Moonshot Bot">
+  <meta name="theme-color" content="#07090e">
+  <meta name="format-detection" content="telephone=no">
   <title>🚀 Moonshot 7/24 Bulut Test Laboratuvarı</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220%22%22><text y=%2226%22 font-size=%2224%22>🚀</text></svg>">
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700;800;900&display=swap" rel="stylesheet">
@@ -747,37 +752,42 @@ function serveDashboardHtml() {
       --purple: #a855f7;
       --blue: #38bdf8;
     }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
     body {
       background: var(--bg);
       color: var(--text);
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-      padding: 12px 16px;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+      padding: max(8px, env(safe-area-inset-top)) max(10px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left));
       font-size: 13px;
       min-height: 100vh;
+      -webkit-font-smoothing: antialiased;
     }
-    .container { max-width: 1560px; margin: 0 auto; }
+    .container { max-width: 1560px; margin: 0 auto; width: 100%; }
 
     /* TABS */
     .tabs {
       display: flex;
-      gap: 8px;
-      margin-bottom: 14px;
+      gap: 6px;
+      margin-bottom: 12px;
       overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
     }
+    .tabs::-webkit-scrollbar { display: none; }
     .tab-btn {
       background: var(--panel);
       border: 1px solid var(--border);
       color: var(--muted);
-      font-size: 12px;
+      font-size: 11px;
       font-weight: 800;
-      padding: 8px 16px;
+      padding: 8px 13px;
       border-radius: 8px;
       cursor: pointer;
       display: inline-flex;
       align-items: center;
-      gap: 6px;
+      gap: 5px;
       white-space: nowrap;
+      flex-shrink: 0;
     }
     .tab-btn.active {
       background: var(--panel2);
@@ -790,26 +800,26 @@ function serveDashboardHtml() {
     .dashboard {
       display: grid;
       grid-template-columns: 310px 1fr;
-      gap: 14px;
+      gap: 12px;
       align-items: start;
     }
-    @media (max-width: 1050px) {
-      .dashboard { grid-template-columns: 1fr; }
+    @media (max-width: 960px) {
+      .dashboard { grid-template-columns: 1fr; gap: 10px; }
     }
 
     .panel {
       background: var(--panel);
       border: 1px solid var(--border);
       border-radius: 12px;
-      padding: 14px;
+      padding: 12px 14px;
       box-shadow: 0 8px 24px rgba(0,0,0,0.5);
     }
     .panel h2 {
-      font-size: 13px;
+      font-size: 12.5px;
       font-weight: 800;
       text-transform: uppercase;
       letter-spacing: 0.5px;
-      margin-bottom: 12px;
+      margin-bottom: 10px;
       display: flex;
       justify-content: space-between;
       align-items: center;
@@ -820,15 +830,15 @@ function serveDashboardHtml() {
       background: rgba(8, 11, 18, 0.7);
       border: 1px solid rgba(255, 255, 255, 0.08);
       border-radius: 8px;
-      padding: 10px 12px;
-      margin-bottom: 12px;
+      padding: 9px 11px;
+      margin-bottom: 10px;
     }
     .status-item {
       display: flex;
       justify-content: space-between;
       align-items: center;
       font-size: 11px;
-      margin-bottom: 6px;
+      margin-bottom: 5px;
       font-weight: 600;
       color: var(--muted);
     }
@@ -850,21 +860,21 @@ function serveDashboardHtml() {
       background: linear-gradient(135deg, rgba(88,28,135,0.25), rgba(15,23,42,0.6));
       border: 1px solid rgba(168,85,247,0.35);
       border-radius: 8px;
-      padding: 10px 12px;
-      margin-bottom: 12px;
+      padding: 9px 11px;
+      margin-bottom: 10px;
     }
     .strat-card-head { display: flex; justify-content: space-between; font-size: 10.5px; margin-bottom: 4px; }
     .strat-badge-pill { background: var(--purple); color: #fff; font-weight: 900; font-size: 9px; padding: 2px 6px; border-radius: 4px; }
-    .strat-card-title { font-weight: 800; font-size: 13px; color: #fff; }
+    .strat-card-title { font-weight: 800; font-size: 12.5px; color: #fff; }
     .strat-card-sub { font-size: 10px; color: var(--muted); margin-top: 2px; }
 
     /* PARAMETERS */
     .sidebar-section-title { font-size: 10px; font-weight: 800; color: var(--muted); text-transform: uppercase; margin-bottom: 8px; letter-spacing: 0.5px; }
-    .param-grid-2x2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
-    .param-card { background: rgba(8, 11, 18, 0.7); border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; padding: 6px 10px; }
+    .param-grid-2x2 { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 8px; }
+    .param-card { background: rgba(8, 11, 18, 0.7); border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; padding: 6px 9px; }
     .param-header { display: flex; justify-content: space-between; font-size: 10px; color: var(--muted); font-weight: 700; margin-bottom: 2px; }
     .param-input-wrap { display: flex; align-items: baseline; justify-content: space-between; }
-    .param-input-wrap input { width: 65px; background: none; border: none; color: #fff; font-family: 'JetBrains Mono', monospace; font-size: 14px; font-weight: 800; outline: none; }
+    .param-input-wrap input { width: 58px; background: none; border: none; color: #fff; font-family: 'JetBrains Mono', monospace; font-size: 14px; font-weight: 800; outline: none; }
     .param-unit { font-size: 10.5px; color: var(--muted); }
 
     /* HERO PERF */
@@ -872,7 +882,7 @@ function serveDashboardHtml() {
       background: linear-gradient(135deg, rgba(16,185,129,0.1), rgba(15,23,42,0.8));
       border: 1px solid rgba(16,185,129,0.3);
       border-radius: 8px;
-      padding: 10px 12px;
+      padding: 9px 11px;
       display: flex;
       justify-content: space-between;
       align-items: center;
@@ -882,45 +892,115 @@ function serveDashboardHtml() {
     .perf-hero-sub { font-size: 11px; font-weight: 700; color: var(--green); }
     .perf-hero-val { font-family: 'JetBrains Mono', monospace; font-size: 18px; font-weight: 900; color: #fff; }
 
-    .perf-grid-4 { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 12px; }
+    .perf-grid-4 { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 10px; }
     .perf-mini-card { background: rgba(8, 11, 18, 0.7); border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; padding: 6px 8px; }
     .perf-mini-label { font-size: 9.5px; color: var(--muted); display: block; }
-    .perf-mini-val { font-family: 'JetBrains Mono', monospace; font-size: 12.5px; font-weight: 800; }
+    .perf-mini-val { font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 800; }
 
-    /* BUTTONS */
-    .btn-action { width: 100%; padding: 8px 12px; border-radius: 6px; font-weight: 800; font-size: 11px; cursor: pointer; border: none; margin-bottom: 6px; transition: 0.2s; text-align: center; text-decoration: none; display: flex; align-items: center; justify-content: center; gap: 6px; }
-    .btn-start { background: linear-gradient(135deg, #10b981, #059669); color: #fff; }
-    .btn-secondary { background: var(--panel2); color: var(--text); border: 1px solid var(--border); }
+    /* BUTTONS GRID */
+    .action-buttons-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+      margin-top: 6px;
+    }
+    .btn-action {
+      width: 100%;
+      padding: 8px 8px;
+      border-radius: 7px;
+      font-weight: 800;
+      font-size: 10.5px;
+      cursor: pointer;
+      border: 1px solid var(--border);
+      transition: 0.15s;
+      text-align: center;
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      min-height: 36px;
+    }
+    .btn-secondary { background: var(--panel2); color: var(--text); }
     .btn-secondary:hover { background: var(--panel-hover); }
+    .btn-reset {
+      grid-column: span 2;
+      background: rgba(244, 63, 94, 0.12);
+      border-color: rgba(244, 63, 94, 0.35);
+      color: var(--red);
+    }
+    .btn-reset:hover { background: var(--red); color: #fff; }
 
     /* TABLES */
     .table-container {
       width: 100%;
       overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
       border: 1px solid var(--border);
       border-radius: 8px;
       background: rgba(8, 11, 18, 0.4);
-      margin-bottom: 14px;
+      margin-bottom: 12px;
     }
-    table { width: 100%; border-collapse: collapse; font-size: 11.5px; white-space: nowrap; }
-    th { position: sticky; top: 0; background: #111724; text-align: left; padding: 8px 10px; color: var(--muted); font-weight: 800; font-size: 10px; text-transform: uppercase; border-bottom: 1px solid var(--border); }
-    td { padding: 8px 10px; border-bottom: 1px solid rgba(255, 255, 255, 0.03); font-family: 'JetBrains Mono', monospace; }
+    .table-container::-webkit-scrollbar { height: 4px; }
+    .table-container::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 2px; }
+    table { width: 100%; border-collapse: collapse; font-size: 11px; white-space: nowrap; }
+    th {
+      position: sticky;
+      top: 0;
+      background: #111724;
+      text-align: left;
+      padding: 7px 9px;
+      color: var(--muted);
+      font-weight: 800;
+      font-size: 9.5px;
+      text-transform: uppercase;
+      border-bottom: 1px solid var(--border);
+      z-index: 2;
+    }
+    td { padding: 7px 9px; border-bottom: 1px solid rgba(255, 255, 255, 0.03); font-family: 'JetBrains Mono', monospace; }
     tr:hover td { background: rgba(255, 255, 255, 0.03); }
 
     /* BADGES */
     .badge-moon { background: rgba(168,85,247,0.18); border: 1px solid rgba(168,85,247,0.4); color: #c084fc; padding: 2px 7px; border-radius: 4px; font-size: 10px; font-weight: 800; }
-    .badge-strat { background: rgba(250,204,21,0.12); border: 1px solid rgba(250,204,21,0.3); color: #facc15; font-size: 9.5px; padding: 2px 6px; border-radius: 3px; font-weight: 700; margin-left: 4px; }
-    .badge-side-long { background: rgba(16,185,129,0.2); border: 1px solid rgba(16,185,129,0.4); color: var(--green); font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: 800; }
-    .badge-side-short { background: rgba(244,63,94,0.2); border: 1px solid rgba(244,63,94,0.4); color: var(--red); font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: 800; }
-    .badge-sl { color: var(--red); font-weight: 800; font-size: 11px; }
-    .badge-be { color: var(--green); font-weight: 800; font-size: 11px; }
-    .badge-pnl-pos { color: var(--green); font-weight: 800; font-size: 11.5px; }
-    .badge-pnl-neg { color: var(--red); font-weight: 800; font-size: 11.5px; }
-    .btn-close-pos { background: rgba(244,63,94,0.15); border: 1px solid rgba(244,63,94,0.35); color: var(--red); font-weight: 800; font-size: 10.5px; padding: 3px 8px; border-radius: 4px; cursor: pointer; transition: 0.2s; }
+    .badge-strat { background: rgba(250,204,21,0.12); border: 1px solid rgba(250,204,21,0.3); color: #facc15; font-size: 9px; padding: 2px 5px; border-radius: 3px; font-weight: 700; margin-left: 4px; }
+    .badge-side-long { background: rgba(16,185,129,0.2); border: 1px solid rgba(16,185,129,0.4); color: var(--green); font-size: 9.5px; padding: 2px 6px; border-radius: 4px; font-weight: 800; }
+    .badge-side-short { background: rgba(244,63,94,0.2); border: 1px solid rgba(244,63,94,0.4); color: var(--red); font-size: 9.5px; padding: 2px 6px; border-radius: 4px; font-weight: 800; }
+    .badge-sl { color: var(--red); font-weight: 800; font-size: 10.5px; }
+    .badge-be { color: var(--green); font-weight: 800; font-size: 10.5px; }
+    .badge-pnl-pos { color: var(--green); font-weight: 800; font-size: 11px; }
+    .badge-pnl-neg { color: var(--red); font-weight: 800; font-size: 11px; }
+    .btn-close-pos {
+      background: rgba(244,63,94,0.15);
+      border: 1px solid rgba(244,63,94,0.35);
+      color: var(--red);
+      font-weight: 800;
+      font-size: 10.5px;
+      padding: 3px 8px;
+      border-radius: 4px;
+      cursor: pointer;
+      min-height: 28px;
+      transition: 0.15s;
+    }
     .btn-close-pos:hover { background: var(--red); color: #fff; }
 
     /* CHIPS */
-    .chip { font-size: 10px; padding: 2px 6px; border-radius: 4px; background: rgba(16,185,129,0.15); border: 1px solid rgba(16,185,129,0.3); color: var(--green); font-family: 'JetBrains Mono', monospace; font-weight: 700; }
+    .chip { font-size: 9.5px; padding: 2px 6px; border-radius: 4px; background: rgba(16,185,129,0.15); border: 1px solid rgba(16,185,129,0.3); color: var(--green); font-family: 'JetBrains Mono', monospace; font-weight: 700; }
+    
+    .mobile-swipe-hint {
+      font-size: 9.5px;
+      color: var(--muted);
+      margin-bottom: 5px;
+      display: none;
+      align-items: center;
+      gap: 4px;
+    }
+
+    @media (max-width: 768px) {
+      .mobile-swipe-hint { display: flex; }
+      input[type="number"], input[type="text"] { font-size: 16px !important; }
+      .param-card { padding: 5px 8px; }
+      .panel { padding: 10px; border-radius: 10px; }
+    }
   </style>
 </head>
 <body>
@@ -1046,16 +1126,18 @@ function serveDashboardHtml() {
           </div>
         </div>
 
-        <div style="background:rgba(16,185,129,0.06);border:1px solid rgba(16,185,129,0.25);border-radius:6px;padding:6px 8px;margin-bottom:10px;display:flex;align-items:center;gap:6px;font-size:10px;color:var(--green);font-weight:700;">
+        <div style="background:rgba(16,185,129,0.06);border:1px solid rgba(16,185,129,0.25);border-radius:6px;padding:6px 8px;margin-bottom:8px;display:flex;align-items:center;gap:6px;font-size:10px;color:var(--green);font-weight:700;">
           <span>⚡</span>
-          <span>7/24 Kesintisiz Hafıza & Otomatik Eşitleme Aktif</span>
+          <span>7/24 Kesintisiz Hafıza & Eşitleme Aktif</span>
         </div>
 
-        <a href="/api/download-csv" class="btn-action btn-secondary" style="font-size:11px;">📊 EXCEL / CSV İNDİR</a>
-        <a href="/api/backup-json" class="btn-action btn-secondary" style="font-size:11px;color:var(--blue);">💾 YEDEĞİ İNDİR (JSON)</a>
-        <button onclick="document.getElementById('importFile').click()" class="btn-action btn-secondary" style="font-size:11px;color:var(--purple);">📂 YEDEK YÜKLE (JSON)</button>
-        <input type="file" id="importFile" accept=".json" style="display:none" onchange="handleImportBackup(event)">
-        <button onclick="resetBalance()" class="btn-action btn-secondary" style="font-size:11px;color:var(--red);">🧹 BAKİYEYİ $100'A SIFIRLA</button>
+        <div class="action-buttons-grid">
+          <a href="/api/download-csv" class="btn-action btn-secondary">📊 CSV İNDİR</a>
+          <a href="/api/backup-json" class="btn-action btn-secondary" style="color:var(--blue);">💾 YEDEK AL</a>
+          <button onclick="document.getElementById('importFile').click()" class="btn-action btn-secondary" style="color:var(--purple);">📂 YEDEK YÜKLE</button>
+          <button onclick="resetBalance()" class="btn-action btn-reset">🧹 SIFIRLA ($100)</button>
+          <input type="file" id="importFile" accept=".json" style="display:none" onchange="handleImportBackup(event)">
+        </div>
       </div>
 
       <!-- SAĞ PANEL: İŞLEMLER -->
@@ -1066,17 +1148,18 @@ function serveDashboardHtml() {
         </h2>
 
         <!-- ŞAMPİYON KOİNLER -->
-        <div style="background:var(--panel2);border:1px solid var(--border);border-radius:6px;padding:8px 12px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;">
-          <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-            <span style="font-size:10px;color:var(--muted);font-weight:700;">🎯 ÖNCELİKLİ ŞAMPİYONLAR (İLK TARANIR):</span>
-            <div id="vipChips" style="display:flex;flex-wrap:wrap;gap:5px;">
+        <div style="background:var(--panel2);border:1px solid var(--border);border-radius:6px;padding:7px 10px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:5px;">
+          <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;">
+            <span style="font-size:9.5px;color:var(--muted);font-weight:700;">🎯 ÖNCELİKLİ ŞAMPİYONLAR:</span>
+            <div id="vipChips" style="display:flex;flex-wrap:wrap;gap:4px;">
               ${vipKeys.map(k => `<span class="chip">${k}</span>`).join('')}
             </div>
           </div>
-          <button onclick="location.reload()" style="font-size:10px;padding:3px 8px;background:none;border:1px solid var(--border);border-radius:4px;color:var(--muted);cursor:pointer;">Varsayılana Dön</button>
+          <button onclick="location.reload()" style="font-size:9.5px;padding:2px 7px;background:none;border:1px solid var(--border);border-radius:4px;color:var(--muted);cursor:pointer;">Yenile</button>
         </div>
 
         <!-- AKTİF POZİSYONLAR TABLOSU -->
+        <div class="mobile-swipe-hint">👉 <span>Yana kaydırarak tüm sütunları inceleyebilirsiniz</span></div>
         <div class="table-container">
           <table>
             <thead>
@@ -1098,10 +1181,11 @@ function serveDashboardHtml() {
         </div>
 
         <!-- TAMAMLANAN MOONSHOT GEÇMİŞİ -->
-        <h2 style="margin-top:16px;">
+        <h2 style="margin-top:14px;">
           <span>📜 TAMAMLANAN MOONSHOT GEÇMİŞİ</span>
           <span style="font-size:11px;color:var(--muted);font-weight:600;"><span id="histCount">${history.length}</span> KAYIT</span>
         </h2>
+        <div class="mobile-swipe-hint">👉 <span>Yana kaydırarak tüm sütunları inceleyebilirsiniz</span></div>
         <div class="table-container">
           <table>
             <thead>
@@ -1119,33 +1203,6 @@ function serveDashboardHtml() {
             </thead>
             <tbody id="historyTbody">
               ${renderHistoryRows(history)}
-            </tbody>
-          </table>
-        </div>
-
-        <!-- 📡 3S / 15DK RADAR VE ALICI BASKISI CANLI PİYASA AKIŞI -->
-        <h2 style="margin-top:16px;">
-          <span>📡 3S / 15DK RADAR VE ALICI BASKISI CANLI PİYASA AKIŞI (TOP VUR-KAÇ ADAYLARI)</span>
-          <span style="font-size:11px;color:var(--muted);font-weight:600;"><span id="radarCount">0</span> KOİN ANALİZ EDİLDİ</span>
-        </h2>
-        <div class="table-container">
-          <table>
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>Sembol</th>
-                <th>Son Fiyat</th>
-                <th>3s Değişim</th>
-                <th>24s Değişim</th>
-                <th>3s Hacim</th>
-                <th>3s Fiyat Aralığı</th>
-                <th>Alıcı Baskısı</th>
-                <th>Sinyal</th>
-                <th>Bot Durumu</th>
-              </tr>
-            </thead>
-            <tbody id="radarTbody">
-              <tr><td colspan="10" style="text-align:center;color:var(--muted);padding:18px;">Radar verileri taranıyor...</td></tr>
             </tbody>
           </table>
         </div>
@@ -1284,45 +1341,6 @@ function serveDashboardHtml() {
               </tr>
             \`;
           }).join('');
-        }
-
-        // 3s / 15dk Radar Tablosu
-        const radarTbody = document.getElementById("radarTbody");
-        if (radarTbody && data.radar) {
-          document.getElementById("radarCount").innerText = data.radar.length;
-          if (data.radar.length === 0) {
-            radarTbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:var(--muted);padding:18px;">Radar verileri taranıyor...</td></tr>';
-          } else {
-            const activeSyms = new Set((data.positions || []).map(p => p.symbol));
-            radarTbody.innerHTML = data.radar.map((r, idx) => {
-              const chgPos = r.chg3h >= 0;
-              const chg24Pos = r.chg24h >= 0;
-              const taker = r.takerBuyRatio || 50;
-              const takerColor = taker >= 52 ? 'var(--green)' : (taker <= 48 ? 'var(--red)' : 'var(--muted)');
-              const isActive = activeSyms.has(r.symbol);
-
-              return \`
-                <tr>
-                  <td style="color:var(--muted);font-weight:700;">\${idx+1}</td>
-                  <td style="font-weight:900;color:#fff;">\${r.symbol}</td>
-                  <td>$\${parseFloat(r.lastPrice).toFixed(4)}</td>
-                  <td style="color:\${chgPos ? 'var(--green)' : 'var(--red)'};font-weight:800;">\${chgPos ? '+' : ''}\${r.chg3h.toFixed(2)}%</td>
-                  <td style="color:\${chg24Pos ? 'var(--green)' : 'var(--red)'};font-weight:700;">\${chg24Pos ? '+' : ''}\${r.chg24h.toFixed(2)}%</td>
-                  <td>$\${(r.vol3hM || 0).toFixed(1)}M</td>
-                  <td style="color:var(--muted);font-size:11px;">\${r.range3h || '-'}</td>
-                  <td style="color:\${takerColor};font-weight:800;">
-                    %\${taker.toFixed(1)} \${taker >= 50 ? 'Alıcı' : 'Satıcı'}
-                  </td>
-                  <td style="font-weight:800;">\${r.signal || '⚖️ NÖTR'}</td>
-                  <td>
-                    \${isActive 
-                      ? '<span style="background:rgba(16,185,129,0.2);color:var(--green);padding:2px 6px;border-radius:4px;font-weight:800;">🟢 POZİSYONDA</span>' 
-                      : '<span style="background:rgba(168,85,247,0.15);color:#c084fc;padding:2px 6px;border-radius:4px;font-weight:700;">🎯 VUR-KAÇ HEDEFTE</span>'}
-                  </td>
-                </tr>
-              \`;
-            }).join('');
-          }
         }
       } catch (e) {}
     }
