@@ -20,7 +20,7 @@ const STATE_FILE = path.join(DATA_DIR, 'bot_state.json');
 // --- EKRAN 1 BİREBİR AYARLARI ---
 let CONFIG = {
   initialBalance: 1000.0,    // Bakiye 1000 Dolar
-  marginPerTrade: 10.0,      // Teminat 10$
+  marginPerTrade: 20.0,      // Teminat 20$ (20x ile $400 pozisyon büyüklüğü)
   leverage: 20,              // Kaldıraç 20x
   maxSlots: 4,               // Max Slot 4 Adet
   slPct: 2.50,               // Stop Loss %2.50
@@ -59,6 +59,7 @@ let balance = CONFIG.initialBalance;
 let activePositions = [];
 let history = [];
 let coinCooldowns = {};
+let coinLossCount = {};  // 🛡️ Aynı koine ardışık zarar sayısı (2 zarar → yasakla, kâr ederse sıfırla)
 let rollingTickerPrices = {};
 let radarMap = {};
 let logs = [];
@@ -487,6 +488,8 @@ async function scanLoop() {
 
         const { sym, lastP, k3m, chg, isVip } = data;
         if (activePositions.some(x => x.symbol === sym) || activeSyms.has(sym) || (coinCooldowns[sym] && coinCooldowns[sym] > Date.now())) continue;
+        // 🛡️ Aynı koine 2 kez üst üste zarar ettiyse girme (kâr ederse sıfırlanır)
+        if (coinLossCount[sym] >= 2) continue;
         const lastIdx = k3m.length - 1;
 
         const curP = parseFloat(k3m[lastIdx][4]);
@@ -568,7 +571,21 @@ async function scanLoop() {
         const validWickLong = isDirectRadarLong ? (curP >= curH * 0.970) : (curP >= curH * 0.991);
         const validWickShort = isDirectRadarShort ? (curP <= curL * 1.030) : (curP <= curL * 1.009);
 
-        const isLongPump = (isDirectRadarLong || (hasMomentum && isWhaleVol) || (isDailyTrending && curMovePct >= 0.60 && isWhaleVol)) && validWickLong && radarOkLong;
+        // 🟢 BOĞA MOMENTUM İYİLEŞTİRME: Radar teyidi olmadan LONG açılacaksa ek filtreler
+        const momentumLongOk = hasMomentum && isWhaleVol;
+        let improvedMomentumLong = momentumLongOk;
+        if (momentumLongOk && !isDirectRadarLong) {
+          // Radar teyidi yoksa (BOĞA MOMENTUM olacak), ekstra güvenlik kontrolleri:
+          const hasTakerSupport = rInfo ? (rInfo.takerBuyRatio || 50) >= 50.0 : true;
+          const hasVolume = rInfo ? (rInfo.vol3hM || 0) >= 2.0 : true;  // Min $2M hacim
+          const notOverbought = chg < 25.0;  // 24s'te +%25'ten fazla yükselmemişse
+          const strongMomentum = curMovePct >= 0.80;  // Daha güçlü anlık momentum iste
+          if (!hasTakerSupport || !hasVolume || !notOverbought || !strongMomentum) {
+            improvedMomentumLong = false;
+          }
+        }
+
+        const isLongPump = (isDirectRadarLong || improvedMomentumLong || (isDailyTrending && curMovePct >= 0.60 && isWhaleVol)) && validWickLong && radarOkLong;
         
         const isDailyOverbought = chg >= 12.0;
         const hasDownMomentum = (curMovePct <= -minJump && curP < curO) || (twoCandleMovePct <= -(minJump + 0.25) && curP < curO);
@@ -763,6 +780,16 @@ function closeTrade(pos, exitReason) {
     coinCooldowns[pos.symbol] = now + (20 * 60 * 1000); // Kâr alındıysa 20 dk dinlenme (düzeltmeden tekrar alıp terse düşmesin!)
   } else {
     coinCooldowns[pos.symbol] = now + (15 * 60 * 1000); // Başabaş, manuel veya diğer çıkışlar için 15 dk
+  }
+
+  // 🛡️ ARDIŞ ZARAR SAYACI: Aynı koine 2 kez üst üste zarar edince yasakla, kâr ederse sıfırla
+  if (exitReason.includes("Stop Loss")) {
+    coinLossCount[pos.symbol] = (coinLossCount[pos.symbol] || 0) + 1;
+    if (coinLossCount[pos.symbol] >= 2) {
+      addLog(`🚫 ${pos.symbol} ardışık ${coinLossCount[pos.symbol]} zarar — koin yasaklandı!`, 'TRADE');
+    }
+  } else if (exitReason.includes("Garanti") || exitReason.includes("Zirveden") || exitReason.includes("MEGA")) {
+    coinLossCount[pos.symbol] = 0; // Kâr edince sayaç sıfırlanır, tekrar girebilir
   }
 
   const tradeRecord = {
@@ -1777,6 +1804,8 @@ const server = http.createServer(async (req, res) => {
     balance = CONFIG.initialBalance;
     activePositions = [];
     history = [];
+    coinLossCount = {};
+    coinCooldowns = {};
     try {
       if (fs.existsSync(STATE_FILE)) fs.unlinkSync(STATE_FILE);
       if (fs.existsSync(HISTORY_FILE)) fs.unlinkSync(HISTORY_FILE);
