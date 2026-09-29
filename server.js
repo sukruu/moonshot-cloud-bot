@@ -89,6 +89,7 @@ function initStorage() {
       }
       activePositions = saved.activePositions || [];
       coinCooldowns = saved.coinCooldowns || {};
+      coinLossCount = saved.coinLossCount || {};
     } else {
       balance = CONFIG.initialBalance;
     }
@@ -113,6 +114,7 @@ function persistState() {
       balance,
       activePositions,
       coinCooldowns,
+      coinLossCount,
       savedAt: Date.now()
     }, null, 2), 'utf8');
   } catch (e) {}
@@ -665,6 +667,7 @@ function checkSlotRotation() {
     const closed = activePositions.splice(stagnantIdx, 1)[0];
     const durMin = Math.round((now - closed.entryTime) / 60000);
     closeTrade(closed, `🔄 Slot Rotasyonu (${closed.symbol} ${durMin}dk Uyudu - Yeni Rokete Yer Açıldı)`);
+    persistState();
   }
 }
 
