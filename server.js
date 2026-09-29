@@ -24,7 +24,7 @@ let CONFIG = {
   leverage: 20,              // Kaldıraç 20x
   maxSlots: 4,               // Max Slot 4 Adet
   slPct: 2.50,               // Stop Loss %2.50
-  bePct: 1.80,               // Otomatik Başabaş %1.80 ($0 Risk)
+  bePct: 1.20,               // Otomatik Başabaş %1.20 ($0 Risk - %24 ROI'da Kilitler)
   moonPct: 15.00,            // Vur-Kaç Moonshot %15.00
   feeRate: 0.0008,           // 0.04% Giriş + 0.04% Çıkış Taker
   scanIntervalMs: 3500,
@@ -585,7 +585,11 @@ async function scanLoop() {
           }
         }
 
-        const isLongPump = (isDirectRadarLong || improvedMomentumLong || (isDailyTrending && curMovePct >= 0.60 && isWhaleVol)) && validWickLong && radarOkLong;
+        // 🛡️ DERS 2: Günlük (24s) Trend Filtresi
+        // Günlükte +%15 şişmiş koine veya -%5 düşen bıçağa LONG girilmez
+        const strictTrendOkLong = (chg < 15.0) && (chg > -5.0);
+
+        const isLongPump = (isDirectRadarLong || improvedMomentumLong || (isDailyTrending && curMovePct >= 0.60 && isWhaleVol)) && validWickLong && radarOkLong && strictTrendOkLong;
         
         const isDailyOverbought = chg >= 12.0;
         const hasDownMomentum = (curMovePct <= -minJump && curP < curO) || (twoCandleMovePct <= -(minJump + 0.25) && curP < curO);
