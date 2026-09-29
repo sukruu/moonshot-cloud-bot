@@ -60,6 +60,7 @@ let activePositions = [];
 let history = [];
 let coinCooldowns = {};
 let coinLossCount = {};  // 🛡️ Aynı koine ardışık zarar sayısı (2 zarar → yasakla, kâr ederse sıfırla)
+let resetEpoch = 0;      // 🛡️ Bilinçli sıfırlama zaman damgası (Zombi geçmiş kurtarmayı engeller)
 let rollingTickerPrices = {};
 let radarMap = {};
 let logs = [];
@@ -90,6 +91,7 @@ function initStorage() {
       activePositions = saved.activePositions || [];
       coinCooldowns = saved.coinCooldowns || {};
       coinLossCount = saved.coinLossCount || {};
+      resetEpoch = saved.resetEpoch || 0;
     } else {
       balance = CONFIG.initialBalance;
     }
@@ -115,6 +117,7 @@ function persistState() {
       activePositions,
       coinCooldowns,
       coinLossCount,
+      resetEpoch,
       savedAt: Date.now()
     }, null, 2), 'utf8');
   } catch (e) {}
@@ -1364,6 +1367,17 @@ function serveDashboardHtml() {
         const data = await res.json();
 
         // 🛡️ İki Yönlü Dayanıklı Hafıza (Auto Self-Healing)
+        const serverResetEpoch = data.resetEpoch || 0;
+        const localResetEpoch = parseInt(localStorage.getItem('moon_reset_epoch') || '0');
+
+        // Eğer sunucu sıfırlanmışsa ve tarayıcıda eski kayıtlar kalmışsa (örn: telefondan girildiğinde):
+        if (serverResetEpoch > localResetEpoch) {
+          localStorage.removeItem(LS_HIST);
+          localStorage.removeItem(LS_BAL);
+          localStorage.setItem('moon_reset_epoch', serverResetEpoch.toString());
+          console.log("Sunucuda sıfırlama tespit edildi, yerel tarayıcı hafızası temizlendi.");
+        }
+
         const localHistStr = localStorage.getItem(LS_HIST);
         const localSavedHist = localHistStr ? JSON.parse(localHistStr) : [];
         const localSavedBal = localStorage.getItem(LS_BAL);
@@ -1378,7 +1392,8 @@ function serveDashboardHtml() {
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 history: localSavedHist,
-                balance: localSavedBal ? (parseFloat(localSavedBal) < 500 ? (1000.0 + parseFloat(localSavedBal) - 100.0) : parseFloat(localSavedBal)) : 1000.0
+                balance: localSavedBal ? (parseFloat(localSavedBal) < 500 ? (1000.0 + parseFloat(localSavedBal) - 100.0) : parseFloat(localSavedBal)) : 1000.0,
+                resetEpoch: localResetEpoch
               })
             });
             const restData = await restRes.json();
@@ -1499,7 +1514,11 @@ function serveDashboardHtml() {
       if (!confirm("DİKKAT: Bakiye $1000.00 olarak sıfırlanacak ve hem sunucudaki hem tarayıcınızdaki tüm geçmiş silinecektir. Emin misiniz?")) return;
       localStorage.removeItem(LS_HIST);
       localStorage.removeItem(LS_BAL);
-      await fetch('/api/reset-balance');
+      const res = await fetch('/api/reset-balance');
+      const data = await res.json();
+      if (data && data.resetEpoch) {
+        localStorage.setItem('moon_reset_epoch', data.resetEpoch.toString());
+      }
       location.reload();
     }
 
@@ -1694,7 +1713,8 @@ const server = http.createServer(async (req, res) => {
       positions: activePositions,
       history: history.slice(0, 50),
       logs: logs.slice(0, 50),
-      radar: radarList.slice(0, 30)
+      radar: radarList.slice(0, 30),
+      resetEpoch: resetEpoch
     }));
     return;
   }
@@ -1703,6 +1723,12 @@ const server = http.createServer(async (req, res) => {
   if (pathname === '/api/restore-state' && req.method === 'POST') {
     try {
       const body = await parseJsonBody(req);
+      const reqResetEpoch = body ? (body.resetEpoch || 0) : 0;
+      if (resetEpoch > 0 && reqResetEpoch < resetEpoch) {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, error: "Sunucu daha yeni sıfırlandı, eski zombi geçmiş reddedildi." }));
+        return;
+      }
       if (body && Array.isArray(body.history) && body.history.length > 0) {
         const existingIds = new Set(history.map(h => h.id));
         let addedCount = 0;
@@ -1808,6 +1834,7 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (pathname === '/api/reset-balance') {
+    resetEpoch = Date.now();
     balance = CONFIG.initialBalance;
     activePositions = [];
     history = [];
@@ -1818,10 +1845,9 @@ const server = http.createServer(async (req, res) => {
       if (fs.existsSync(HISTORY_FILE)) fs.unlinkSync(HISTORY_FILE);
       if (fs.existsSync(CSV_FILE)) fs.unlinkSync(CSV_FILE);
     } catch (e) {}
-    initStorage();
     persistState();
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ ok: true, balance }));
+    res.end(JSON.stringify({ ok: true, balance, resetEpoch }));
     return;
   }
 
