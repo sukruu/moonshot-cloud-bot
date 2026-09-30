@@ -593,43 +593,45 @@ async function scanLoop() {
         const momentumLongOk = hasMomentum && isWhaleVol;
         let improvedMomentumLong = momentumLongOk;
         if (momentumLongOk && !isDirectRadarLong) {
-          // Radar teyidi yoksa (BOĞA MOMENTUM olacak), ekstra güvenlik kontrolleri:
-          const hasTakerSupport = rInfo ? (rInfo.takerBuyRatio || 50) >= 50.0 : true;
-          const hasVolume = rInfo ? (rInfo.vol3hM || 0) >= 2.0 : true;  // Min $2M hacim
-          const notOverbought = chg < 25.0;  // 24s'te +%25'ten fazla yükselmemişse
-          const strongMomentum = curMovePct >= 0.80;  // Daha güçlü anlık momentum iste
-          if (!hasTakerSupport || !hasVolume || !notOverbought || !strongMomentum) {
-            improvedMomentumLong = false;
-          }
+          const hasTakerSupport = rInfo ? (rInfo.takerBuyRatio || 50) >= 52.0 : false;
+          const hasVolume = rInfo ? (rInfo.vol3hM || 0) >= 3.0 : true;
+          const notOverbought = chg < 15.0;
+          const strongMomentum = curMovePct >= 0.80;
+          if (!hasTakerSupport || !hasVolume || !notOverbought || !strongMomentum) improvedMomentumLong = false;
         }
 
-        // 🛡️ DERS 2: Günlük (24s) Trend Filtresi
-        // Günlükte +%15 şişmiş koine veya -%5 düşen bıçağa LONG girilmez
-        const strictTrendOkLong = (chg < 15.0) && (chg > -5.0);
+        // 🔴 AYI MOMENTUM İYİLEŞTİRME: Radar teyidi olmadan SHORT açılacaksa ek filtreler
+        const isDailyOverbought = chg >= 12.0;
+        const hasDownMomentum = (curMovePct <= -minJump && curP < curO) || (twoCandleMovePct <= -(minJump + 0.25) && curP < curO);
+        let improvedMomentumShort = hasDownMomentum && isWhaleVol;
+        if (improvedMomentumShort && !isDirectRadarShort) {
+          const hasTakerSell = rInfo ? (rInfo.takerBuyRatio || 50) <= 48.0 : false;
+          const hasVolume = rInfo ? (rInfo.vol3hM || 0) >= 3.0 : true;
+          const strongMomentumDown = curMovePct <= -0.80;
+          if (!hasTakerSell || !hasVolume || !strongMomentumDown) improvedMomentumShort = false;
+        }
+        if (isDailyOverbought && curMovePct <= -0.80 && isWhaleVol) {
+          improvedMomentumShort = true; // Aşırı alım bölgesinde sert düşüşe tolerans
+        }
+
+        // 🛡️ DERS 2: Günlük (24s) ve 3s Trend Filtresi (Tükenmiş Roket Engeli)
+        const strictTrendOkLong = (chg < 15.0) && (chg > -5.0) && (!rInfo || (rInfo.chg3h || 0) < 8.0); // 3 saatte %8'den fazla fırlamışa LONG girme!
+        const strictTrendOkShort = (chg > -15.0) && (!rInfo || (rInfo.chg3h || 0) > -8.0);
 
         // 🛡️ TEPE VE DİP TUZAĞI KORUMASI (Direnç ve Destek Sıkışması)
         let isNearPeakTrap = false;
         let isNearDipTrap = false;
         if (rInfo) {
-          // Tepe Tuzağı: 3 saatte %4+ yükselmiş ve 3s zirvesinin %1.5 altına sıkışmışsa LONG AÇMA! (APR, UAI, OPENAI engeli)
           if (rInfo.high3h && (rInfo.chg3h || 0) >= 4.0) {
-            if (curP >= rInfo.high3h * 0.985 && curP <= rInfo.high3h * 1.002) {
-              isNearPeakTrap = true;
-            }
+            if (curP >= rInfo.high3h * 0.985 && curP <= rInfo.high3h * 1.002) isNearPeakTrap = true;
           }
-          // Dip Tuzağı: 3 saatte %4+ düşmüş ve 3s dibinin %1.5 üstüne sıkışmışsa SHORT AÇMA!
           if (rInfo.low3h && (rInfo.chg3h || 0) <= -4.0) {
-            if (curP <= rInfo.low3h * 1.015 && curP >= rInfo.low3h * 0.998) {
-              isNearDipTrap = true;
-            }
+            if (curP <= rInfo.low3h * 1.015 && curP >= rInfo.low3h * 0.998) isNearDipTrap = true;
           }
         }
 
-        const isLongPump = (isDirectRadarLong || improvedMomentumLong || (isDailyTrending && curMovePct >= 0.60 && isWhaleVol)) && validWickLong && radarOkLong && strictTrendOkLong && !isNearPeakTrap;
-        
-        const isDailyOverbought = chg >= 12.0;
-        const hasDownMomentum = (curMovePct <= -minJump && curP < curO) || (twoCandleMovePct <= -(minJump + 0.25) && curP < curO);
-        const isShortDump = (isDirectRadarShort || (hasDownMomentum && isWhaleVol) || (isDailyOverbought && curMovePct <= -0.80 && isWhaleVol)) && validWickShort && radarOkShort && !isNearDipTrap;
+        const isLongPump = (isDirectRadarLong || improvedMomentumLong) && validWickLong && radarOkLong && strictTrendOkLong && !isNearPeakTrap;
+        const isShortDump = (isDirectRadarShort || improvedMomentumShort) && validWickShort && radarOkShort && strictTrendOkShort && !isNearDipTrap;
 
         if (isLongPump || isShortDump) {
           const side = isLongPump ? "LONG" : "SHORT";
@@ -689,7 +691,9 @@ function checkSlotRotation() {
 
   activePositions.forEach((pos, idx) => {
     const durMin = (now - pos.entryTime) / 60000;
-    if (durMin >= 25 && Math.abs(pos.mfe || 0) < 0.60 && Math.abs(pos.roi || 0) < 5.0) {
+    // Hata düzeltmesi: Math.abs(pos.roi) < 5.0 yerine (pos.roi || 0) < 5.0
+    // Kanayan koinleri acımasızca rotasyona sok (eğer ROI %5 kâr altında ise)
+    if (durMin >= 25 && (pos.mfe || 0) < 0.60 && (pos.roi || 0) < 5.0) {
       if (durMin > maxDuration) {
         maxDuration = durMin;
         stagnantIdx = idx;
