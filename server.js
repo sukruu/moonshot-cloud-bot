@@ -1112,7 +1112,6 @@ function serveDashboardHtml() {
     .btn-secondary { background: var(--panel2); color: var(--text); }
     .btn-secondary:hover { background: var(--panel-hover); }
     .btn-reset {
-      grid-column: span 2;
       background: rgba(244, 63, 94, 0.12);
       border-color: rgba(244, 63, 94, 0.35);
       color: var(--red);
@@ -1465,10 +1464,7 @@ function serveDashboardHtml() {
 
         <div class="action-buttons-grid">
           <a href="/api/download-csv" class="btn-action btn-secondary">📊 CSV İNDİR</a>
-          <a href="/api/backup-json" class="btn-action btn-secondary" style="color:var(--blue);">💾 YEDEK AL</a>
-          <button onclick="document.getElementById('importFile').click()" class="btn-action btn-secondary" style="color:var(--purple);">📂 YEDEK YÜKLE</button>
           <button onclick="resetBalance()" class="btn-action btn-reset">🧹 SIFIRLA ($1000)</button>
-          <input type="file" id="importFile" accept=".json" style="display:none" onchange="handleImportBackup(event)">
         </div>
       </div>
 
@@ -1788,37 +1784,6 @@ function serveDashboardHtml() {
       window.location.href = window.location.origin + window.location.pathname + '?reset=' + Date.now();
     }
 
-    async function handleImportBackup(e) {
-      const file = e.target.files[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = async (evt) => {
-        try {
-          const json = JSON.parse(evt.target.result);
-          if (!json.history || !Array.isArray(json.history)) {
-            alert("Hata: Geçersiz yedek dosyası formatı!");
-            return;
-          }
-          localStorage.setItem(LS_HIST, JSON.stringify(json.history));
-          if (json.balance) localStorage.setItem(LS_BAL, json.balance);
-          const res = await fetch('/api/import-backup', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(json)
-          });
-          const d = await res.json();
-          if (d.ok) {
-            alert("✅ Yedek başarıyla yüklendi! (" + d.restored + " adet işlem kurtarıldı, Bakiye: $" + d.balance + ")");
-            location.reload();
-          } else {
-            alert("Yükleme başarısız: " + (d.error || "Bilinmeyen hata"));
-          }
-        } catch(err) {
-          alert("Dosya okunamadı: " + err.message);
-        }
-      };
-      reader.readAsText(file);
-    }
 
     // Parametreleri Dinamik Güncelleme
     ['inpSlots', 'inpMargin', 'inpLev', 'inpSl', 'inpBe', 'inpMoon'].forEach(id => {
