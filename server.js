@@ -616,7 +616,7 @@ async function scanLoop() {
 
         // 🛡️ DERS 2: Günlük (24s) ve 3s Trend Filtresi (Tükenmiş Roket Engeli)
         const strictTrendOkLong = (chg < 15.0) && (chg > -5.0) && (!rInfo || (rInfo.chg3h || 0) < 8.0); // 3 saatte %8'den fazla fırlamışa LONG girme!
-        const strictTrendOkShort = (chg > -15.0) && (!rInfo || (rInfo.chg3h || 0) > -8.0);
+        const strictTrendOkShort = (chg > -15.0) && (chg < 4.0) && (!rInfo || (rInfo.chg3h || 0) > -8.0); // Günlükte +%4 yeşil olan koine SHORT girme (Trende Karşı İşlem)!
 
         // 🛡️ TEPE VE DİP TUZAĞI KORUMASI (Direnç ve Destek Sıkışması)
         let isNearPeakTrap = false;
