@@ -1166,19 +1166,60 @@ function serveDashboardHtml() {
     .chip { font-size: 9.5px; padding: 2px 6px; border-radius: 4px; background: rgba(16,185,129,0.15); border: 1px solid rgba(16,185,129,0.3); color: var(--green); font-family: 'JetBrains Mono', monospace; font-weight: 700; }
     
     .mobile-swipe-hint {
-      font-size: 9.5px;
-      color: var(--muted);
-      margin-bottom: 5px;
+      font-size: 10px;
+      color: var(--blue);
+      background: rgba(56, 189, 248, 0.08);
+      border: 1px solid rgba(56, 189, 248, 0.2);
+      border-radius: 6px;
+      padding: 5px 9px;
+      margin-bottom: 7px;
       display: none;
       align-items: center;
-      gap: 4px;
+      gap: 6px;
+      font-weight: 700;
     }
 
-    @media (max-width: 768px) {
-      .mobile-swipe-hint { display: flex; }
+    /* iPHONE 17 & MOBILE RESPONSIVE ENGINE */
+    @media (max-width: 900px) {
+      .dashboard { grid-template-columns: 1fr; gap: 10px; }
+      body {
+        padding: max(8px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
+      }
+      .panel { padding: 11px 9px; border-radius: 12px; }
+      .panel h2 { font-size: 11.5px; }
+
+      /* Mobile tabs */
+      .tabs { gap: 5px; margin-bottom: 8px; }
+      .tab-btn { font-size: 10px; padding: 7px 10px; min-height: 36px; border-radius: 7px; }
+
+      /* Status & Perf cards on mobile */
+      .status-box { padding: 8px 10px; margin-bottom: 8px; }
+      .status-item { font-size: 10.5px; margin-bottom: 4px; }
+      .perf-hero-card { padding: 9px 12px; margin-bottom: 6px; }
+      .perf-hero-val { font-size: 20px; }
+      .perf-grid-4 { gap: 5px; margin-bottom: 8px; }
+      .perf-mini-card { padding: 5px 7px; }
+      .perf-mini-val { font-size: 11.5px; }
+
+      /* Inputs - prevent iOS Safari auto-zoom */
       input[type="number"], input[type="text"] { font-size: 16px !important; }
-      .param-card { padding: 5px 8px; }
-      .panel { padding: 10px; border-radius: 10px; }
+      .param-card { padding: 6px 8px; }
+      .param-header { font-size: 9.5px; }
+
+      /* Action buttons touch target */
+      .btn-action { min-height: 42px; font-size: 11px; border-radius: 8px; font-weight: 800; }
+      .btn-action:active { transform: scale(0.97); opacity: 0.85; }
+
+      /* Tables horizontal momentum scroll */
+      .mobile-swipe-hint { display: flex; }
+      .table-container {
+        border-radius: 8px;
+        margin-bottom: 10px;
+        -webkit-overflow-scrolling: touch;
+      }
+      table { font-size: 10.5px; }
+      th { font-size: 9px; padding: 6px 7px; }
+      td { padding: 6px 7px; }
     }
   </style>
 </head>
@@ -1225,13 +1266,32 @@ function serveDashboardHtml() {
           </div>
         </div>
 
-        <div class="strategy-banner-card">
-          <div class="strat-card-head">
-            <span class="strat-badge-pill">AKTİF MOTOR</span>
-            <span style="font-size:10px; color:#c084fc;">⚡ Vur-Kaç Sniper</span>
+        <div class="sidebar-section-title" style="margin-top:6px;">💰 SEANS PERFORMANSI</div>
+        <div class="perf-hero-card">
+          <div>
+            <span class="perf-hero-title">KASA BAKİYESİ</span>
+            <span class="perf-hero-sub" id="stPnl">${parseFloat(stats.totalPnl) >= 0 ? '+' : ''}$${stats.totalPnl} (%${stats.totalRoi})</span>
           </div>
-          <div class="strat-card-title">🐋 Balina Avcısı (3m Hızlı Vur-Kaç)</div>
-          <div class="strat-card-sub">Dakikalar İçinde Kâr Al • 3m Hacim Patlaması & %100 Çıkış</div>
+          <div class="perf-hero-val" id="stBalance">$${stats.balance}</div>
+        </div>
+
+        <div class="perf-grid-4">
+          <div class="perf-mini-card">
+            <span class="perf-mini-label">Toplam İşlem</span>
+            <span class="perf-mini-val" id="stTotalTrades">${stats.totalTrades}</span>
+          </div>
+          <div class="perf-mini-card">
+            <span class="perf-mini-label">Kazanma %</span>
+            <span class="perf-mini-val" style="color:var(--green);" id="stWinRate">%${stats.winRate}</span>
+          </div>
+          <div class="perf-mini-card">
+            <span class="perf-mini-label">Kazan/Kaybet</span>
+            <span class="perf-mini-val" id="stWinsLosses">${stats.wins}K / ${stats.losses}Z</span>
+          </div>
+          <div class="perf-mini-card">
+            <span class="perf-mini-label">Mega-Win</span>
+            <span class="perf-mini-val" style="color:#facc15;" id="stMega">${stats.megaWins} Adet</span>
+          </div>
         </div>
 
         <div class="sidebar-section-title">⚙️ TEMEL RİSK & POZİSYON</div>
@@ -1275,39 +1335,6 @@ function serveDashboardHtml() {
             <input type="number" id="inpMoon" value="${CONFIG.moonPct.toFixed(2)}" step="1" style="width:48px;background:none;border:none;color:#facc15;font-family:'JetBrains Mono';font-size:13px;font-weight:800;text-align:right;outline:none;">
             <span style="font-size:10px;color:var(--muted)">%</span>
           </div>
-        </div>
-
-        <div class="sidebar-section-title">💰 SEANS PERFORMANSI</div>
-        <div class="perf-hero-card">
-          <div>
-            <span class="perf-hero-title">KASA BAKİYESİ</span>
-            <span class="perf-hero-sub" id="stPnl">${parseFloat(stats.totalPnl) >= 0 ? '+' : ''}$${stats.totalPnl} (%${stats.totalRoi})</span>
-          </div>
-          <div class="perf-hero-val" id="stBalance">$${stats.balance}</div>
-        </div>
-
-        <div class="perf-grid-4">
-          <div class="perf-mini-card">
-            <span class="perf-mini-label">Toplam İşlem</span>
-            <span class="perf-mini-val" id="stTotalTrades">${stats.totalTrades}</span>
-          </div>
-          <div class="perf-mini-card">
-            <span class="perf-mini-label">Kazanma %</span>
-            <span class="perf-mini-val" style="color:var(--green);" id="stWinRate">%${stats.winRate}</span>
-          </div>
-          <div class="perf-mini-card">
-            <span class="perf-mini-label">Kazan/Kaybet</span>
-            <span class="perf-mini-val" id="stWinsLosses">${stats.wins}K / ${stats.losses}Z</span>
-          </div>
-          <div class="perf-mini-card">
-            <span class="perf-mini-label">Mega-Win</span>
-            <span class="perf-mini-val" style="color:#facc15;" id="stMega">${stats.megaWins} Adet</span>
-          </div>
-        </div>
-
-        <div style="background:rgba(16,185,129,0.06);border:1px solid rgba(16,185,129,0.25);border-radius:6px;padding:6px 8px;margin-bottom:8px;display:flex;align-items:center;gap:6px;font-size:10px;color:var(--green);font-weight:700;">
-          <span>⚡</span>
-          <span>7/24 Kesintisiz Hafıza & Eşitleme Aktif</span>
         </div>
 
         <div class="action-buttons-grid">
