@@ -1188,6 +1188,115 @@ function serveDashboardHtml() {
       font-weight: 700;
     }
 
+    /* VIEW MODE SWITCHER (MOBİL / iPHONE 17) */
+    .view-mode-switcher {
+      display: none;
+      gap: 6px;
+      margin-bottom: 10px;
+    }
+    .view-btn {
+      flex: 1;
+      padding: 8px 10px;
+      font-size: 11px;
+      font-weight: 800;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--panel2);
+      color: var(--muted);
+      cursor: pointer;
+      min-height: 38px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      transition: 0.15s;
+    }
+    .view-btn.active {
+      background: rgba(168, 85, 247, 0.25);
+      border-color: rgba(168, 85, 247, 0.6);
+      color: #fff;
+      box-shadow: 0 0 10px rgba(168, 85, 247, 0.2);
+    }
+
+    /* MOBİL KARTLAR */
+    .mobile-cards-container {
+      display: none;
+      flex-direction: column;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .pos-card-mobile {
+      background: var(--panel2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 12px;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.35);
+    }
+    .pos-card-mobile.card-long { border-left: 3.5px solid var(--green); }
+    .pos-card-mobile.card-short { border-left: 3.5px solid var(--red); }
+    .pos-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 7px;
+    }
+    .pos-card-sym {
+      font-weight: 900;
+      font-size: 13.5px;
+      color: #fff;
+    }
+    .pos-card-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 5px 8px;
+      font-size: 11px;
+      margin-bottom: 8px;
+      background: rgba(0,0,0,0.25);
+      padding: 7px 9px;
+      border-radius: 6px;
+    }
+    .card-lbl { color: var(--muted); font-size: 10px; }
+    .card-val { font-family: 'JetBrains Mono', monospace; font-weight: 700; color: #fff; }
+    .pos-card-footer {
+      display: flex;
+      justify-content: flex-end;
+    }
+
+    .hist-card-mobile {
+      background: rgba(15, 23, 42, 0.55);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 8px;
+      padding: 9px 11px;
+    }
+    .hist-card-mobile.hist-win { border-left: 3.5px solid var(--green); }
+    .hist-card-mobile.hist-loss { border-left: 3.5px solid var(--red); }
+    .hist-card-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 4px;
+    }
+    .hist-card-sym { font-weight: 800; font-size: 12px; color: #fff; }
+    .hist-card-time { font-size: 9.5px; color: var(--muted); }
+    .hist-card-mid { font-size: 10.5px; color: var(--muted); margin-bottom: 4px; }
+    .hist-card-bot {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-top: 1px solid rgba(255,255,255,0.05);
+      padding-top: 5px;
+      font-size: 10px;
+    }
+    .empty-cards-msg {
+      text-align: center;
+      color: var(--muted);
+      padding: 18px 12px;
+      font-size: 11px;
+      background: rgba(8,11,18,0.4);
+      border-radius: 8px;
+      border: 1px dashed var(--border);
+    }
+
     /* iPHONE 17 & MOBILE RESPONSIVE ENGINE */
     @media (max-width: 900px) {
       .dashboard { grid-template-columns: 1fr; gap: 10px; }
@@ -1219,8 +1328,16 @@ function serveDashboardHtml() {
       .btn-action { min-height: 42px; font-size: 11px; border-radius: 8px; font-weight: 800; }
       .btn-action:active { transform: scale(0.97); opacity: 0.85; }
 
-      /* Tables horizontal momentum scroll */
-      .mobile-swipe-hint { display: flex; }
+      /* Görünüm Değiştirici ve Kart Kontrolleri */
+      .view-mode-switcher { display: flex; }
+      body.mode-cards .table-container { display: none !important; }
+      body.mode-cards .mobile-swipe-hint { display: none !important; }
+      body.mode-cards .mobile-cards-container { display: flex !important; }
+
+      body.mode-table .table-container { display: block !important; }
+      body.mode-table .mobile-swipe-hint { display: flex !important; }
+      body.mode-table .mobile-cards-container { display: none !important; }
+
       .table-container {
         border-radius: 8px;
         margin-bottom: 10px;
@@ -1373,6 +1490,17 @@ function serveDashboardHtml() {
           <button onclick="location.reload()" style="font-size:9.5px;padding:2px 7px;background:none;border:1px solid var(--border);border-radius:4px;color:var(--muted);cursor:pointer;">Yenile</button>
         </div>
 
+        <!-- MOBİL GÖRÜNÜM SEÇİCİ (iPHONE & MOBİL) -->
+        <div class="view-mode-switcher">
+          <button class="view-btn active" id="btnCards" onclick="setViewMode('cards')">📱 Kart Görünümü (Mobil)</button>
+          <button class="view-btn" id="btnTable" onclick="setViewMode('table')">📊 Tablo Görünümü</button>
+        </div>
+
+        <!-- MOBİL KARTLAR (AKTİF POZİSYONLAR) -->
+        <div id="activeCardsMobile" class="mobile-cards-container">
+          ${renderActiveCards(activePositions)}
+        </div>
+
         <!-- AKTİF POZİSYONLAR TABLOSU -->
         <div class="mobile-swipe-hint">👉 <span>Yana kaydırarak tüm sütunları inceleyebilirsiniz</span></div>
         <div class="table-container">
@@ -1400,6 +1528,12 @@ function serveDashboardHtml() {
           <span>📜 TAMAMLANAN MOONSHOT GEÇMİŞİ</span>
           <span style="font-size:11px;color:var(--muted);font-weight:600;"><span id="histCount">${history.length}</span> KAYIT</span>
         </h2>
+
+        <!-- MOBİL KARTLAR (GEÇMİŞ) -->
+        <div id="historyCardsMobile" class="mobile-cards-container">
+          ${renderHistoryCards(history)}
+        </div>
+
         <div class="mobile-swipe-hint">👉 <span>Yana kaydırarak tüm sütunları inceleyebilirsiniz</span></div>
         <div class="table-container">
           <table>
@@ -1429,61 +1563,44 @@ function serveDashboardHtml() {
   <script>
     const LS_HIST = "moon_cloud_history";
     const LS_BAL = "moon_cloud_balance";
-    let isRestoring = false;
+    window.isResetting = false;
+
+    function setViewMode(mode) {
+      try {
+        localStorage.setItem('moon_view_mode', mode);
+      } catch (e) {}
+      if (mode === 'table') {
+        document.body.classList.remove('mode-cards');
+        document.body.classList.add('mode-table');
+        document.getElementById('btnTable')?.classList.add('active');
+        document.getElementById('btnCards')?.classList.remove('active');
+      } else {
+        document.body.classList.remove('mode-table');
+        document.body.classList.add('mode-cards');
+        document.getElementById('btnCards')?.classList.add('active');
+        document.getElementById('btnTable')?.classList.remove('active');
+      }
+    }
+
+    // Mobilde varsayılan görünüm modu
+    const initialMode = localStorage.getItem('moon_view_mode') || 'cards';
+    setViewMode(initialMode);
 
     async function updateDashboard() {
+      if (window.isResetting) return;
       try {
         const res = await fetch('/api/status');
         if (!res.ok) return;
         const data = await res.json();
 
-        // 🛡️ İki Yönlü Dayanıklı Hafıza (Auto Self-Healing)
+        // 🛡️ Sıfırlama Koruması: Sunucu sıfırlandıysa tarayıcı hafızasını temizle
         const serverResetEpoch = data.resetEpoch || 0;
         const localResetEpoch = parseInt(localStorage.getItem('moon_reset_epoch') || '0');
 
-        // Eğer sunucu sıfırlanmışsa ve tarayıcıda eski kayıtlar kalmışsa (örn: telefondan girildiğinde):
-        if (serverResetEpoch > localResetEpoch) {
+        if (serverResetEpoch > 0 && serverResetEpoch > localResetEpoch) {
           localStorage.removeItem(LS_HIST);
           localStorage.removeItem(LS_BAL);
           localStorage.setItem('moon_reset_epoch', serverResetEpoch.toString());
-          console.log("Sunucuda sıfırlama tespit edildi, yerel tarayıcı hafızası temizlendi.");
-        }
-
-        const localHistStr = localStorage.getItem(LS_HIST);
-        const localSavedHist = localHistStr ? JSON.parse(localHistStr) : [];
-        const localSavedBal = localStorage.getItem(LS_BAL);
-
-        // Durum A: Render yeniden başlamış (Sunucu geçmişi 0, ama tarayıcıda kayıt var)
-        if ((!data.history || data.history.length === 0) && localSavedHist.length > 0 && !isRestoring) {
-          isRestoring = true;
-          console.log("Sunucu belleği Render yeniden başlatması sonrası temizlenmiş. Tarayıcıdan geri yükleniyor...");
-          try {
-            const restRes = await fetch('/api/restore-state', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                history: localSavedHist,
-                balance: localSavedBal ? (parseFloat(localSavedBal) < 500 ? (1000.0 + parseFloat(localSavedBal) - 100.0) : parseFloat(localSavedBal)) : 1000.0,
-                resetEpoch: localResetEpoch
-              })
-            });
-            const restData = await restRes.json();
-            if (restData.ok) {
-              console.log("Sunucu durumu başarıyla kurtarıldı:", restData);
-              isRestoring = false;
-              setTimeout(updateDashboard, 400);
-              return;
-            }
-          } catch (err) {
-            console.error("Geri yükleme hatası:", err);
-          }
-          isRestoring = false;
-        }
-
-        // Durum B: Sunucuda işlemler var -> Tarayıcı hafızasını güncelle
-        if (data.history && data.history.length > 0) {
-          localStorage.setItem(LS_HIST, JSON.stringify(data.history));
-          localStorage.setItem(LS_BAL, data.stats.balance);
         }
 
         // Performans & İstatistikler
@@ -1548,6 +1665,45 @@ function serveDashboardHtml() {
           }).join('');
         }
 
+        // 2. Aktif Pozisyonlar - Mobil Kartlar (iPHONE)
+        const activeCardsEl = document.getElementById("activeCardsMobile");
+        if (activeCardsEl) {
+          if (data.positions.length === 0) {
+            activeCardsEl.innerHTML = '<div class="empty-cards-msg">🔍 350+ Vadeli Koinlerde 3m Balina & Moonshot Kırılımları Taranıyor...</div>';
+          } else {
+            activeCardsEl.innerHTML = data.positions.map((p, idx) => {
+              const isLong = p.side === 'LONG';
+              const isWin = (p.pnl || 0) >= 0;
+              const stopText = p.beLocked 
+                ? '<span class="badge-be">🛡️ BAŞABAŞ ($0 RİSK)</span>' 
+                : ('<span class="badge-sl">🛑 STOP: -%' + (data.stats && data.stats.slPct ? data.stats.slPct : 1.5).toFixed(2) + '</span>');
+              const roiStr = (p.roi >= 0 ? '+' : '') + (p.roi || 0).toFixed(1) + '%';
+              const pnlStr = (p.pnl >= 0 ? '+$' : '-$') + Math.abs(p.pnl || 0).toFixed(2);
+
+              return \`
+                <div class="pos-card-mobile \${isLong ? 'card-long' : 'card-short'}">
+                  <div class="pos-card-header">
+                    <div style="display:flex;align-items:center;gap:6px;">
+                      <span class="pos-card-sym">\${p.symbol}</span>
+                      <span class="\${isLong ? 'badge-side-long' : 'badge-side-short'}">\${isLong ? '▲ LONG 20x' : '▼ SHORT 20x'}</span>
+                    </div>
+                    <span class="\${isWin ? 'badge-pnl-pos' : 'badge-pnl-neg'}" style="font-size:13px;font-weight:900;">\${roiStr} (\${pnlStr})</span>
+                  </div>
+                  <div class="pos-card-grid">
+                    <div><span class="card-lbl">Giriş:</span> <span class="card-val">$\${parseFloat(p.entryPrice).toFixed(4)}</span></div>
+                    <div><span class="card-lbl">Canlı:</span> <span class="card-val">$\${parseFloat(p.currentPrice).toFixed(4)}</span></div>
+                    <div><span class="card-lbl">MFE (Zirve):</span> <span class="card-val" style="color:var(--green)">+%\${(p.mfe || 0).toFixed(2)}</span></div>
+                    <div><span class="card-lbl">Durum:</span> \${stopText}</div>
+                  </div>
+                  <div class="pos-card-footer">
+                    <button onclick="closePosition('\${p.id}')" class="btn-close-pos" style="width:100%;min-height:36px;font-size:12px;">✕ Pozisyonu Kapat</button>
+                  </div>
+                </div>
+              \`;
+            }).join('');
+          }
+        }
+
         // Geçmiş Tablosu
         const histTbody = document.getElementById("historyTbody");
         if (data.history.length === 0) {
@@ -1572,6 +1728,41 @@ function serveDashboardHtml() {
             \`;
           }).join('');
         }
+
+        // 4. Geçmiş Kartları - Mobil (iPHONE)
+        const histCardsEl = document.getElementById("historyCardsMobile");
+        if (histCardsEl) {
+          if (data.history.length === 0) {
+            histCardsEl.innerHTML = '<div class="empty-cards-msg">Henüz tamamlanan işlem geçmişi bulunmuyor.</div>';
+          } else {
+            histCardsEl.innerHTML = data.history.slice(0, 50).map((h, idx) => {
+              const isWin = (h.pnl || 0) >= 0;
+              const isLong = h.side === 'LONG';
+              const rTag = h.radarTag || (h.signal ? ('[' + h.signal + ']') : '-');
+              return \`
+                <div class="hist-card-mobile \${isWin ? 'hist-win' : 'hist-loss'}">
+                  <div class="hist-card-top">
+                    <div style="display:flex;align-items:center;gap:5px;">
+                      <span class="hist-card-sym">\${h.symbol}</span>
+                      <span class="\${isLong ? 'badge-side-long' : 'badge-side-short'}">\${h.side}</span>
+                      <span class="hist-card-time">\${h.time}</span>
+                    </div>
+                    <span class="\${isWin ? 'badge-pnl-pos' : 'badge-pnl-neg'}" style="font-weight:900;font-size:12px;">
+                      \${isWin ? '+' : ''}$\${(h.pnl || 0).toFixed(2)} (\${isWin ? '+' : ''}%\${(h.roi || 0).toFixed(1)})
+                    </span>
+                  </div>
+                  <div class="hist-card-mid">
+                    <span style="color:var(--muted);font-size:10px;">\${h.exitReason}</span>
+                  </div>
+                  <div class="hist-card-bot">
+                    <span style="color:#c084fc;font-size:9.5px;font-weight:700;">\${rTag}</span>
+                    <span style="color:var(--muted);font-size:9.5px;">MFE: <b style="color:var(--green)">+%\${(h.mfe || 0).toFixed(2)}</b> • \${h.durationMin}dk</span>
+                  </div>
+                </div>
+              \`;
+            }).join('');
+          }
+        }
       } catch (e) {}
     }
 
@@ -1582,15 +1773,19 @@ function serveDashboardHtml() {
     }
 
     async function resetBalance() {
-      if (!confirm("DİKKAT: Bakiye $1000.00 olarak sıfırlanacak ve hem sunucudaki hem tarayıcınızdaki tüm geçmiş silinecektir. Emin misiniz?")) return;
+      if (!confirm("DİKKAT: Bakiye $1000.00 olarak sıfırlanacak ve tüm geçmiş kalıcı olarak silinecektir. Emin misiniz?")) return;
+      window.isResetting = true;
       localStorage.removeItem(LS_HIST);
       localStorage.removeItem(LS_BAL);
-      const res = await fetch('/api/reset-balance');
-      const data = await res.json();
-      if (data && data.resetEpoch) {
-        localStorage.setItem('moon_reset_epoch', data.resetEpoch.toString());
-      }
-      location.reload();
+      sessionStorage.clear();
+      try {
+        const res = await fetch('/api/reset-balance');
+        const data = await res.json();
+        if (data && data.resetEpoch) {
+          localStorage.setItem('moon_reset_epoch', data.resetEpoch.toString());
+        }
+      } catch (e) {}
+      window.location.href = window.location.origin + window.location.pathname + '?reset=' + Date.now();
     }
 
     async function handleImportBackup(e) {
@@ -1713,6 +1908,74 @@ function renderHistoryRows(hist) {
   }).join('');
 }
 
+function renderActiveCards(positions) {
+  if (!positions || positions.length === 0) {
+    return '<div class="empty-cards-msg">🔍 350+ Vadeli Koinlerde 3m Balina & Moonshot Kırılımları Taranıyor...</div>';
+  }
+  return positions.map((p, idx) => {
+    const isLong = p.side === 'LONG';
+    const isWin = (p.pnl || 0) >= 0;
+    const stopText = p.beLocked 
+      ? '<span class="badge-be">🛡️ BAŞABAŞ ($0 RİSK)</span>' 
+      : `<span class="badge-sl">🛑 STOP: -%${CONFIG.slPct.toFixed(2)}</span>`;
+    const roiStr = (p.roi >= 0 ? '+' : '') + (p.roi || 0).toFixed(1) + '%';
+    const pnlStr = (p.pnl >= 0 ? '+$' : '-$') + Math.abs(p.pnl || 0).toFixed(2);
+
+    return `
+      <div class="pos-card-mobile ${isLong ? 'card-long' : 'card-short'}">
+        <div class="pos-card-header">
+          <div style="display:flex;align-items:center;gap:6px;">
+            <span class="pos-card-sym">${p.symbol}</span>
+            <span class="${isLong ? 'badge-side-long' : 'badge-side-short'}">${isLong ? '▲ LONG 20x' : '▼ SHORT 20x'}</span>
+          </div>
+          <span class="${isWin ? 'badge-pnl-pos' : 'badge-pnl-neg'}" style="font-size:13px;font-weight:900;">${roiStr} (${pnlStr})</span>
+        </div>
+        <div class="pos-card-grid">
+          <div><span class="card-lbl">Giriş:</span> <span class="card-val">$${parseFloat(p.entryPrice).toFixed(4)}</span></div>
+          <div><span class="card-lbl">Canlı:</span> <span class="card-val">$${parseFloat(p.currentPrice).toFixed(4)}</span></div>
+          <div><span class="card-lbl">MFE (Zirve):</span> <span class="card-val" style="color:var(--green)">+%${(p.mfe || 0).toFixed(2)}</span></div>
+          <div><span class="card-lbl">Durum:</span> ${stopText}</div>
+        </div>
+        <div class="pos-card-footer">
+          <button onclick="closePosition('${p.id}')" class="btn-close-pos" style="width:100%;min-height:36px;font-size:12px;">✕ Pozisyonu Kapat</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function renderHistoryCards(hist) {
+  if (!hist || hist.length === 0) {
+    return '<div class="empty-cards-msg">Henüz tamamlanan işlem geçmişi bulunmuyor.</div>';
+  }
+  return hist.slice(0, 50).map((h, idx) => {
+    const isWin = (h.pnl || 0) >= 0;
+    const isLong = h.side === 'LONG';
+    const rTag = h.radarTag || (h.signal ? `[${h.signal}]` : '-');
+    return `
+      <div class="hist-card-mobile ${isWin ? 'hist-win' : 'hist-loss'}">
+        <div class="hist-card-top">
+          <div style="display:flex;align-items:center;gap:5px;">
+            <span class="hist-card-sym">${h.symbol}</span>
+            <span class="${isLong ? 'badge-side-long' : 'badge-side-short'}">${h.side}</span>
+            <span class="hist-card-time">${h.time}</span>
+          </div>
+          <span class="${isWin ? 'badge-pnl-pos' : 'badge-pnl-neg'}" style="font-weight:900;font-size:12px;">
+            ${isWin ? '+' : ''}$${(h.pnl || 0).toFixed(2)} (${isWin ? '+' : ''}%${(h.roi || 0).toFixed(1)})
+          </span>
+        </div>
+        <div class="hist-card-mid">
+          <span style="color:var(--muted);font-size:10px;">${h.exitReason}</span>
+        </div>
+        <div class="hist-card-bot">
+          <span style="color:#c084fc;font-size:9.5px;font-weight:700;">${rTag}</span>
+          <span style="color:var(--muted);font-size:9.5px;">MFE: <b style="color:var(--green)">+%${(h.mfe || 0).toFixed(2)}</b> • ${h.durationMin}dk</span>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
 function parseJsonBody(req) {
   return new Promise((resolve, reject) => {
     let body = '';
@@ -1795,9 +2058,9 @@ const server = http.createServer(async (req, res) => {
     try {
       const body = await parseJsonBody(req);
       const reqResetEpoch = body ? (body.resetEpoch || 0) : 0;
-      if (resetEpoch > 0 && reqResetEpoch < resetEpoch) {
+      if (resetEpoch > 0 && reqResetEpoch <= resetEpoch) {
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ ok: false, error: "Sunucu daha yeni sıfırlandı, eski zombi geçmiş reddedildi." }));
+        res.end(JSON.stringify({ ok: false, error: "Sunucu sıfırlandı. Eski zombi geçmiş kesin olarak engellendi." }));
         return;
       }
       if (body && Array.isArray(body.history) && body.history.length > 0) {
@@ -1912,11 +2175,11 @@ const server = http.createServer(async (req, res) => {
     coinLossCount = {};
     coinCooldowns = {};
     try {
-      if (fs.existsSync(STATE_FILE)) fs.unlinkSync(STATE_FILE);
-      if (fs.existsSync(HISTORY_FILE)) fs.unlinkSync(HISTORY_FILE);
-      if (fs.existsSync(CSV_FILE)) fs.unlinkSync(CSV_FILE);
+      fs.writeFileSync(HISTORY_FILE, '[]', 'utf8');
+      rewriteCsvFile();
     } catch (e) {}
     persistState();
+    addLog(`🧹 Bakiye $${balance.toFixed(2)} olarak ve işlem geçmişi tamamen sıfırlandı.`, 'RESET');
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ ok: true, balance, resetEpoch }));
     return;
