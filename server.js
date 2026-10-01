@@ -24,8 +24,8 @@ let CONFIG = {
   leverage: 20,              // Kaldıraç 20x
   maxSlots: 4,               // Max Slot 4 Adet
   slPct: 2.50,               // Stop Loss %2.50
-  bePct: 1.20,               // Otomatik Başabaş %1.20 ($0 Risk - %24 ROI'da Kilitler)
-  moonPct: 15.00,            // Vur-Kaç Moonshot %15.00
+  bePct: 1.10,               // Erken Kâr Kilidi Başlangıcı %1.10 (+%22 ROI)
+  moonPct: 2.20,             // Sert Vur-Kaç Hedefi %2.20 (+%44 ROI ile anında çık)
   feeRate: 0.0008,           // 0.04% Giriş + 0.04% Çıkış Taker
   scanIntervalMs: 3500,
   riskIntervalMs: 2000,
@@ -744,52 +744,61 @@ async function fastRiskLoop() {
 
       let exitReason = null;
 
-      // 1. ERKEN BAŞABAŞ KİLİDİ (%1.80)
-      if (!pos.beLocked && pos.mfe >= CONFIG.bePct) {
+      // 1. KADEMELİ GARANTİ KÂR KİLİTLERİ (KÂRI PİYASAYA GERİ VERME!)
+      // Kilit 1: MFE >= %1.10 -> Stopu +%0.50 Kâra kilitle (+%10 ROI Garanti!)
+      if (pos.mfe >= CONFIG.bePct) {
         pos.beLocked = true;
-        pos.stopPrice = isLong ? pos.entryPrice * 1.002 : pos.entryPrice * 0.998;
-        stateChanged = true;
-        addLog(`🛡️ ${pos.symbol} +%${pos.mfe.toFixed(2)} Kâra Ulaştı! Stop Girişe Çekildi ($0 RİSK)`);
+        const lock1 = isLong ? pos.entryPrice * 1.0050 : pos.entryPrice * 0.9950;
+        if (!pos.stopPrice || (isLong && lock1 > pos.stopPrice) || (!isLong && lock1 < pos.stopPrice)) {
+          pos.stopPrice = lock1;
+          stateChanged = true;
+        }
+      }
+      // Kilit 2: MFE >= %1.60 -> Stopu +%1.00 Kâra kilitle (+%20 ROI Garanti!)
+      if (pos.mfe >= 1.60) {
+        const lock2 = isLong ? pos.entryPrice * 1.0100 : pos.entryPrice * 0.9900;
+        if (!pos.stopPrice || (isLong && lock2 > pos.stopPrice) || (!isLong && lock2 < pos.stopPrice)) {
+          pos.stopPrice = lock2;
+          stateChanged = true;
+        }
+      }
+      // Kilit 3: MFE >= %2.00 -> Stopu +%1.50 Kâra kilitle (+%30 ROI Garanti!)
+      if (pos.mfe >= 2.00) {
+        const lock3 = isLong ? pos.entryPrice * 1.0150 : pos.entryPrice * 0.9850;
+        if (!pos.stopPrice || (isLong && lock3 > pos.stopPrice) || (!isLong && lock3 < pos.stopPrice)) {
+          pos.stopPrice = lock3;
+          stateChanged = true;
+        }
+      }
+      // Kilit 4: MFE >= %3.00 -> Stopu +%2.30 Kâra kilitle (+%46 ROI Garanti!)
+      if (pos.mfe >= 3.00) {
+        const lock4 = isLong ? pos.entryPrice * 1.0230 : pos.entryPrice * 0.9770;
+        if (!pos.stopPrice || (isLong && lock4 > pos.stopPrice) || (!isLong && lock4 < pos.stopPrice)) {
+          pos.stopPrice = lock4;
+          stateChanged = true;
+        }
       }
 
-      // 2. GARANTİ KÂR KİLİTLERİ
-      if (pos.mfe >= 2.50) {
-        const guaranteedStop = isLong ? pos.entryPrice * 1.0120 : pos.entryPrice * 0.9880;
-        if (!pos.stopPrice || (isLong && guaranteedStop > pos.stopPrice) || (!isLong && guaranteedStop < pos.stopPrice)) {
-          pos.stopPrice = guaranteedStop;
-          stateChanged = true;
-        }
-      }
-      if (pos.mfe >= 4.50) {
-        const guaranteedStop2 = isLong ? pos.entryPrice * 1.0280 : pos.entryPrice * 0.9720;
-        if (!pos.stopPrice || (isLong && guaranteedStop2 > pos.stopPrice) || (!isLong && guaranteedStop2 < pos.stopPrice)) {
-          pos.stopPrice = guaranteedStop2;
-          stateChanged = true;
-        }
-      }
-      if (pos.mfe >= 7.50) {
-        const guaranteedStop3 = isLong ? pos.entryPrice * 1.0500 : pos.entryPrice * 0.9500;
-        if (!pos.stopPrice || (isLong && guaranteedStop3 > pos.stopPrice) || (!isLong && guaranteedStop3 < pos.stopPrice)) {
-          pos.stopPrice = guaranteedStop3;
-          stateChanged = true;
-        }
+      // 2. SERT VUR-KAÇ HEDEFİ (+%2.20 Spot = +%44 ROI ile %100 Çıkış)
+      if (!exitReason && move >= CONFIG.moonPct) {
+        exitReason = `🎯 VUR-KAÇ HEDEFİ ALINDI (+%${pos.roi.toFixed(1)} ROI / +%${move.toFixed(2)} Spot)`;
       }
 
-      // 3. DİNAMİK İZSÜREN TRAILING STOP (GENİŞLETİLMİŞ — Güçlü Trendlerde Erken Çıkmayı Engelle)
+      // 3. DİNAMİK ZİRVEDEN DÖNÜŞ KÂR KORUMASI (Zirveden %0.45 düşerse kârı al çık!)
       const mfe = pos.mfe || 0;
-      const pullbackLimit = mfe >= 20.0 ? 7.00 : (mfe >= 12.0 ? 5.00 : (mfe >= 5.0 ? 3.50 : 2.50));
+      let pullbackLimit = 2.50;
+      if (mfe >= 10.0) pullbackLimit = 3.50;
+      else if (mfe >= 5.0) pullbackLimit = 2.00;
+      else if (mfe >= 2.5) pullbackLimit = 0.70;
+      else if (mfe >= 1.10) pullbackLimit = 0.45;
+
       if (!exitReason && mfe >= CONFIG.bePct && (mfe - move) >= pullbackLimit) {
         exitReason = `🏆 Zirveden Takip Kârı Alındı (+%${pos.roi.toFixed(1)} ROI / Zirve: +%${mfe.toFixed(2)} Spot)`;
       }
 
-      // 4. MEGA MOONSHOT HEDEFİ (+%15 Spot = +%300 ROI)
-      if (!exitReason && move >= CONFIG.moonPct) {
-        exitReason = `🏆 MEGA VUR-KAÇ HEDEFİ ALINDI (+%${pos.roi.toFixed(0)} ROI / +%${mfe.toFixed(1)} Spot)`;
-      }
-
-      // 5. STOP LOSS VEYA KİLİTLİ STOP TETİKLENMESİ
+      // 4. STOP LOSS VEYA KİLİTLİ STOP TETİKLENMESİ
       if (!exitReason && ((isLong && curP <= pos.stopPrice) || (!isLong && curP >= pos.stopPrice))) {
-        if ((isLong && pos.stopPrice > pos.entryPrice * 1.005) || (!isLong && pos.stopPrice < pos.entryPrice * 0.995)) {
+        if ((isLong && pos.stopPrice > pos.entryPrice * 1.003) || (!isLong && pos.stopPrice < pos.entryPrice * 0.997)) {
           exitReason = `🔒 Garanti Kilitli Kâr Çıkışı (+%${pos.roi.toFixed(1)} ROI)`;
         } else if (pos.beLocked) {
           exitReason = `🛡️ Başabaş Koruma Çıkışı ($0.00 Risk / Zirve: +%${mfe.toFixed(2)})`;
