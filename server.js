@@ -617,7 +617,7 @@ async function scanLoop() {
         const intel = global.coinIntelligence[sym];
         if (intel) {
            // 1. Tarihi Dirence Çok Yakınsa LONG Girme (Zirveden %3 uzağı riskli bölge)
-           if (curP >= intel.max6m * 0.97) {
+           if (lastP >= intel.max6m * 0.97) {
              continue; // Direnç reddi riski
            }
            // 2. Karakteri Fazla Yavaş Koinleri Ele (Günde ortalama %3'ten az hareket eden)
