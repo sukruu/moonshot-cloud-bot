@@ -23,9 +23,9 @@ let CONFIG = {
   marginPerTrade: 20.0,      // Teminat 20$ (20x ile $400 pozisyon büyüklüğü)
   leverage: 20,              // Kaldıraç 20x
   maxSlots: 4,               // Max Slot 4 Adet
-  slPct: 1.40,               // Stop Loss %1.40 Spot (20x ile -%28 ROI, max -$5.60 kayıp)
-  bePct: 0.70,               // Erken Kâr Kilidi %0.70 Spot (+%14 ROI görünce $0 Riske kitle)
-  moonPct: 2.00,             // Sert Vur-Kaç Hedefi %2.00 (+%40 ROI ile %100 Çıkış)
+  slPct: 1.50,               // Stop Loss %1.50 Spot (20x ile -%30 ROI, max -.00 kayıp)
+  bePct: 1.20,               // Erken Kâr Kilidi %1.20 Spot (+%24 ROI görünce  Riske kitle)
+  moonPct: 3.00,             // Sert Vur-Kaç Hedefi %3.00 (+%60 ROI ile %100 Çıkış)
   feeRate: 0.0008,           // 0.04% Giriş + 0.04% Çıkış Taker
   scanIntervalMs: 3500,
   riskIntervalMs: 2000,
@@ -258,6 +258,119 @@ const BINANCE_FAPI_MIRRORS = [
   "https://fapi2.binance.com",
   "https://fapi3.binance.com"
 ];
+
+
+// ==========================================
+// 🧠 DEEP ANALYSIS ENGINE (6 Aylık Tarihi Zeka Motoru)
+// ==========================================
+global.coinIntelligence = {};
+let isDeepScanRunning = false;
+
+function getPearson(x, y) {
+  if (x.length !== y.length || x.length === 0) return 0;
+  const n = x.length;
+  let sum_x = 0, sum_y = 0, sum_xy = 0, sum_x2 = 0, sum_y2 = 0;
+  for (let i = 0; i < n; i++) {
+    sum_x += x[i];
+    sum_y += y[i];
+    sum_xy += x[i] * y[i];
+    sum_x2 += x[i] * x[i];
+    sum_y2 += y[i] * y[i];
+  }
+  const numerator = (n * sum_xy) - (sum_x * sum_y);
+  const denominator = Math.sqrt(((n * sum_x2) - (sum_x * sum_x)) * ((n * sum_y2) - (sum_y * sum_y)));
+  if (denominator === 0) return 0;
+  return numerator / denominator;
+}
+
+async function runHistoricalDeepScan() {
+  if (isDeepScanRunning) return;
+  isDeepScanRunning = true;
+  console.log("🧠 [DeepScan] 6 Aylık Tarihsel Derin Analiz Motoru Başlatılıyor...");
+  try {
+    const tickers = await fetchBinance("https://fapi.binance.com/fapi/v1/ticker/24hr");
+    if (!tickers) {
+      isDeepScanRunning = false;
+      return;
+    }
+    const validSyms = tickers.map(t => t.symbol).filter(s => s.endsWith("USDT") && !s.startsWith("USDC") && !BANNED_SYMBOLS.has(s));
+
+    const btcKlines = await fetchBinance("https://fapi.binance.com/fapi/v1/klines?symbol=BTCUSDT&interval=1d&limit=180");
+    if (!btcKlines) {
+      isDeepScanRunning = false;
+      return;
+    }
+    const btcPctChanges = [];
+    for (let i = 1; i < btcKlines.length; i++) {
+      const open = parseFloat(btcKlines[i][1]);
+      const close = parseFloat(btcKlines[i][4]);
+      btcPctChanges.push((close - open) / open);
+    }
+
+    const chunkSize = 20;
+    for (let i = 0; i < validSyms.length; i += chunkSize) {
+      const chunk = validSyms.slice(i, i + chunkSize);
+      await Promise.all(chunk.map(async (sym) => {
+        try {
+          const klines = await fetchBinance(`https://fapi.binance.com/fapi/v1/klines?symbol=${sym}&interval=1d&limit=180`);
+          if (!klines || klines.length < 30) return;
+
+          let maxHigh = -Infinity;
+          let minLow = Infinity;
+          const altPctChanges = [];
+
+          for (let j = 1; j < klines.length; j++) {
+            const open = parseFloat(klines[j][1]);
+            const high = parseFloat(klines[j][2]);
+            const low = parseFloat(klines[j][3]);
+            const close = parseFloat(klines[j][4]);
+            
+            if (high > maxHigh) maxHigh = high;
+            if (low < minLow) minLow = low;
+
+            const daysFromEnd = klines.length - j;
+            if (daysFromEnd <= btcPctChanges.length) {
+              const btcIdx = btcPctChanges.length - daysFromEnd;
+              if (btcIdx >= 0) {
+                 altPctChanges.push({ x: btcPctChanges[btcIdx], y: (close - open) / open });
+              }
+            }
+          }
+
+          const xArr = altPctChanges.map(c => c.x);
+          const yArr = altPctChanges.map(c => c.y);
+          const btcCorr = getPearson(xArr, yArr);
+
+          let totalDailyRange = 0;
+          for (let j = 0; j < klines.length; j++) {
+             const h = parseFloat(klines[j][2]);
+             const l = parseFloat(klines[j][3]);
+             totalDailyRange += (h - l) / l;
+          }
+          const avgDailyVolatility = (totalDailyRange / klines.length) * 100;
+
+          global.coinIntelligence[sym] = {
+            max6m: maxHigh,
+            min6m: minLow,
+            btcCorrelation: btcCorr,
+            volatilityScore: avgDailyVolatility,
+            lastUpdated: Date.now()
+          };
+        } catch (e) {}
+      }));
+      await new Promise(resolve => setTimeout(resolve, 800));
+    }
+    console.log(`🧠 [DeepScan] ${Object.keys(global.coinIntelligence).length} Koin için 6 Aylık DNA ve BTC Analizi Tamamlandı!`);
+  } catch (err) {
+  } finally {
+    isDeepScanRunning = false;
+  }
+}
+
+setTimeout(runHistoricalDeepScan, 5000);
+setInterval(runHistoricalDeepScan, 4 * 60 * 60 * 1000);
+// ==========================================
+
 
 async function fetchBinance(url) {
   let relativePath = url;
@@ -499,6 +612,20 @@ async function scanLoop() {
         const rInfo = radarMap[sym];
         // 🛡️ DÜŞÜK HACİMLİ ÇÖP KOİN FİLTRESİ ($3M altı sığ tahtalı koinlere girme)
         if (rInfo && rInfo.vol3hM !== null && rInfo.vol3hM !== undefined && rInfo.vol3hM < 3.0) continue;
+
+        // 🧠 DEEP ANALYSIS FİLTRELERİ
+        const intel = global.coinIntelligence[sym];
+        if (intel) {
+           // 1. Tarihi Dirence Çok Yakınsa LONG Girme (Zirveden %3 uzağı riskli bölge)
+           if (curP >= intel.max6m * 0.97) {
+             continue; // Direnç reddi riski
+           }
+           // 2. Karakteri Fazla Yavaş Koinleri Ele (Günde ortalama %3'ten az hareket eden)
+           if (intel.volatilityScore < 3.0) {
+             continue; // Yeterince volatil değil, Moonshot çıkmaz.
+           }
+        }
+
         const lastIdx = k3m.length - 1;
 
         const curP = parseFloat(k3m[lastIdx][4]);
@@ -754,69 +881,46 @@ async function fastRiskLoop() {
 
       let exitReason = null;
 
-      // 1. KADEMELİ GARANTİ KÂR KİLİTLERİ (KÂRI PİYASAYA GERİ VERME!)
-      // Kilit 0: MFE >= %0.70 (Erken Başabaş) -> Stopu +%0.18 Kâra çek ($0 Risk, Komisyonlar Ödenir!)
-      if (pos.mfe >= CONFIG.bePct) {
-        pos.beLocked = true;
-        const lock0 = isLong ? pos.entryPrice * 1.0018 : pos.entryPrice * 0.9982;
-        if (!pos.stopPrice || (isLong && lock0 > pos.stopPrice) || (!isLong && lock0 < pos.stopPrice)) {
-          pos.stopPrice = lock0;
-          stateChanged = true;
+      // 1. BAŞABAŞ VE KÂR KORUMASI (Genişletildi)
+        // Erken Başabaş (MFE >= %1.20 ise stopu +%0.20'ye çek)
+        if (pos.mfe >= CONFIG.bePct) {
+          pos.beLocked = true;
+          const lock0 = isLong ? pos.entryPrice * 1.0020 : pos.entryPrice * 0.9980;
+          if (!pos.stopPrice || (isLong && lock0 > pos.stopPrice) || (!isLong && lock0 < pos.stopPrice)) {
+            pos.stopPrice = lock0;
+            stateChanged = true;
+          }
         }
-      }
-      // Kilit 1: MFE >= %1.00 -> Stopu +%0.50 Kâra kilitle (+%10 ROI Garanti!)
-      if (pos.mfe >= 1.00) {
-        const lock1 = isLong ? pos.entryPrice * 1.0050 : pos.entryPrice * 0.9950;
-        if (!pos.stopPrice || (isLong && lock1 > pos.stopPrice) || (!isLong && lock1 < pos.stopPrice)) {
-          pos.stopPrice = lock1;
-          stateChanged = true;
+        
+        // Güçlü Kilit: MFE >= %2.00 ( %40 ROI) -> Stopu +%1.00 Kâra kilitle ( %20 ROI Garanti)
+        if (pos.mfe >= 2.00) {
+          const lock1 = isLong ? pos.entryPrice * 1.0100 : pos.entryPrice * 0.9900;
+          if (!pos.stopPrice || (isLong && lock1 > pos.stopPrice) || (!isLong && lock1 < pos.stopPrice)) {
+            pos.stopPrice = lock1;
+            stateChanged = true;
+          }
         }
-      }
-      // Kilit 2: MFE >= %1.40 -> Stopu +%0.90 Kâra kilitle (+%18 ROI Garanti!)
-      if (pos.mfe >= 1.40) {
-        const lock2 = isLong ? pos.entryPrice * 1.0090 : pos.entryPrice * 0.9910;
-        if (!pos.stopPrice || (isLong && lock2 > pos.stopPrice) || (!isLong && lock2 < pos.stopPrice)) {
-          pos.stopPrice = lock2;
-          stateChanged = true;
+  
+        // 2. SERT VUR-KAÇ HEDEFİ (+%3.00 Spot = +%60 ROI ile %100 Çıkış)
+        if (!exitReason && move >= CONFIG.moonPct) {
+          exitReason = `🎯 MOONSHOT HEDEFİ ALINDI (+%${pos.roi.toFixed(1)} ROI / +%${move.toFixed(2)} Spot)`;
         }
-      }
-      // Kilit 3: MFE >= %1.80 -> Stopu +%1.30 Kâra kilitle (+%26 ROI Garanti!)
-      if (pos.mfe >= 1.80) {
-        const lock3 = isLong ? pos.entryPrice * 1.0130 : pos.entryPrice * 0.9870;
-        if (!pos.stopPrice || (isLong && lock3 > pos.stopPrice) || (!isLong && lock3 < pos.stopPrice)) {
-          pos.stopPrice = lock3;
-          stateChanged = true;
+  
+        // 3. DİNAMİK ZİRVEDEN DÖNÜŞ KÂR KORUMASI (Nefes Alma Payı Genişletildi!)
+        const mfe = pos.mfe || 0;
+        let pullbackLimit = 2.00; // Varsayılan çok geniş
+        if (mfe >= 5.0) pullbackLimit = 1.50; // Zirveden -%1.50 düşerse çık
+        else if (mfe >= 3.0) pullbackLimit = 1.00; // Zirveden -%1.00 düşerse çık
+        else if (mfe >= 2.0) pullbackLimit = 0.80; // Zirveden -%0.80 düşerse çık
+        else if (mfe >= 1.5) pullbackLimit = 0.60; // Zirveden -%0.60 düşerse çık
+        // MFE 1.5 altında dinamik stop yok, sadece başabaş stopu veya kilitli stop geçerli.
+  
+        if (!exitReason && mfe >= 1.5 && (mfe - move) >= pullbackLimit) {
+          exitReason = `🏆 Dinamik İzleyen Stop (+%${pos.roi.toFixed(1)} ROI / Zirve: +%${mfe.toFixed(2)} Spot)`;
         }
-      }
-      // Kilit 4: MFE >= %2.50 -> Stopu +%1.80 Kâra kilitle (+%36 ROI Garanti!)
-      if (pos.mfe >= 2.50) {
-        const lock4 = isLong ? pos.entryPrice * 1.0180 : pos.entryPrice * 0.9820;
-        if (!pos.stopPrice || (isLong && lock4 > pos.stopPrice) || (!isLong && lock4 < pos.stopPrice)) {
-          pos.stopPrice = lock4;
-          stateChanged = true;
-        }
-      }
-
-      // 2. SERT VUR-KAÇ HEDEFİ (+%2.00 Spot = +%40 ROI ile %100 Çıkış)
-      if (!exitReason && move >= CONFIG.moonPct) {
-        exitReason = `🎯 VUR-KAÇ HEDEFİ ALINDI (+%${pos.roi.toFixed(1)} ROI / +%${move.toFixed(2)} Spot)`;
-      }
-
-      // 3. DİNAMİK ZİRVEDEN DÖNÜŞ KÂR KORUMASI (Zirveden çekilince kârı al çık!)
-      const mfe = pos.mfe || 0;
-      let pullbackLimit = 2.00;
-      if (mfe >= 10.0) pullbackLimit = 3.00;
-      else if (mfe >= 5.0) pullbackLimit = 1.60;
-      else if (mfe >= 2.0) pullbackLimit = 0.50;
-      else if (mfe >= 1.20) pullbackLimit = 0.38;
-      else if (mfe >= 0.70) pullbackLimit = 0.32;
-
-      if (!exitReason && mfe >= CONFIG.bePct && (mfe - move) >= pullbackLimit) {
-        exitReason = `🏆 Zirveden Takip Kârı Alındı (+%${pos.roi.toFixed(1)} ROI / Zirve: +%${mfe.toFixed(2)} Spot)`;
-      }
-
-      // 4. STOP LOSS VEYA KİLİTLİ STOP TETİKLENMESİ
-      if (!exitReason && ((isLong && curP <= pos.stopPrice) || (!isLong && curP >= pos.stopPrice))) {
+  
+        // 4. STOP LOSS VEYA KİLİTLİ STOP TETİKLENMESİ
+        if (!exitReason && ((isLong && curP <= pos.stopPrice) || (!isLong && curP >= pos.stopPrice))) {
         if ((isLong && pos.stopPrice > pos.entryPrice * 1.003) || (!isLong && pos.stopPrice < pos.entryPrice * 0.997)) {
           exitReason = `🔒 Garanti Kilitli Kâr Çıkışı (+%${pos.roi.toFixed(1)} ROI)`;
         } else if (pos.beLocked) {
