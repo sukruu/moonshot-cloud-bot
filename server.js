@@ -711,64 +711,71 @@ async function scanLoop() {
           }
         }
 
-        // 🕐 SON MUM MOMENTUM TEYİDİ: Son 3dk mumun yönü işlem yönüyle aynı mı?
-        const lastCandleGreen = curP > curO;
-        const lastCandleRed = curP < curO;
-        if (isDirectRadarShort && lastCandleGreen && curMovePct > 0.15) {
-          isDirectRadarShort = false;
-        }
-        if (isDirectRadarLong && lastCandleRed && curMovePct < -0.15) {
-          isDirectRadarLong = false;
-        }
+        // 🕐 1. ANLIK MUM TEYİDİ & FRESH MOMENTUM (Bayatlamış Pompaları Ele!)
+        // Coinin 3 saatlik geçmişi ne kadar güzel olursa olsun, ŞU ANKİ 3dk mumunda alım ivmesi yoksa GİRİLMEZ!
+        const curCandleGreen = curP > curO && curMovePct >= 0.25;
+        const curCandleRed = curP < curO && curMovePct <= -0.25;
+        const freshVolumeLong = curV >= avgVol20 * 1.25 || (curV + prevV) >= avgVol20 * 1.7;
+        const freshVolumeShort = curV >= avgVol20 * 1.25 || (curV + prevV) >= avgVol20 * 1.7;
 
-        // İğne tuzağı kontrolü: Sıçramış koine tepeden/dipten atlama toleransını daralt
-        const validWickLong = isDirectRadarLong ? (curP >= curH * 0.985) : (curP >= curH * 0.992);
-        const validWickShort = isDirectRadarShort ? (curP <= curL * 1.015) : (curP <= curL * 1.008);
+        // İğne tuzağı kontrolü: Mumun en tepesinden veya en dibinden iğneye atlamayı engelle
+        const validWickLong = curP >= curH * 0.990;
+        const validWickShort = curP <= curL * 1.010;
 
-        // 🟢 BOĞA MOMENTUM İYİLEŞTİRME: Radar teyidi olmadan LONG açılacaksa ek filtreler
-        const momentumLongOk = hasMomentum && isWhaleVol;
-        let improvedMomentumLong = momentumLongOk;
-        if (momentumLongOk && !isDirectRadarLong) {
-          const hasTakerSupport = rInfo ? (rInfo.takerBuyRatio || 50) >= 52.0 : false;
+        // 🟢 BOĞA GİRİŞ KOŞULLARI:
+        // Radar teyidi varsa bile taze mum ve hacim ŞART! Radar yoksa daha sert momentum şart!
+        let finalLongSignal = false;
+        if (isDirectRadarLong && curCandleGreen && freshVolumeLong) {
+          finalLongSignal = true;
+        } else if (hasMomentum && isWhaleVol) {
+          const hasTakerSupport = rInfo ? (rInfo.takerBuyRatio || 50) >= 51.5 : false;
           const hasVolume = rInfo ? (rInfo.vol3hM || 0) >= 3.0 : true;
           const notOverbought = chg < 15.0;
-          const strongMomentum = curMovePct >= 0.80;
-          if (!hasTakerSupport || !hasVolume || !notOverbought || !strongMomentum) improvedMomentumLong = false;
+          const strongMomentum = curMovePct >= 0.70;
+          if (hasTakerSupport && hasVolume && notOverbought && strongMomentum) {
+            finalLongSignal = true;
+          }
         }
 
-        // 🔴 AYI MOMENTUM İYİLEŞTİRME: Radar teyidi olmadan SHORT açılacaksa ek filtreler
-        const isDailyOverbought = chg >= 12.0;
-        const hasDownMomentum = (curMovePct <= -minJump && curP < curO) || (twoCandleMovePct <= -(minJump + 0.25) && curP < curO);
-        let improvedMomentumShort = hasDownMomentum && isWhaleVol;
-        if (improvedMomentumShort && !isDirectRadarShort) {
-          const hasTakerSell = rInfo ? (rInfo.takerBuyRatio || 50) <= 47.5 : false;
+        // 🔴 AYI GİRİŞ KOŞULLARI:
+        let finalShortSignal = false;
+        if (isDirectRadarShort && curCandleRed && freshVolumeShort) {
+          finalShortSignal = true;
+        } else if ((curMovePct <= -minJump && curP < curO) && isWhaleVol) {
+          const hasTakerSell = rInfo ? (rInfo.takerBuyRatio || 50) <= 48.5 : false;
           const hasVolume = rInfo ? (rInfo.vol3hM || 0) >= 3.0 : true;
-          const strongMomentumDown = curMovePct <= -0.80;
+          const strongMomentumDown = curMovePct <= -0.70;
           const notOversold = chg > -8.0;
-          if (!hasTakerSell || !hasVolume || !strongMomentumDown || !notOversold) improvedMomentumShort = false;
-        }
-        if (isDailyOverbought && curMovePct <= -0.80 && isWhaleVol) {
-          improvedMomentumShort = true;
+          if (hasTakerSell && hasVolume && strongMomentumDown && notOversold) {
+            finalShortSignal = true;
+          }
         }
 
         // 🛡️ DERS 2: Günlük (24s) ve 3s Trend Filtresi (Tükenmiş Roket / Dipte Short Engeli)
         const strictTrendOkLong = (chg < 18.0) && (chg > -4.0) && (!rInfo || (rInfo.chg3h || 0) < 7.0); 
         const strictTrendOkShort = (chg > -8.0) && (chg < 4.0) && (!rInfo || ((rInfo.chg3h || 0) > -5.0 && (rInfo.chg3h || 0) < 0));
 
-        // 🛡️ TEPE VE DİP TUZAĞI KORUMASI (Direnç ve Destek Sıkışması)
+        // 🛡️ TEPE VE DİP TUZAĞI KORUMASI (Genişletildi: %1.5 üzeri tüm hareketlerde tavan kontrolü)
         let isNearPeakTrap = false;
         let isNearDipTrap = false;
         if (rInfo) {
-          if (rInfo.high3h && (rInfo.chg3h || 0) >= 4.0) {
-            if (curP >= rInfo.high3h * 0.985 && curP <= rInfo.high3h * 1.002) isNearPeakTrap = true;
+          if (rInfo.high3h && (rInfo.chg3h || 0) >= 1.5) {
+            // 3 saatlik tavanın %1.0'dan daha yakınına geldiyse ve balina hacmiyle kırmıyorsa tepe tuzağı!
+            if (curP >= rInfo.high3h * 0.990 && curV < avgVol20 * 2.2) isNearPeakTrap = true;
           }
-          if (rInfo.low3h && (rInfo.chg3h || 0) <= -4.0) {
-            if (curP <= rInfo.low3h * 1.015 && curP >= rInfo.low3h * 0.998) isNearDipTrap = true;
+          if (rInfo.low3h && (rInfo.chg3h || 0) <= -1.5) {
+            // 3 saatlik tabanın %1.0'dan daha yakınına geldiyse dip tuzağı!
+            if (curP <= rInfo.low3h * 1.010 && curV < avgVol20 * 2.2) isNearDipTrap = true;
           }
         }
 
-        const isLongPump = (isDirectRadarLong || improvedMomentumLong) && validWickLong && radarOkLong && strictTrendOkLong && !isNearPeakTrap;
-        const isShortDump = (isDirectRadarShort || improvedMomentumShort) && validWickShort && radarOkShort && strictTrendOkShort && !isNearDipTrap;
+        // 🛡️ BTC TREND KORUMASI (BTC Çakılırken Asla LONG Açma!)
+        const btcNumeric = parseFloat((btc15mTrend || "0").replace('%', '')) || 0;
+        const btcSafeForLong = btc15mIsGreen || btcNumeric >= -0.20;
+        const btcSafeForShort = !btc15mIsGreen || btcNumeric <= 0.20;
+
+        const isLongPump = finalLongSignal && validWickLong && radarOkLong && strictTrendOkLong && !isNearPeakTrap && btcSafeForLong;
+        const isShortDump = finalShortSignal && validWickShort && radarOkShort && strictTrendOkShort && !isNearDipTrap && btcSafeForShort;
 
         if (isLongPump || isShortDump) {
           const side = isLongPump ? "LONG" : "SHORT";
