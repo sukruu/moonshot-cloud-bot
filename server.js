@@ -24,7 +24,7 @@ let CONFIG = {
   leverage: 20,              // Kaldıraç 20x
   maxSlots: 4,               // Max Slot 4 Adet
   slPct: 1.50,               // Stop Loss %1.50 Spot (20x ile -%30 ROI, max -.00 kayıp)
-  bePct: 1.20,               // Erken Kâr Kilidi %1.20 Spot (+%24 ROI görünce  Riske kitle)
+  bePct: 0.80,               // Erken Kâr Kilidi %1.20 Spot (+%24 ROI görünce  Riske kitle)
   moonPct: 3.00,             // Sert Vur-Kaç Hedefi %3.00 (+%60 ROI ile %100 Çıkış)
   feeRate: 0.0008,           // 0.04% Giriş + 0.04% Çıkış Taker
   scanIntervalMs: 3500,
