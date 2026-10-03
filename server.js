@@ -74,8 +74,12 @@ let isRiskRunning = false;
 let isRadarRunning = false;
 let isBotActive = true;
 
+const TR_TZ = 'Europe/Istanbul';
+function trTime(ms) { return new Date(ms || Date.now()).toLocaleTimeString('tr-TR', { timeZone: TR_TZ }); }
+function trDateTime(ms) { return new Date(ms || Date.now()).toLocaleString('tr-TR', { timeZone: TR_TZ }); }
+
 function addLog(msg, type = "INFO") {
-  const time = new Date().toLocaleTimeString('tr-TR');
+  const time = trTime();
   logs.unshift({ time, type, msg });
   if (logs.length > 150) logs.pop();
   console.log(`[${time}] [${type}] ${msg}`);
@@ -155,7 +159,8 @@ function rewriteCsvFile() {
   try {
     const csvHeader = '\uFEFF' + [
       'ID',
-      'Tarih & Saat',
+      'Giriş Saati',
+      'Kapanış Saati',
       'Koin',
       'Yön',
       'Giriş Fiyatı',
@@ -190,16 +195,20 @@ function rewriteCsvFile() {
 
       content += [
         trade.id,
-        `"${trade.time || trade.dateFullStr || ''}"`,
+        `"${trade.entryTimeStr || '-'}"`,
+        `"${trade.dateFullStr || trade.time || ''}"`,
         trade.symbol,
         trade.side,
         trade.entryPrice,
         trade.exitPrice,
         trade.durationMin,
         `"%${(trade.mfe || 0).toFixed(2)}"`,
-        `"$${(trade.pnl || 0).toFixed(2)}"`,
+        `"%${(trade.mae || 0).toFixed(2)}"`,
+        `"${(trade.pnl || 0).toFixed(2)}"`,
         `"%${(trade.roi || 0).toFixed(2)}"`,
         `"${(trade.exitReason || '').replace(/"/g, '""')}"`,
+        `"%${(trade.btc5mEntry || 0).toFixed(2)}"`,
+        `"%${(trade.btc15mEntry || 0).toFixed(2)}"`,
         chg3hStr,
         vol3hStr,
         chg24hStr,
@@ -231,7 +240,8 @@ function appendTradeToCsv(trade) {
 
     const row = [
       trade.id,
-      `"${trade.time}"`,
+      `"${trade.entryTimeStr || '-'}"`,
+      `"${trade.dateFullStr || trade.time || ''}"`,
       trade.symbol,
       trade.side,
       trade.entryPrice,
@@ -996,9 +1006,10 @@ function closeTrade(pos, exitReason) {
   }
 
   const tradeRecord = {
-    id: history.length + 1,
-    time: new Date().toLocaleTimeString('tr-TR'),
-    dateFullStr: new Date().toLocaleString('tr-TR'),
+    id: (history.length > 0 ? Math.max(...history.map(h => h.id || 0)) : 0) + 1,
+    time: trTime(),
+    dateFullStr: trDateTime(),
+    entryTimeStr: trDateTime(pos.entryTime),
     symbol: pos.symbol,
     side: pos.side,
     entryPrice: pos.entryPrice,
@@ -1025,7 +1036,7 @@ function closeTrade(pos, exitReason) {
 
   appendTradeToCsv(tradeRecord);
   try {
-    fs.writeFileSync(HISTORY_FILE, JSON.stringify(history.slice(0, 100), null, 2), 'utf8');
+    fs.writeFileSync(HISTORY_FILE, JSON.stringify(history.slice(0, 500), null, 2), 'utf8');
   } catch (e) {}
 
   addLog(`🏁 KAPANDI: [${pos.side}] ${pos.symbol} | PnL: ${pos.pnl >= 0 ? '+' : ''}$${pos.pnl.toFixed(2)} (%${pos.roi.toFixed(1)} ROI) | ${exitReason}`, pos.pnl >= 0 ? 'WIN' : 'LOSS');
@@ -2206,7 +2217,7 @@ const server = http.createServer(async (req, res) => {
         rewriteCsvFile();
         persistState();
         try {
-          fs.writeFileSync(HISTORY_FILE, JSON.stringify(history.slice(0, 100), null, 2), 'utf8');
+          fs.writeFileSync(HISTORY_FILE, JSON.stringify(history.slice(0, 500), null, 2), 'utf8');
         } catch(e) {}
 
         addLog(`💾 Tarayıcı Hafızasından (LocalStorage) Bakiye ($${balance.toFixed(2)}) ve ${history.length} Adet İşlem Başarıyla Kurtarıldı! (+${addedCount} yeni)`, 'RESTORE');
@@ -2261,7 +2272,7 @@ const server = http.createServer(async (req, res) => {
         rewriteCsvFile();
         persistState();
         try {
-          fs.writeFileSync(HISTORY_FILE, JSON.stringify(history.slice(0, 100), null, 2), 'utf8');
+          fs.writeFileSync(HISTORY_FILE, JSON.stringify(history.slice(0, 500), null, 2), 'utf8');
         } catch(e) {}
         addLog(`📂 Yedek Dosyası Yüklendi: $${balance.toFixed(2)} Bakiye, ${history.length} Adet İşlem!`, 'RESTORE');
         res.writeHead(200, { 'Content-Type': 'application/json' });
