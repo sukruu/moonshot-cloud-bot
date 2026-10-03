@@ -631,7 +631,7 @@ async function scanLoop() {
 
         const rInfo = radarMap[sym];
         // 🛡️ DÜŞÜK HACİMLİ ÇÖP KOİN FİLTRESİ ($3M altı sığ tahtalı koinlere girme)
-        if (rInfo && rInfo.vol3hM !== null && rInfo.vol3hM !== undefined && rInfo.vol3hM < 15.0) continue;
+        if (rInfo && rInfo.vol3hM !== null && rInfo.vol3hM !== undefined && rInfo.vol3hM < 5.0) continue;
 
         // 🧠 DEEP ANALYSIS FİLTRELERİ
         const intel = global.coinIntelligence[sym];
@@ -664,7 +664,7 @@ async function scanLoop() {
 
         const curMovePct = ((curP - curO) / curO) * 100;
         const twoCandleMovePct = ((curP - prevO) / prevO) * 100;
-        const minJump = isVip ? 0.70 : 0.90;
+        const minJump = isVip ? 0.60 : 0.80;
 
         const isWhaleVol = curV >= avgVol20 * 1.8 || (curV + prevV) >= avgVol20 * 2.5 || prevV >= avgVol20 * 1.8;
         const isDailyTrending = chg >= 2.0 && chg <= 80.0;
@@ -683,7 +683,7 @@ async function scanLoop() {
           const sig = rInfo.signal || "";
 
           // 1. YÜKSELİRKEN VUR-KAÇ (LONG): 3s Değişim %2.0 - %7.0 + Alıcı Baskısı >= %52 + Boğa/Roket
-          if (chg3 >= 2.0 && chg3 <= 7.0 && (rInfo.chg24h || chg) < 18.0 && taker >= 52.0 && (sig.includes("ROKET") || sig.includes("BOĞA"))) {
+          if (chg3 >= 2.0 && chg3 <= 7.0 && (rInfo.chg24h || chg) < 18.0 && taker >= 51.2 && (sig.includes("ROKET") || sig.includes("BOĞA"))) {
             isDirectRadarLong = true;
             radarTag = `[3s: +%${chg3.toFixed(1)} / %${taker.toFixed(0)} Alıcı - ${sig}]`;
           }
@@ -749,7 +749,7 @@ async function scanLoop() {
           finalLongSignal = true;
         } else if (hasMomentum && isWhaleVol) {
           const hasTakerSupport = rInfo ? (rInfo.takerBuyRatio || 50) >= 51.5 : false;
-          const hasVolume = rInfo ? (rInfo.vol3hM || 0) >= 15.0 : true;
+          const hasVolume = rInfo ? (rInfo.vol3hM || 0) >= 5.0 : true;
           const notOverbought = chg < 15.0;
           const strongMomentum = curMovePct >= 0.70;
           if (hasTakerSupport && hasVolume && notOverbought && strongMomentum) {
@@ -763,7 +763,7 @@ async function scanLoop() {
           finalShortSignal = true;
         } else if ((curMovePct <= -minJump && curP < curO) && isWhaleVol) {
           const hasTakerSell = rInfo ? (rInfo.takerBuyRatio || 50) <= 48.5 : false;
-          const hasVolume = rInfo ? (rInfo.vol3hM || 0) >= 15.0 : true;
+          const hasVolume = rInfo ? (rInfo.vol3hM || 0) >= 5.0 : true;
           const strongMomentumDown = curMovePct <= -0.70;
           const notOversold = chg > -8.0;
           if (hasTakerSell && hasVolume && strongMomentumDown && notOversold) {
@@ -793,8 +793,8 @@ async function scanLoop() {
         // Hem 5 dakikalık hem de 15 dakikalık trendi kontrol ediyoruz.
         // Eğer kısa vadede (5m) çok sert bir düşüş varsa (-0.15% altı), LONG açma.
         // Eğer genel trend (15m) kötüyse (-0.25% altı), LONG açma.
-        const btcSafeForLong = (btc5mNumeric > -0.15) && (btc15mNumeric > -0.25);
-        const btcSafeForShort = (btc5mNumeric < 0.15) && (btc15mNumeric < 0.25);
+        const btcSafeForLong = (btc5mNumeric > -0.20) && (btc15mNumeric > -0.30);
+        const btcSafeForShort = (btc5mNumeric < 0.20) && (btc15mNumeric < 0.30);
 
         const isLongPump = finalLongSignal && validWickLong && radarOkLong && strictTrendOkLong && !isNearPeakTrap && btcSafeForLong;
         const isShortDump = finalShortSignal && validWickShort && radarOkShort && strictTrendOkShort && !isNearDipTrap && btcSafeForShort;
