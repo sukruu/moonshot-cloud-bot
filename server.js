@@ -1621,16 +1621,7 @@ function serveDashboardHtml() {
           <span class="badge-moon">🚀 10X TREND MODU</span>
         </h2>
 
-        <!-- ŞAMPİYON KOİNLER -->
-        <div style="background:var(--panel2);border:1px solid var(--border);border-radius:6px;padding:7px 10px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:5px;">
-          <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;">
-            <span style="font-size:9.5px;color:var(--muted);font-weight:700;">🎯 ÖNCELİKLİ ŞAMPİYONLAR:</span>
-            <div id="vipChips" style="display:flex;flex-wrap:wrap;gap:4px;">
-              ${vipKeys.map(k => `<span class="chip">${k}</span>`).join('')}
-            </div>
-          </div>
-          <button onclick="location.reload()" style="font-size:9.5px;padding:2px 7px;background:none;border:1px solid var(--border);border-radius:4px;color:var(--muted);cursor:pointer;">Yenile</button>
-        </div>
+        <!-- ŞAMPİYON KOİNLER (GİZLENDİ) -->
 
         <!-- MOBİL GÖRÜNÜM SEÇİCİ (iPHONE & MOBİL) -->
         <div class="view-mode-switcher">
