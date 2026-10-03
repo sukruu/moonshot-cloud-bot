@@ -1170,30 +1170,35 @@ function serveDashboardHtml() {
 
     /* STATUS BOX */
     .status-box {
-      background: rgba(8, 11, 18, 0.7);
-      border: 1px solid rgba(255, 255, 255, 0.08);
+      background: linear-gradient(180deg, rgba(15,23,42,0.6) 0%, rgba(8,11,18,0.8) 100%);
+      border: 1px solid rgba(255,255,255,0.05);
       border-radius: 8px;
-      padding: 9px 11px;
-      margin-bottom: 10px;
+      padding: 12px;
+      margin-bottom: 12px;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.02);
     }
     .status-item {
       display: flex;
       justify-content: space-between;
       align-items: center;
       font-size: 11px;
-      margin-bottom: 5px;
+      margin-bottom: 8px;
       font-weight: 600;
       color: var(--muted);
+      border-bottom: 1px dashed rgba(255,255,255,0.04);
+      padding-bottom: 8px;
     }
-    .status-item:last-child { margin-bottom: 0; }
+    .status-item:last-child { margin-bottom: 0; border-bottom: none; padding-bottom: 0; }
     .status-pill {
       font-family: 'JetBrains Mono', monospace;
       font-weight: 800;
       font-size: 10.5px;
-      padding: 2px 7px;
+      padding: 3px 8px;
       border-radius: 4px;
-      background: rgba(255,255,255,0.06);
+      background: rgba(255,255,255,0.04);
       color: #fff;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
     }
     .status-pill.green { background: rgba(16,185,129,0.15); color: var(--green); border: 1px solid rgba(16,185,129,0.3); }
     .status-pill.purple { background: rgba(168,85,247,0.15); color: var(--purple); border: 1px solid rgba(168,85,247,0.3); }
@@ -1212,10 +1217,12 @@ function serveDashboardHtml() {
     .strat-card-sub { font-size: 10px; color: var(--muted); margin-top: 2px; }
 
     /* PARAMETERS */
-    .sidebar-section-title { font-size: 10px; font-weight: 800; color: var(--muted); text-transform: uppercase; margin-bottom: 8px; letter-spacing: 0.5px; }
-    .param-grid-2x2 { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 8px; }
-    .param-card { background: rgba(8, 11, 18, 0.7); border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; padding: 6px 9px; }
-    .param-header { display: flex; justify-content: space-between; font-size: 10px; color: var(--muted); font-weight: 700; margin-bottom: 2px; }
+    .sidebar-section-title { font-size: 10px; font-weight: 800; color: #64748b; text-transform: uppercase; margin-bottom: 10px; margin-top: 14px; letter-spacing: 1px; display:flex; align-items:center; gap:6px; }
+    .sidebar-section-title::after { content: ''; flex-grow: 1; height: 1px; background: rgba(255,255,255,0.04); }
+    .param-grid-2x2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+    .param-card { background: rgba(15, 23, 42, 0.4); border: 1px solid rgba(255,255,255,0.04); border-radius: 6px; padding: 8px 10px; transition: 0.2s ease; }
+    .param-card:hover { border-color: rgba(255,255,255,0.1); background: rgba(15, 23, 42, 0.6); }
+    .param-header { display: flex; justify-content: space-between; font-size: 10px; color: #94a3b8; font-weight: 700; margin-bottom: 4px; }
     .param-input-wrap { display: flex; align-items: baseline; justify-content: space-between; }
     .param-input-wrap input { width: 58px; background: none; border: none; color: #fff; font-family: 'JetBrains Mono', monospace; font-size: 14px; font-weight: 800; outline: none; }
     .param-unit { font-size: 10.5px; color: var(--muted); }
@@ -1595,25 +1602,25 @@ function serveDashboardHtml() {
         </div>
 
         <div class="sidebar-section-title">🛡️ SIFIR RİSK VE KADEMELİ HEDEFLER</div>
-        <div style="background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.3);border-radius:6px;padding:8px 10px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;">
+        <div style="background:linear-gradient(90deg, rgba(16,185,129,0.1) 0%, rgba(16,185,129,0.02) 100%); border-left:3px solid var(--green); border-radius:4px; padding:10px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center; box-shadow: 0 2px 8px rgba(0,0,0,0.2);">
           <div>
-            <div style="font-size:10.5px;font-weight:800;color:var(--green)">🛡️ Otomatik Başabaş ($0 Risk)</div>
-            <div style="font-size:9.5px;color:var(--muted)">Koin girilen kâra ulaşınca stop maliyete çekilir ($0 Risk)</div>
+            <div style="font-size:11px;font-weight:800;color:var(--green);letter-spacing:0.3px;">🛡️ OTOMATİK BAŞABAŞ</div>
+            <div style="font-size:9px;color:#64748b;margin-top:2px;">Kâr yakalanınca $0 Riske çekilir</div>
           </div>
-          <div style="display:flex;align-items:baseline;gap:3px;">
-            <input type="number" id="inpBe" value="${CONFIG.bePct.toFixed(2)}" step="0.1" style="width:48px;background:none;border:none;color:var(--green);font-family:'JetBrains Mono';font-size:13px;font-weight:800;text-align:right;outline:none;">
-            <span style="font-size:10px;color:var(--muted)">%</span>
+          <div style="display:flex;align-items:baseline;gap:2px;background:rgba(0,0,0,0.2);padding:4px 8px;border-radius:4px;border:1px solid rgba(16,185,129,0.2);">
+            <input type="number" id="inpBe" value="${CONFIG.bePct.toFixed(2)}" step="0.1" style="width:40px;background:none;border:none;color:var(--green);font-family:'JetBrains Mono';font-size:14px;font-weight:800;text-align:right;outline:none;">
+            <span style="font-size:11px;color:var(--green);opacity:0.7;">%</span>
           </div>
         </div>
 
-        <div style="background:rgba(250,204,21,0.08);border:1px solid rgba(250,204,21,0.3);border-radius:6px;padding:8px 10px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;">
+        <div style="background:linear-gradient(90deg, rgba(250,204,21,0.1) 0%, rgba(250,204,21,0.02) 100%); border-left:3px solid #facc15; border-radius:4px; padding:10px; margin-bottom:14px; display:flex; justify-content:space-between; align-items:center; box-shadow: 0 2px 8px rgba(0,0,0,0.2);">
           <div>
-            <div style="font-size:10.5px;font-weight:800;color:#facc15">🏆 VUR-KAÇ MOONSHOT</div>
-            <div style="font-size:9.5px;color:var(--muted)">Hedefe ulaşınca %100 pozisyon kapatılır</div>
+            <div style="font-size:11px;font-weight:800;color:#facc15;letter-spacing:0.3px;">🏆 VUR-KAÇ MOONSHOT</div>
+            <div style="font-size:9px;color:#64748b;margin-top:2px;">Kâr hedefinde tamamen çıkılır</div>
           </div>
-          <div style="display:flex;align-items:baseline;gap:3px;">
-            <input type="number" id="inpMoon" value="${CONFIG.moonPct.toFixed(2)}" step="1" style="width:48px;background:none;border:none;color:#facc15;font-family:'JetBrains Mono';font-size:13px;font-weight:800;text-align:right;outline:none;">
-            <span style="font-size:10px;color:var(--muted)">%</span>
+          <div style="display:flex;align-items:baseline;gap:2px;background:rgba(0,0,0,0.2);padding:4px 8px;border-radius:4px;border:1px solid rgba(250,204,21,0.2);">
+            <input type="number" id="inpMoon" value="${CONFIG.moonPct.toFixed(2)}" step="1" style="width:40px;background:none;border:none;color:#facc15;font-family:'JetBrains Mono';font-size:14px;font-weight:800;text-align:right;outline:none;">
+            <span style="font-size:11px;color:#facc15;opacity:0.7;">%</span>
           </div>
         </div>
 
