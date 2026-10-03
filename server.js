@@ -1778,7 +1778,7 @@ function serveDashboardHtml() {
             const isWin = (p.pnl || 0) >= 0;
             const stopText = p.beLocked 
               ? '<span class="badge-be">🛡️ KÂR KİLİDİ ($0 RİSK)</span>' 
-              : `<span class="badge-sl">🛑 RİSK YÖNETİMİ AKTİF</span>`;
+              : '<span class="badge-sl">🛑 RİSK YÖNETİMİ AKTİF</span>';
 
             const roiStr = (p.roi >= 0 ? '+' : '') + (p.roi || 0).toFixed(2) + '%';
             const pnlStr = (p.pnl >= 0 ? '+$' : '-$') + Math.abs(p.pnl || 0).toFixed(2);
