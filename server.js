@@ -1764,48 +1764,56 @@ function serveDashboardHtml() {
         // Aktif Pozisyonlar Tablosu
         const tbody = document.getElementById("activeTbody");
         if (data.positions.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:24px;font-size:12px;">🔍 350+ Vadeli Koinlerde 3m Balina & Moonshot Kırılımları Taranıyor...</td></tr>';
+          tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:35px 15px;"><div style="font-size:32px; margin-bottom:12px; filter:grayscale(0.3);">🔭</div><div style="color:var(--text); font-weight:700; font-size:14px; letter-spacing:0.5px;">TETİKTE BEKLENİYOR</div><div style="color:var(--muted); font-size:11px; margin-top:6px; max-width:300px; margin-left:auto; margin-right:auto; line-height:1.4;">350+ Koinin anlık emir defterleri ve 3 dakikalık balina kırılımları radarla taranıyor...</div></td></tr>';
         } else {
           tbody.innerHTML = data.positions.map((p, idx) => {
             const isLong = p.side === 'LONG';
             const isWin = (p.pnl || 0) >= 0;
             const stopText = p.beLocked 
-              ? '<span class="badge-be">🛡️ BAŞABAŞ ($0 RİSK)</span>' 
-              : '<span class="badge-sl">🛑 STOP: -%${CONFIG.slPct.toFixed(2)}</span>';
+              ? '<span class="badge-be">🛡️ KÂR KİLİDİ ($0 RİSK)</span>' 
+              : `<span class="badge-sl">🛑 RİSK YÖNETİMİ AKTİF</span>`;
 
-            const roiStr = (p.roi >= 0 ? '+' : '') + (p.roi || 0).toFixed(1) + '%';
+            const roiStr = (p.roi >= 0 ? '+' : '') + (p.roi || 0).toFixed(2) + '%';
             const pnlStr = (p.pnl >= 0 ? '+$' : '-$') + Math.abs(p.pnl || 0).toFixed(2);
+            const tagStr = p.radarTag ? p.radarTag : (isLong ? 'Boğa Kırılımı' : 'Ayı Kırılımı');
 
             return \`
-              <tr>
+              <tr style="border-left: 2px solid \${isLong ? 'var(--green)' : 'var(--red)'}; background: rgba(255,255,255,0.01);">
                 <td style="color:var(--muted);font-weight:700;">\${idx+1}</td>
                 <td>
-                  <div style="display:flex;align-items:center;gap:4px;">
-                    <span style="font-weight:900;color:#fff;">\${p.symbol}</span>
-                    <span class="badge-strat">🚀 MOONSHOT TREND</span>
+                  <div style="display:flex; flex-direction:column; gap:3px;">
+                    <span style="font-family:'JetBrains Mono'; font-weight:900; font-size:13px; color:#fff; letter-spacing:0.5px;">\${p.symbol}</span>
+                    <span style="font-size:9.5px; color:var(--muted); text-overflow:ellipsis; white-space:nowrap; overflow:hidden; max-width:140px;" title="\${tagStr}">⚡ \${tagStr}</span>
                   </div>
                 </td>
                 <td>
                   <span class="\${isLong ? 'badge-side-long' : 'badge-side-short'}">\${isLong ? '▲ LONG' : '▼ SHORT'}</span>
                 </td>
                 <td>
-                  <span style="color:var(--muted);">$ \${parseFloat(p.entryPrice).toFixed(4)}</span>
-                  <span style="color:var(--blue);margin:0 2px;">➔</span>
-                  <span style="color:#fff;font-weight:800;">$ \${parseFloat(p.currentPrice).toFixed(4)}</span>
-                  <div style="font-size:9.5px;color:var(--muted)">RSI: 50</div>
+                  <div style="display:flex; flex-direction:column; gap:2px;">
+                    <div><span style="color:var(--muted);font-size:10px;">Giriş: </span><span style="color:#fff;font-weight:700;">$\${parseFloat(p.entryPrice).toFixed(4)}</span></div>
+                    <div><span style="color:var(--muted);font-size:10px;">Anlık: </span><span style="color:var(--blue);font-weight:700;">$\${parseFloat(p.currentPrice).toFixed(4)}</span></div>
+                  </div>
                 </td>
                 <td>\${stopText}</td>
-                <td><span style="color:var(--green);font-weight:800;">+%\${(p.mfe || 0).toFixed(2)}</span></td>
                 <td>
-                  <span class="\${isWin ? 'badge-pnl-pos' : 'badge-pnl-neg'}">\${roiStr} (\${pnlStr})</span>
+                  <div style="display:flex; flex-direction:column; gap:2px;">
+                    <span style="color:var(--green);font-weight:800;font-size:12px;">+%\${(p.mfe || 0).toFixed(2)}</span>
+                    <span style="color:var(--red);font-weight:600;font-size:9px;">-%\${(p.mae || 0).toFixed(2)}</span>
+                  </div>
                 </td>
                 <td>
-                  <button onclick="closePosition('\${p.id}')" class="btn-close-pos">Kapat</button>
+                  <div class="\${isWin ? 'badge-pnl-pos' : 'badge-pnl-neg'}" style="font-size:13px; padding:4px 8px; text-align:center;">
+                    \${roiStr} <br><span style="font-size:10px; opacity:0.8;">\${pnlStr}</span>
+                  </div>
+                </td>
+                <td>
+                  <button onclick="closePosition('\${p.id}')" class="btn-close-pos">✖ Kapat</button>
                 </td>
               </tr>
             \`;
           }).join('');
-        }
+        }       }
 
         // 2. Aktif Pozisyonlar - Mobil Kartlar (iPHONE)
         const activeCardsEl = document.getElementById("activeCardsMobile");
