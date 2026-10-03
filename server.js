@@ -1497,11 +1497,11 @@ function serveDashboardHtml() {
 <body>
   <div class="container">
     <!-- TABS -->
-    <div class="tabs">
+    <!-- <div class="tabs">
       <div class="tab-btn active">⚡ 1. CANLI SİMÜLASYON (TEST LAB)</div>
       <div class="tab-btn" onclick="alert('Gerçek Binance API modu bulut test sürümünde güvenlik için pasiftir. Test Lab 7/24 çalışmaktadır.')">⚡ 2. GERÇEK BINANCE İŞLEMLERİ (CANLI API)</div>
       <a href="/api/download-csv" class="tab-btn" style="text-decoration:none;">🔍 3. 15DK RADAR & EXCEL AKTARICI</a>
-    </div>
+    </div> -->
 
     <div class="dashboard">
       <!-- SOL PANEL: MOTOR KONTROLÜ -->
