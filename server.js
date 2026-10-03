@@ -1516,8 +1516,8 @@ function serveDashboardHtml() {
             <span class="status-pill green" id="liveStatus">ÇALIŞIYOR</span>
           </div>
           <div class="status-item">
-            <span>🛡️ 1s Lazer Motor</span>
-            <span class="status-pill green">AKTİF (2s Lazer)</span>
+            <span>🛡️ Lazer Motoru</span>
+            <span class="status-pill green">AKTİF (${CONFIG.riskIntervalMs / 1000}s)</span>
           </div>
           <div class="status-item">
             <span>🐋 Balina Radarı</span>
