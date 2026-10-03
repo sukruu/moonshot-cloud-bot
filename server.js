@@ -67,6 +67,8 @@ let logs = [];
 let startTime = Date.now();
 let btc15mTrend = "+0.00%";
 let btc15mIsGreen = true;
+let btc5mNumeric = 0;
+let btc15mNumeric = 0;
 let isScanRunning = false;
 let isRiskRunning = false;
 let isRadarRunning = false;
@@ -424,10 +426,18 @@ async function updateRadar() {
       btcPriceHistory = btcPriceHistory.filter(x => now - x.t <= 15 * 60 * 1000);
       
       if (btcPriceHistory.length > 0) {
-        const oldest = btcPriceHistory[0].p;
-        const btcMove = ((p - oldest) / oldest) * 100;
-        btc15mTrend = `${btcMove >= 0 ? '+' : ''}${btcMove.toFixed(2)}%`;
-        btc15mIsGreen = btcMove >= 0;
+        const oldest15m = btcPriceHistory[0].p;
+        const oldest5mObj = btcPriceHistory.find(x => now - x.t <= 5 * 60 * 1000);
+        const oldest5m = oldest5mObj ? oldest5mObj.p : oldest15m;
+        
+        btc15mNumeric = ((p - oldest15m) / oldest15m) * 100;
+        btc5mNumeric = ((p - oldest5m) / oldest5m) * 100;
+        
+        const f15 = `${btc15mNumeric >= 0 ? '+' : ''}${btc15mNumeric.toFixed(2)}%`;
+        const f5 = `${btc5mNumeric >= 0 ? '+' : ''}${btc5mNumeric.toFixed(2)}%`;
+        
+        btc15mTrend = `5m: ${f5} | 15m: ${f15}`;
+        btc15mIsGreen = btc5mNumeric >= 0; // UI color based on 5m
       }
     }
 
@@ -774,9 +784,11 @@ async function scanLoop() {
         }
 
         // 🛡️ BTC TREND KORUMASI (BTC Çakılırken Asla LONG Açma!)
-        const btcNumeric = parseFloat((btc15mTrend || "0").replace('%', '')) || 0;
-        const btcSafeForLong = btc15mIsGreen || btcNumeric >= -0.20;
-        const btcSafeForShort = !btc15mIsGreen || btcNumeric <= 0.20;
+        // Hem 5 dakikalık hem de 15 dakikalık trendi kontrol ediyoruz.
+        // Eğer kısa vadede (5m) çok sert bir düşüş varsa (-0.15% altı), LONG açma.
+        // Eğer genel trend (15m) kötüyse (-0.25% altı), LONG açma.
+        const btcSafeForLong = (btc5mNumeric > -0.15) && (btc15mNumeric > -0.25);
+        const btcSafeForShort = (btc5mNumeric < 0.15) && (btc15mNumeric < 0.25);
 
         const isLongPump = finalLongSignal && validWickLong && radarOkLong && strictTrendOkLong && !isNearPeakTrap && btcSafeForLong;
         const isShortDump = finalShortSignal && validWickShort && radarOkShort && strictTrendOkShort && !isNearDipTrap && btcSafeForShort;
