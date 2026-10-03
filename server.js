@@ -773,20 +773,16 @@ async function scanLoop() {
 
         // 🛡️ DERS 2: Günlük (24s) ve 3s Trend Filtresi (Tükenmiş Roket / Dipte Short Engeli)
         const strictTrendOkLong = (chg < 18.0) && (chg > -12.0) && (!rInfo || (rInfo.chg3h || 0) < 12.0); 
-        const strictTrendOkShort = (chg > -12.0) && (chg < 8.0);
+        const strictTrendOkShort = (chg > -12.0) && (chg < 4.0);
 
         // 🛡️ TEPE VE DİP TUZAĞI KORUMASI (Genişletildi: %1.5 üzeri tüm hareketlerde tavan kontrolü)
         let isNearPeakTrap = false;
         let isNearDipTrap = false;
         if (rInfo) {
-          if (rInfo.high3h && (rInfo.chg3h || 0) >= 1.5) {
-            // 3 saatlik tavanın %1.0'dan daha yakınına geldiyse ve balina hacmiyle kırmıyorsa tepe tuzağı!
-            if (curP >= rInfo.high3h * 0.990 && curV < avgVol20 * 2.2) isNearPeakTrap = true;
-          }
-          if (rInfo.low3h && (rInfo.chg3h || 0) <= -1.5) {
-            // 3 saatlik tabanın %1.0'dan daha yakınına geldiyse dip tuzağı!
-            if (curP <= rInfo.low3h * 1.010 && curV < avgVol20 * 2.2) isNearDipTrap = true;
-          }
+          // CSV 03.10 dersi: 3s tavanının üstünden açılan 4 LONG'un 3'ü anında stop oldu (MFE ≤ %0.10).
+          // Hacimli olsa bile yeni 3s zirvesini kovalama; aralık içinden gir.
+          if (rInfo.high3h && curP > rInfo.high3h) isNearPeakTrap = true;
+          if (rInfo.low3h && curP < rInfo.low3h) isNearDipTrap = true;
         }
 
         // 🛡️ BTC TREND KORUMASI (BTC Çakılırken Asla LONG Açma!)
@@ -830,7 +826,9 @@ async function scanLoop() {
             chg24h: rInfo ? rInfo.chg24h : chg,
             range3h: rInfo ? rInfo.range3h : "",
             takerBuyRatio: rInfo ? rInfo.takerBuyRatio : null,
-            signal: (rInfo && rInfo.signal) ? rInfo.signal : (side === "LONG" ? "🟢 BOĞA MOMENTUM" : "🔴 AYI MOMENTUM")
+            signal: (rInfo && rInfo.signal) ? rInfo.signal : (side === "LONG" ? "🟢 BOĞA MOMENTUM" : "🔴 AYI MOMENTUM"),
+            btc5mEntry: btc5mNumeric,
+            btc15mEntry: btc15mNumeric
           };
 
           activePositions.push(position);
@@ -980,12 +978,11 @@ function closeTrade(pos, exitReason) {
 
   // 🛡️ ÇOKLAMA / YENİDEN GİRİŞ TUZAĞI ENGELİ (COOLDOWN KORUMASI)
   // Pozisyon nasıl kapanırsa kapansın (kâr, stop, başabaş, manuel), aynı koine hemen tekrar girmesini engelle!
-  if (exitReason.includes("Stop Loss") || (pos.pnl < -2.0)) {
-    coinCooldowns[pos.symbol] = now + (90 * 60 * 1000); // Stop olduysa veya zararla çıktıysa 90 dk ağır ceza!
-  } else if (exitReason.includes("Zirveden") || exitReason.includes("MEGA") || exitReason.includes("Kâr")) {
-    coinCooldowns[pos.symbol] = now + (20 * 60 * 1000); // Kâr alındıysa 20 dk dinlenme (düzeltmeden tekrar alıp terse düşmesin!)
+  // CSV 03.10 dersi: Aynı koine 2. kez girişler (ZRO x2, NIGHT, SAND) toplamda zarar etti.
+  if (exitReason.includes("Stop Loss") || pos.pnl < 0) {
+    coinCooldowns[pos.symbol] = now + (3 * 60 * 60 * 1000); // Zararla çıktıysa 3 saat
   } else {
-    coinCooldowns[pos.symbol] = now + (15 * 60 * 1000); // Başabaş, manuel veya diğer çıkışlar için 15 dk
+    coinCooldowns[pos.symbol] = now + (2 * 60 * 60 * 1000); // Kâr/başabaş çıkışında 2 saat
   }
 
   // 🛡️ ARDIŞ ZARAR SAYACI: Aynı koine 2 kez üst üste zarar edince yasakla, kâr ederse sıfırla
@@ -994,7 +991,7 @@ function closeTrade(pos, exitReason) {
     if (coinLossCount[pos.symbol] >= 2) {
       addLog(`🚫 ${pos.symbol} ardışık ${coinLossCount[pos.symbol]} zarar — koin yasaklandı!`, 'TRADE');
     }
-  } else if (exitReason.includes("Garanti") || exitReason.includes("Zirveden") || exitReason.includes("MEGA")) {
+  } else if (pos.pnl > 0) {
     coinLossCount[pos.symbol] = 0; // Kâr edince sayaç sıfırlanır, tekrar girebilir
   }
 
