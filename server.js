@@ -1516,7 +1516,7 @@ function serveDashboardHtml() {
             <span class="status-pill green">Aktif (Gerçek Zamanlı)</span>
           </div>
           <div class="status-item">
-            <span>📊 BTC 15m Trend</span>
+            <span>📊 BTC Trend</span>
             <span class="status-pill" id="btcVal" style="color:${stats.btcIsGreen ? 'var(--green)' : 'var(--red)'};">${stats.btcTrend}</span>
           </div>
           <div class="status-item">
