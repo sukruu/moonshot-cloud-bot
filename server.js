@@ -162,9 +162,12 @@ function rewriteCsvFile() {
       'Çıkış Fiyatı',
       'Süre (Dk)',
       'MFE (Max Kâr %)',
+      'MAE (Max Zarar %)',
       'Net Kâr ($)',
       'ROI (%)',
       'Çıkış Nedeni',
+      'BTC 5m Giriş (%)',
+      'BTC 15m Giriş (%)',
       '3s Değişim (%)',
       '3s Hacim ($M)',
       '24s Değişim (%)',
@@ -235,9 +238,12 @@ function appendTradeToCsv(trade) {
       trade.exitPrice,
       trade.durationMin,
       `"%${(trade.mfe || 0).toFixed(2)}"`,
-      `"$${(trade.pnl || 0).toFixed(2)}"`,
+      `"%${(trade.mae || 0).toFixed(2)}"`,
+      `"${(trade.pnl || 0).toFixed(2)}"`,
       `"%${(trade.roi || 0).toFixed(2)}"`,
       `"${(trade.exitReason || '').replace(/"/g, '""')}"`,
+      `"%${(trade.btc5mEntry || 0).toFixed(2)}"`,
+      `"%${(trade.btc15mEntry || 0).toFixed(2)}"`,
       chg3hStr,
       vol3hStr,
       chg24hStr,
@@ -1011,7 +1017,10 @@ function closeTrade(pos, exitReason) {
     chg24h: pos.chg24h !== undefined ? pos.chg24h : null,
     range3h: pos.range3h || "",
     takerBuyRatio: pos.takerBuyRatio !== undefined ? pos.takerBuyRatio : null,
-    signal: pos.signal || ""
+    signal: pos.signal || "",
+    mae: pos.mae || 0,
+    btc5mEntry: pos.btc5mEntry !== undefined ? pos.btc5mEntry : 0,
+    btc15mEntry: pos.btc15mEntry !== undefined ? pos.btc15mEntry : 0
   };
 
   history.unshift(tradeRecord);
