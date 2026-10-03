@@ -664,9 +664,9 @@ async function scanLoop() {
 
         const curMovePct = ((curP - curO) / curO) * 100;
         const twoCandleMovePct = ((curP - prevO) / prevO) * 100;
-        const minJump = isVip ? 0.60 : 0.80;
+        const minJump = isVip ? 0.40 : 0.60;
 
-        const isWhaleVol = curV >= avgVol20 * 1.8 || (curV + prevV) >= avgVol20 * 2.5 || prevV >= avgVol20 * 1.8;
+        const isWhaleVol = curV >= avgVol20 * 1.5 || (curV + prevV) >= avgVol20 * 2.2 || prevV >= avgVol20 * 1.5;
         const isDailyTrending = chg >= 2.0 && chg <= 80.0;
         const hasMomentum = (curMovePct >= minJump && curP > curO) || (twoCandleMovePct >= (minJump + 0.25) && curP >= curO * 0.998);
 
@@ -733,10 +733,10 @@ async function scanLoop() {
 
         // 🕐 1. ANLIK MUM TEYİDİ & FRESH MOMENTUM (Bayatlamış Pompaları Ele!)
         // Coinin 3 saatlik geçmişi ne kadar güzel olursa olsun, ŞU ANKİ 3dk mumunda alım ivmesi yoksa GİRİLMEZ!
-        const curCandleGreen = curP > curO && curMovePct >= 0.50;
-        const curCandleRed = curP < curO && curMovePct <= -0.50;
-        const freshVolumeLong = curV >= avgVol20 * 2.5 || (curV + prevV) >= avgVol20 * 3.5;
-        const freshVolumeShort = curV >= avgVol20 * 2.5 || (curV + prevV) >= avgVol20 * 3.5;
+        const curCandleGreen = curP > curO && curMovePct >= 0.35;
+        const curCandleRed = curP < curO && curMovePct <= -0.35;
+        const freshVolumeLong = curV >= avgVol20 * 2.0 || (curV + prevV) >= avgVol20 * 3.0;
+        const freshVolumeShort = curV >= avgVol20 * 2.0 || (curV + prevV) >= avgVol20 * 3.0;
 
         // İğne tuzağı kontrolü: Mumun en tepesinden veya en dibinden iğneye atlamayı engelle
         const validWickLong = curP >= curH * 0.990;
@@ -751,7 +751,7 @@ async function scanLoop() {
           const hasTakerSupport = rInfo ? (rInfo.takerBuyRatio || 50) >= 50.8 : false;
           const hasVolume = rInfo ? (rInfo.vol3hM || 0) >= 5.0 : true;
           const notOverbought = chg < 15.0;
-          const strongMomentum = curMovePct >= 0.70;
+          const strongMomentum = curMovePct >= 0.50;
           if (hasTakerSupport && hasVolume && notOverbought && strongMomentum) {
             finalLongSignal = true;
           }
@@ -764,7 +764,7 @@ async function scanLoop() {
         } else if ((curMovePct <= -minJump && curP < curO) && isWhaleVol) {
           const hasTakerSell = rInfo ? (rInfo.takerBuyRatio || 50) <= 48.5 : false;
           const hasVolume = rInfo ? (rInfo.vol3hM || 0) >= 5.0 : true;
-          const strongMomentumDown = curMovePct <= -0.70;
+          const strongMomentumDown = curMovePct <= -0.50;
           const notOversold = chg > -8.0;
           if (hasTakerSell && hasVolume && strongMomentumDown && notOversold) {
             finalShortSignal = true;
