@@ -29,7 +29,7 @@ let CONFIG = {
   moonPct: 3.00,             // Sert Vur-Kaç Hedefi %3.00 (+%60 ROI ile %100 Çıkış)
   feeRate: 0.0008,           // 0.04% Giriş + 0.04% Çıkış Taker
   scanIntervalMs: 3500,
-  riskIntervalMs: 2000,
+  riskIntervalMs: 1000,
   radarIntervalMs: 60000
 };
 
@@ -844,10 +844,11 @@ async function scanLoop() {
         let isNearPeakTrap = false;
         let isNearDipTrap = false;
         if (rInfo) {
-          // CSV 03.10 dersi: 3s tavanının üstünden açılan 4 LONG'un 3'ü anında stop oldu (MFE ≤ %0.10).
-          // Hacimli olsa bile yeni 3s zirvesini kovalama; aralık içinden gir.
-          if (rInfo.high3h && curP > rInfo.high3h) isNearPeakTrap = true;
-          if (rInfo.low3h && curP < rInfo.low3h) isNearDipTrap = true;
+          // 🛡️ TAVAN / DİP DUVARI ENGELİ (CSV 04.10 kanıtı):
+          // 3 saatlik tavanın %1.0'dan daha yakınına (veya üstüne) geldiyse LONG açma! (Direnç duvarına toslayıp stop oluyor)
+          // 3 saatlik tabanın %1.0'dan daha yakınına (veya altına) geldiyse SHORT açma! (Destek duvarına toslayıp stop oluyor)
+          if (rInfo.high3h && curP >= rInfo.high3h * 0.990) isNearPeakTrap = true;
+          if (rInfo.low3h && curP <= rInfo.low3h * 1.010) isNearDipTrap = true;
         }
 
         // 🛡️ BTC TREND KORUMASI (BTC Çakılırken Asla LONG Açma!)
