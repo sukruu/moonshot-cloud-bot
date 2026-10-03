@@ -748,7 +748,7 @@ async function scanLoop() {
         if (isDirectRadarLong && curCandleGreen && freshVolumeLong) {
           finalLongSignal = true;
         } else if (hasMomentum && isWhaleVol) {
-          const hasTakerSupport = rInfo ? (rInfo.takerBuyRatio || 50) >= 51.5 : false;
+          const hasTakerSupport = rInfo ? (rInfo.takerBuyRatio || 50) >= 50.8 : false;
           const hasVolume = rInfo ? (rInfo.vol3hM || 0) >= 5.0 : true;
           const notOverbought = chg < 15.0;
           const strongMomentum = curMovePct >= 0.70;
@@ -772,8 +772,8 @@ async function scanLoop() {
         }
 
         // 🛡️ DERS 2: Günlük (24s) ve 3s Trend Filtresi (Tükenmiş Roket / Dipte Short Engeli)
-        const strictTrendOkLong = (chg < 18.0) && (chg > -4.0) && (!rInfo || (rInfo.chg3h || 0) < 7.0); 
-        const strictTrendOkShort = (chg > -8.0) && (chg < 4.0) && (!rInfo || ((rInfo.chg3h || 0) > -5.0 && (rInfo.chg3h || 0) < 0));
+        const strictTrendOkLong = (chg < 18.0) && (chg > -12.0) && (!rInfo || (rInfo.chg3h || 0) < 12.0); 
+        const strictTrendOkShort = (chg > -12.0) && (chg < 8.0);
 
         // 🛡️ TEPE VE DİP TUZAĞI KORUMASI (Genişletildi: %1.5 üzeri tüm hareketlerde tavan kontrolü)
         let isNearPeakTrap = false;
@@ -794,7 +794,7 @@ async function scanLoop() {
         // Eğer kısa vadede (5m) çok sert bir düşüş varsa (-0.15% altı), LONG açma.
         // Eğer genel trend (15m) kötüyse (-0.25% altı), LONG açma.
         const btcSafeForLong = (btc5mNumeric > -0.20) && (btc15mNumeric > -0.30);
-        const btcSafeForShort = (btc5mNumeric < 0.20) && (btc15mNumeric < 0.30);
+        const btcSafeForShort = (btc5mNumeric < 0.25) && (btc15mNumeric < 0.35);
 
         const isLongPump = finalLongSignal && validWickLong && radarOkLong && strictTrendOkLong && !isNearPeakTrap && btcSafeForLong;
         const isShortDump = finalShortSignal && validWickShort && radarOkShort && strictTrendOkShort && !isNearDipTrap && btcSafeForShort;
