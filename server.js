@@ -408,24 +408,28 @@ async function fetchBinance(url) {
 
 // 1. RADAR (3S & 15DK ÇOKLU ZAMAN, ALICI BASKISI VE SİNYAL MOTORU)
 let radarList = [];
+let btcPriceHistory = [];
 async function updateRadar() {
   if (isRadarRunning) return;
   isRadarRunning = true;
   try {
-    const [btcKlines, tickers] = await Promise.all([
-      fetchBinance("/fapi/v1/klines?symbol=BTCUSDT&interval=15m&limit=2"),
-      fetchBinance("/fapi/v1/ticker/24hr")
-    ]);
-
-    if (btcKlines && btcKlines.length >= 2) {
-      const o = parseFloat(btcKlines[btcKlines.length - 1][1]);
-      const c = parseFloat(btcKlines[btcKlines.length - 1][4]);
-      const btcMove = ((c - o) / o) * 100;
-      btc15mTrend = `${btcMove >= 0 ? '+' : ''}${btcMove.toFixed(2)}%`;
-      btc15mIsGreen = btcMove >= 0;
-    }
-
+    const tickers = await fetchBinance('/fapi/v1/ticker/24hr');
     if (!tickers || !Array.isArray(tickers)) return;
+
+    const btcTicker = tickers.find(t => t.symbol === 'BTCUSDT');
+    if (btcTicker) {
+      const now = Date.now();
+      const p = parseFloat(btcTicker.lastPrice);
+      btcPriceHistory.push({ t: now, p: p });
+      btcPriceHistory = btcPriceHistory.filter(x => now - x.t <= 15 * 60 * 1000);
+      
+      if (btcPriceHistory.length > 0) {
+        const oldest = btcPriceHistory[0].p;
+        const btcMove = ((p - oldest) / oldest) * 100;
+        btc15mTrend = `${btcMove >= 0 ? '+' : ''}${btcMove.toFixed(2)}%`;
+        btc15mIsGreen = btcMove >= 0;
+      }
+    }
 
     const tickerMap = {};
     tickers.forEach(t => {
@@ -1505,11 +1509,11 @@ function serveDashboardHtml() {
           </div>
           <div class="status-item">
             <span>🐋 Balina Radarı</span>
-            <span class="status-pill green">⚡ SAF BALİNA (Canlı 3m)</span>
+            <span class="status-pill green">⚡ Saf Hacim Radarı</span>
           </div>
           <div class="status-item">
             <span>📡 Likit Radar</span>
-            <span class="status-pill green">Aktif ($50M+ Likit: 25L/20S)</span>
+            <span class="status-pill green">Aktif (Gerçek Zamanlı)</span>
           </div>
           <div class="status-item">
             <span>📊 BTC 15m Trend</span>
