@@ -16,6 +16,7 @@ const DATA_DIR = __dirname;
 const HISTORY_FILE = path.join(DATA_DIR, 'trades_history.json');
 const CSV_FILE = path.join(DATA_DIR, 'trades_history.csv');
 const STATE_FILE = path.join(DATA_DIR, 'bot_state.json');
+const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
 
 // --- EKRAN 1 BİREBİR AYARLARI ---
 let CONFIG = {
@@ -85,8 +86,62 @@ function addLog(msg, type = "INFO") {
   console.log(`[${time}] [${type}] ${msg}`);
 }
 
+// ⚙️ KALICI AYARLAR (Ekrandan değişen parametreler yeniden başlatmada kaybolmasın)
+let settingsCustomized = false;
+
+function sanitizeSettings(s) {
+  const out = {};
+  const num = (v) => { const n = parseFloat(v); return (isFinite(n) ? n : null); };
+  const inRange = (n, lo, hi) => (n !== null && n >= lo && n <= hi);
+  const slots = num(s.slots), margin = num(s.margin), lev = num(s.lev);
+  const sl = num(s.sl), be = num(s.be), moon = num(s.moon);
+  if (inRange(slots, 1, 20)) out.maxSlots = Math.round(slots);
+  if (inRange(margin, 1, 100000)) out.marginPerTrade = margin;
+  if (inRange(lev, 1, 125)) out.leverage = lev;
+  if (inRange(sl, 0.1, 20)) out.slPct = sl;
+  if (inRange(be, 0.1, 20)) out.bePct = be;
+  if (inRange(moon, 0.1, 100)) out.moonPct = moon;
+  return out;
+}
+
+function saveSettings() {
+  try {
+    fs.writeFileSync(SETTINGS_FILE, JSON.stringify({
+      maxSlots: CONFIG.maxSlots,
+      marginPerTrade: CONFIG.marginPerTrade,
+      leverage: CONFIG.leverage,
+      slPct: CONFIG.slPct,
+      bePct: CONFIG.bePct,
+      moonPct: CONFIG.moonPct,
+      savedAt: Date.now()
+    }, null, 2), 'utf8');
+    settingsCustomized = true;
+  } catch (e) {}
+}
+
+function loadSettings() {
+  try {
+    if (!fs.existsSync(SETTINGS_FILE)) return;
+    const saved = JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8'));
+    const clean = sanitizeSettings({
+      slots: saved.maxSlots, margin: saved.marginPerTrade, lev: saved.leverage,
+      sl: saved.slPct, be: saved.bePct, moon: saved.moonPct
+    });
+    Object.assign(CONFIG, clean);
+    settingsCustomized = true;
+  } catch (e) {}
+}
+
+function getSettingsPayload() {
+  return {
+    slots: CONFIG.maxSlots, margin: CONFIG.marginPerTrade, lev: CONFIG.leverage,
+    sl: CONFIG.slPct, be: CONFIG.bePct, moon: CONFIG.moonPct
+  };
+}
+
 // Depolamayı Başlat & Bakiye Eşitle ($1000)
 function initStorage() {
+  loadSettings();
   try {
     if (fs.existsSync(STATE_FILE)) {
       const saved = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
@@ -1761,6 +1816,9 @@ function serveDashboardHtml() {
           localStorage.setItem('moon_reset_epoch', serverResetEpoch.toString());
         }
 
+        // ⚙️ Ayar senkronu (deploy sonrası sunucu varsayılana döndüyse tarayıcı kaydını geri yükler)
+        syncSettings(data.settings, data.settingsCustomized);
+
         // Performans & İstatistikler
         document.getElementById("stBalance").innerText = '$' + data.stats.balance;
         const pnlEl = document.getElementById("stPnl");
@@ -1770,7 +1828,7 @@ function serveDashboardHtml() {
         document.getElementById("stWinRate").innerText = '%' + data.stats.winRate;
         document.getElementById("stWinsLosses").innerText = data.stats.wins + 'K / ' + data.stats.losses + 'Z';
         document.getElementById("stMega").innerText = data.stats.megaWins + ' Adet';
-        document.getElementById("posCount").innerText = data.stats.activeCount + ' / ' + ${CONFIG.maxSlots} + ' (Sniper Slot)';
+        document.getElementById("posCount").innerText = data.stats.activeCount + ' / ' + (data.settings ? data.settings.slots : '') + ' (Sniper Slot)';
         document.getElementById("histCount").innerText = data.history.length;
 
         const btcEl = document.getElementById("btcVal");
@@ -1955,16 +2013,43 @@ function serveDashboardHtml() {
     }
 
 
-    // Parametreleri Dinamik Güncelleme
-    ['inpSlots', 'inpMargin', 'inpLev', 'inpSl', 'inpBe', 'inpMoon'].forEach(id => {
-      document.getElementById(id).addEventListener('change', async () => {
-        const slots = document.getElementById('inpSlots').value;
-        const margin = document.getElementById('inpMargin').value;
-        const lev = document.getElementById('inpLev').value;
-        const sl = document.getElementById('inpSl').value;
-        const be = document.getElementById('inpBe').value;
-        const moon = document.getElementById('inpMoon').value;
-        await fetch(\`/api/update-settings?slots=\${slots}&margin=\${margin}&lev=\${lev}&sl=\${sl}&be=\${be}&moon=\${moon}\`);
+    // Parametreleri Dinamik Güncelleme (sunucuya + tarayıcı hafızasına kaydeder)
+    const LS_SET = 'moon_settings';
+    const SET_IDS = { slots: 'inpSlots', margin: 'inpMargin', lev: 'inpLev', sl: 'inpSl', be: 'inpBe', moon: 'inpMoon' };
+    let settingsSynced = false;
+
+    function readSettingsFromInputs() {
+      const o = {};
+      Object.keys(SET_IDS).forEach(k => { o[k] = document.getElementById(SET_IDS[k]).value; });
+      return o;
+    }
+
+    async function pushSettings(o) {
+      await fetch('/api/update-settings?' + new URLSearchParams(o).toString());
+    }
+
+    async function syncSettings(serverSettings, customized) {
+      if (settingsSynced || !serverSettings) return;
+      settingsSynced = true;
+      try {
+        const saved = JSON.parse(localStorage.getItem(LS_SET) || 'null');
+        if (!customized && saved) {
+          // Sunucu varsayılanda (deploy/yeniden başlatma) -> tarayıcıdaki kayıtlı ayarları sunucuya geri yükle
+          Object.keys(SET_IDS).forEach(k => {
+            if (saved[k] !== undefined && saved[k] !== '') document.getElementById(SET_IDS[k]).value = saved[k];
+          });
+          await pushSettings(readSettingsFromInputs());
+        } else if (customized) {
+          localStorage.setItem(LS_SET, JSON.stringify(serverSettings));
+        }
+      } catch (e) {}
+    }
+
+    Object.keys(SET_IDS).forEach(k => {
+      document.getElementById(SET_IDS[k]).addEventListener('change', async () => {
+        const o = readSettingsFromInputs();
+        try { localStorage.setItem(LS_SET, JSON.stringify(o)); } catch (e) {}
+        await pushSettings(o);
       });
     });
 
@@ -2183,7 +2268,9 @@ const server = http.createServer(async (req, res) => {
       history: history.slice(0, 50),
       logs: logs.slice(0, 50),
       radar: radarList.slice(0, 30),
-      resetEpoch: resetEpoch
+      resetEpoch: resetEpoch,
+      settings: getSettingsPayload(),
+      settingsCustomized: settingsCustomized
     }));
     return;
   }
@@ -2321,19 +2408,17 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (pathname === '/api/update-settings') {
-    const slots = parseInt(parsedUrl.searchParams.get('slots'));
-    const margin = parseFloat(parsedUrl.searchParams.get('margin'));
-    const lev = parseFloat(parsedUrl.searchParams.get('lev'));
-    const sl = parseFloat(parsedUrl.searchParams.get('sl'));
-    const be = parseFloat(parsedUrl.searchParams.get('be'));
-    const moon = parseFloat(parsedUrl.searchParams.get('moon'));
-
-    if (slots) CONFIG.maxSlots = slots;
-    if (margin) CONFIG.marginPerTrade = margin;
-    if (lev) CONFIG.leverage = lev;
-    if (sl) CONFIG.slPct = sl;
-    if (be) CONFIG.bePct = be;
-    if (moon) CONFIG.moonPct = moon;
+    const clean = sanitizeSettings({
+      slots: parsedUrl.searchParams.get('slots'),
+      margin: parsedUrl.searchParams.get('margin'),
+      lev: parsedUrl.searchParams.get('lev'),
+      sl: parsedUrl.searchParams.get('sl'),
+      be: parsedUrl.searchParams.get('be'),
+      moon: parsedUrl.searchParams.get('moon')
+    });
+    Object.assign(CONFIG, clean);
+    saveSettings();
+    addLog(`⚙️ Ayarlar kaydedildi: Slot ${CONFIG.maxSlots} | Teminat $${CONFIG.marginPerTrade} | ${CONFIG.leverage}x | SL %${CONFIG.slPct} | BE %${CONFIG.bePct} | Moon %${CONFIG.moonPct}`, 'INFO');
 
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ ok: true, config: CONFIG }));
