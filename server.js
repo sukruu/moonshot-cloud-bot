@@ -1627,7 +1627,7 @@ function serveDashboardHtml() {
       <div class="panel">
         <h2>
           <span>🎯 BEKLEYEN MOONSHOT POZİSYONLARI</span>
-          <span class="badge-moon">🚀 10X TREND MODU</span>
+          <!-- <span class="badge-moon">🚀 10X TREND MODU</span> -->
         </h2>
 
         <!-- ŞAMPİYON KOİNLER (GİZLENDİ) -->
