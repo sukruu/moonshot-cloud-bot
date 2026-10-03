@@ -1820,7 +1820,7 @@ function serveDashboardHtml() {
               </tr>
             \`;
           }).join('');
-        }       }
+        }
 
         // 2. Aktif Pozisyonlar - Mobil Kartlar (iPHONE)
         const activeCardsEl = document.getElementById("activeCardsMobile");
