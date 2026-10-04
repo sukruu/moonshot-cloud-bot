@@ -858,8 +858,14 @@ async function scanLoop() {
         const btcSafeForLong = (btc5mNumeric > -0.20) && (btc15mNumeric > -0.30);
         const btcSafeForShort = (btc5mNumeric < 0.25) && (btc15mNumeric < 0.35);
 
-        const isLongPump = finalLongSignal && validWickLong && radarOkLong && strictTrendOkLong && !isNearPeakTrap && btcSafeForLong;
-        const isShortDump = finalShortSignal && validWickShort && radarOkShort && strictTrendOkShort && !isNearDipTrap && btcSafeForShort;
+        // 🎯 TREND ŞARTI (27 LONG işlemlik CSV analizi, 04.10): radar 3s değişimi >= +%4 olan 12 işlemde 3 stop (net +$24.78),
+        // altındaki 15 işlemde 7 stop (net -$32.41). Eşik veriden seçildi, örnek küçük: yeni verilerle yeniden test edilmeli.
+        // LONG için 3s >= +%4, SHORT için 3s <= -%1.2 olmayan koine girilmez (radar profili yoksa da girilmez).
+        const longTrendOk = !!rInfo && (rInfo.chg3h || 0) >= 4.0;
+        const shortTrendOk = !!rInfo && (rInfo.chg3h || 0) <= -1.2;
+
+        const isLongPump = finalLongSignal && longTrendOk && validWickLong && radarOkLong && strictTrendOkLong && !isNearPeakTrap && btcSafeForLong;
+        const isShortDump = finalShortSignal && shortTrendOk && validWickShort && radarOkShort && strictTrendOkShort && !isNearDipTrap && btcSafeForShort;
 
         if (isLongPump || isShortDump) {
           const side = isLongPump ? "LONG" : "SHORT";
@@ -1045,8 +1051,10 @@ function closeTrade(pos, exitReason) {
   // 🛡️ ÇOKLAMA / YENİDEN GİRİŞ TUZAĞI ENGELİ (COOLDOWN KORUMASI)
   // Pozisyon nasıl kapanırsa kapansın (kâr, stop, başabaş, manuel), aynı koine hemen tekrar girmesini engelle!
   // CSV 03.10 dersi: Aynı koine 2. kez girişler (ZRO x2, NIGHT, SAND) toplamda zarar etti.
-  if (exitReason.includes("Stop Loss") || pos.pnl < 0) {
-    coinCooldowns[pos.symbol] = now + (3 * 60 * 60 * 1000); // Zararla çıktıysa 3 saat
+  if (exitReason.includes("Stop Loss")) {
+    coinCooldowns[pos.symbol] = now + (12 * 60 * 60 * 1000); // Stop olduysa 12 saat (SAND/ZRO/NIGHT 3 saat sonra tekrar girip yine stop oldu)
+  } else if (pos.pnl < 0) {
+    coinCooldowns[pos.symbol] = now + (3 * 60 * 60 * 1000); // Diğer zararlı çıkışlarda 3 saat
   } else {
     coinCooldowns[pos.symbol] = now + (2 * 60 * 60 * 1000); // Kâr/başabaş çıkışında 2 saat
   }
