@@ -657,7 +657,7 @@ async function scanLoop() {
         isVip
       };
     })
-    .filter(t => t.isVip || t.volM >= 4.0)
+    .filter(t => t.isVip || t.volM >= 25.0)
     .sort((a, b) => b.hotScore - a.hotScore)
     .slice(0, 80);
 
@@ -695,8 +695,10 @@ async function scanLoop() {
         if (coinLossCount[sym] >= 2) continue;
 
         const rInfo = radarMap[sym];
-        // 🛡️ DÜŞÜK HACİMLİ ÇÖP KOİN FİLTRESİ ($3M altı sığ tahtalı koinlere girme)
-        if (rInfo && rInfo.vol3hM !== null && rInfo.vol3hM !== undefined && rInfo.vol3hM < 5.0) continue;
+        // 🛡️ KURUMSAL HACİM KALKANI (6 günlük veri ve canlı CSV kanıtı):
+        // 3 saatlik hacmi $12M altındaki sığ tahtalı koinlerde (BAT, IOTA, LYN vb.) tahta boştur, fakeout ve kayma (slippage) yaşanır.
+        // MUBARAK, BTW, 龙虾 gibi gerçek balina parası olan koinler için en az $12M şart!
+        if (rInfo && rInfo.vol3hM !== null && rInfo.vol3hM !== undefined && rInfo.vol3hM < 12.0) continue;
 
         // 🧠 DEEP ANALYSIS FİLTRELERİ
         const intel = global.coinIntelligence[sym];
@@ -814,7 +816,7 @@ async function scanLoop() {
           finalLongSignal = true;
         } else if (hasMomentum && isWhaleVol) {
           const hasTakerSupport = rInfo ? (rInfo.takerBuyRatio || 50) >= 50.8 : false;
-          const hasVolume = rInfo ? (rInfo.vol3hM || 0) >= 5.0 : true;
+          const hasVolume = rInfo ? (rInfo.vol3hM || 0) >= 12.0 : false;
           const notOverbought = chg < 15.0;
           const strongMomentum = curMovePct >= 0.50;
           if (hasTakerSupport && hasVolume && notOverbought && strongMomentum) {
@@ -828,7 +830,7 @@ async function scanLoop() {
           finalShortSignal = true;
         } else if ((curMovePct <= -minJump && curP < curO) && isWhaleVol) {
           const hasTakerSell = rInfo ? (rInfo.takerBuyRatio || 50) <= 48.5 : false;
-          const hasVolume = rInfo ? (rInfo.vol3hM || 0) >= 5.0 : true;
+          const hasVolume = rInfo ? (rInfo.vol3hM || 0) >= 12.0 : false;
           const strongMomentumDown = curMovePct <= -0.50;
           const notOversold = chg > -8.0;
           if (hasTakerSell && hasVolume && strongMomentumDown && notOversold) {
