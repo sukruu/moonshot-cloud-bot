@@ -1019,28 +1019,28 @@ async function fastRiskLoop() {
         }
       }
 
-      // 🎯 3. SERT VUR-KAÇ HEDEFİ (+%1.80 Spot = +%36 ROI ile Kalan Pozisyonu Kapat!)
+      // 🎯 3. SERT VUR-KAÇ HEDEFİ (+%1.00 Spot = +%20 ROI ile Anında Kapat!)
       if (!exitReason && move >= CONFIG.moonPct) {
         exitReason = pos.tp1Taken
-          ? `🎯 KADEMELİ MOONSHOT ALINDI (TP1: +%20 ROI + TP2: +%${pos.roi.toFixed(1)} ROI)`
-          : `🎯 MOONSHOT HEDEFİ ALINDI (+%${pos.roi.toFixed(1)} ROI / +%${move.toFixed(2)} Spot)`;
+          ? `🎯 KADEMELİ MOONSHOT ALINDI (TP1: +%16 ROI + TP2: +%${pos.roi.toFixed(1)} ROI)`
+          : `🎯 VUR-KAÇ HEDEFİ VURULDU (+%${pos.roi.toFixed(1)} ROI / +%${move.toFixed(2)} Spot)`;
       }
 
-      // 4. DİNAMİK ZİRVEDEN DÖNÜŞ KÂR KORUMASI
+      // 4. DİNAMİK ZİRVEDEN DÖNÜŞ KÂR KORUMASI (Zirveden 0.18-0.25 Gevşerse Kârı Bırakma, Anında Kapat!)
       const mfe = pos.mfe || 0;
-      let pullbackLimit = 1.50;
-      if (mfe >= 3.0) pullbackLimit = 0.80;
-      else if (mfe >= 2.0) pullbackLimit = 0.60;
-      else if (mfe >= 1.4) pullbackLimit = 0.40;
+      let pullbackLimit = 0.50;
+      if (mfe >= 1.5) pullbackLimit = 0.30;
+      else if (mfe >= 0.9) pullbackLimit = 0.20;
+      else if (mfe >= 0.65) pullbackLimit = 0.18;
 
-      if (!exitReason && mfe >= 1.4 && (mfe - move) >= pullbackLimit) {
-        exitReason = `🏆 Dinamik İzleyen Stop (+%${pos.roi.toFixed(1)} ROI / Zirve: +%${mfe.toFixed(2)} Spot)`;
+      if (!exitReason && mfe >= 0.65 && (mfe - move) >= pullbackLimit) {
+        exitReason = `🏆 Lazer Vur-Kaç Kâr Kilidi (+%${pos.roi.toFixed(1)} ROI / Zirve: +%${mfe.toFixed(2)} Spot)`;
       }
 
-      // 5. MOMENTUM TÜKENMESİ KORUMASI (10 dk geçti ama MFE <%0.25 ise ve eksiye kayıyorsa erken kes)
+      // 5. HIZLI VUR-KAÇ ZAMAN STOPU: 4 dakika geçti ama koin patlamadıysa (MFE < %0.40) DERHAL ÇIK! Saatlerce beklemek yok!
       const durMinLive = (now - pos.entryTime) / 60000;
-      if (!exitReason && durMinLive >= 10 && (pos.mfe || 0) < 0.25 && move <= -0.70) {
-        exitReason = `⏱️ Momentum Tükenmesi Çıkışı (10 Dk Boyunca İvme Yok / MFE: +%${(pos.mfe || 0).toFixed(2)})`;
+      if (!exitReason && durMinLive >= 4 && (pos.mfe || 0) < 0.40) {
+        exitReason = `⏱️ Lazer Zaman Stopu (4 Dk Boyunca İvme Yok / MFE: +%${(pos.mfe || 0).toFixed(2)})`;
       }
 
       // 6. STOP LOSS VEYA KİLİTLİ STOP TETİKLENMESİ
