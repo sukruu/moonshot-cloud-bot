@@ -805,12 +805,11 @@ async function scanLoop() {
         const candleElapsedSec = Math.max(15, Math.min(180, (Date.now() - candleStart) / 1000));
         const projectedVol = curV * (180 / candleElapsedSec);
 
-        const curCandleGreen = (curP > curO && curMovePct >= 0.40) || (twoCandleMovePct >= 0.60 && curP >= curO * 0.998);
-        const curCandleRed = (curP < curO && curMovePct <= -0.40) || (twoCandleMovePct <= -0.60 && curP <= curO * 1.002);
+        const curCandleGreen = (curP > curO && curMovePct >= 0.25) || (twoCandleMovePct >= 0.40 && curP >= curO * 0.998);
+        const curCandleRed = (curP < curO && curMovePct <= -0.25) || (twoCandleMovePct <= -0.40 && curP <= curO * 1.002);
         
-        // ŞİDDETLİ HACİM PATLAMASI ŞARTI (Sniper Vur-Kaç için): En az 2.5x - 3.0x ortalama hacim olmalı. %5 fazla hacimle işleme girilmez!
-        const freshVolumeLong = projectedVol >= avgVol20 * 2.5 || curV >= avgVol20 * 2.0 || prevV >= avgVol20 * 3.0 || (curV + prevV) >= avgVol20 * 3.5;
-        const freshVolumeShort = projectedVol >= avgVol20 * 2.5 || curV >= avgVol20 * 2.0 || prevV >= avgVol20 * 3.0 || (curV + prevV) >= avgVol20 * 3.5;
+        const freshVolumeLong = projectedVol >= avgVol20 * 1.2 || curV >= avgVol20 * 1.05 || prevV >= avgVol20 * 1.2 || (curV + prevV) >= avgVol20 * 1.6;
+        const freshVolumeShort = projectedVol >= avgVol20 * 1.2 || curV >= avgVol20 * 1.05 || prevV >= avgVol20 * 1.2 || (curV + prevV) >= avgVol20 * 1.6;
 
         // İğne tuzağı kontrolü: Mumun en tepesinden veya en dibinden iğneye atlamayı engelle
         const validWickLong = curP >= curH * 0.988;
@@ -1038,11 +1037,7 @@ async function fastRiskLoop() {
         exitReason = `🏆 Lazer Vur-Kaç Kâr Kilidi (+%${pos.roi.toFixed(1)} ROI / Zirve: +%${mfe.toFixed(2)} Spot)`;
       }
 
-      // 5. HIZLI VUR-KAÇ ZAMAN STOPU: 4 dakika geçti ama koin patlamadıysa (MFE < %0.40) DERHAL ÇIK! Saatlerce beklemek yok!
-      const durMinLive = (now - pos.entryTime) / 60000;
-      if (!exitReason && durMinLive >= 4 && (pos.mfe || 0) < 0.40) {
-        exitReason = `⏱️ Lazer Zaman Stopu (4 Dk Boyunca İvme Yok / MFE: +%${(pos.mfe || 0).toFixed(2)})`;
-      }
+      // (Zaman stopu kaldırıldı - coinlere hareket için alan tanınıyor)
 
       // 6. STOP LOSS VEYA KİLİTLİ STOP TETİKLENMESİ
       if (!exitReason && ((isLong && curP <= pos.stopPrice) || (!isLong && curP >= pos.stopPrice))) {
