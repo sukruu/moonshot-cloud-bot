@@ -1028,12 +1028,12 @@ async function fastRiskLoop() {
 
       // 4. DİNAMİK ZİRVEDEN DÖNÜŞ KÂR KORUMASI (Zirveden 0.18-0.25 Gevşerse Kârı Bırakma, Anında Kapat!)
       const mfe = pos.mfe || 0;
-      let pullbackLimit = 0.50;
-      if (mfe >= 1.5) pullbackLimit = 0.30;
-      else if (mfe >= 0.9) pullbackLimit = 0.20;
-      else if (mfe >= 0.65) pullbackLimit = 0.18;
+      let pullbackLimit = 0.80;
+      if (mfe >= 2.5) pullbackLimit = 0.50;
+      else if (mfe >= 1.5) pullbackLimit = 0.40;
+      else if (mfe >= 1.0) pullbackLimit = 0.35;
 
-      if (!exitReason && mfe >= 0.65 && (mfe - move) >= pullbackLimit) {
+      if (!exitReason && mfe >= 1.0 && (mfe - move) >= pullbackLimit) {
         exitReason = `🏆 Lazer Vur-Kaç Kâr Kilidi (+%${pos.roi.toFixed(1)} ROI / Zirve: +%${mfe.toFixed(2)} Spot)`;
       }
 
