@@ -657,7 +657,7 @@ async function scanLoop() {
         isVip
       };
     })
-    .filter(t => t.isVip || t.volM >= 25.0)
+    .filter(t => t.isVip || t.volM >= 12.0)
     .sort((a, b) => b.hotScore - a.hotScore)
     .slice(0, 80);
 
@@ -695,10 +695,8 @@ async function scanLoop() {
         if (coinLossCount[sym] >= 2) continue;
 
         const rInfo = radarMap[sym];
-        // 🛡️ KURUMSAL HACİM KALKANI (6 günlük veri ve canlı CSV kanıtı):
-        // 3 saatlik hacmi $12M altındaki sığ tahtalı koinlerde (BAT, IOTA, LYN vb.) tahta boştur, fakeout ve kayma (slippage) yaşanır.
-        // MUBARAK, BTW, 龙虾 gibi gerçek balina parası olan koinler için en az $12M şart!
-        if (rInfo && rInfo.vol3hM !== null && rInfo.vol3hM !== undefined && rInfo.vol3hM < 12.0) continue;
+        // 🛡️ HACİM KALKANI: 3 saatlik hacmi en az $5M olan likit koinleri al (havuzu genişletir, sığ tahtaları eler)
+        if (rInfo && rInfo.vol3hM !== null && rInfo.vol3hM !== undefined && rInfo.vol3hM < 5.0) continue;
 
         // 🧠 DEEP ANALYSIS FİLTRELERİ
         const intel = global.coinIntelligence[sym];
@@ -749,15 +747,15 @@ async function scanLoop() {
           const chg3 = rInfo.chg3h || 0;
           const sig = rInfo.signal || "";
 
-          // 1. YÜKSELİRKEN VUR-KAÇ (LONG): 3s Değişim %2.0 - %7.0 + Alıcı Baskısı >= %52 + Boğa/Roket
-          if (chg3 >= 2.0 && chg3 <= 7.0 && (rInfo.chg24h || chg) < 18.0 && taker >= 51.2 && (sig.includes("ROKET") || sig.includes("BOĞA"))) {
+          // 1. YÜKSELİRKEN VUR-KAÇ (LONG): 3s Değişim %1.8 - %7.0 + Alıcı Baskısı >= %53 + Boğa/Roket
+          if (chg3 >= 1.8 && chg3 <= 7.0 && (rInfo.chg24h || chg) < 14.0 && taker >= 53.0 && (sig.includes("ROKET") || sig.includes("BOĞA"))) {
             isDirectRadarLong = true;
             radarTag = `[3s: +%${chg3.toFixed(1)} / %${taker.toFixed(0)} Alıcı - ${sig}]`;
           }
 
-          // 2. DÜŞERKEN VUR-KAÇ (SHORT): Taze Kırılım (% -1.2 ile -4.5 arası) + Satıcı Baskısı >= %52.5
+          // 2. DÜŞERKEN VUR-KAÇ (SHORT): Taze Kırılım (% -1.2 ile -4.5 arası) + Satıcı Baskısı >= %53
           // Zaten -%5'ten fazla çökmüş veya günlükte -%8 olmuş aşırı satım koinlerine ASLA SHORT AÇILMAZ!
-          if (chg3 <= -1.2 && chg3 >= -4.5 && (rInfo.chg24h || chg) > -8.0 && taker <= 47.5 && (sig.includes("ŞELALE") || sig.includes("AYI"))) {
+          if (chg3 <= -1.2 && chg3 >= -4.5 && (rInfo.chg24h || chg) > -8.0 && taker <= 47.0 && (sig.includes("ŞELALE") || sig.includes("AYI"))) {
             isDirectRadarShort = true;
             radarTag = `[3s: %${chg3.toFixed(1)} / %${(100 - taker).toFixed(0)} Satıcı - ${sig}]`;
           }
@@ -767,8 +765,8 @@ async function scanLoop() {
             radarOkShort = false;
             isDirectRadarShort = false;
           }
-          // 🛡️ AŞIRI ALIM & TEPE TUZAĞI ENGELİ: Koin zaten 3 saatte +%7 veya 24 saatte +%18 fırladıysa LONG YASAK!
-          if (chg3 >= 7.0 || (rInfo.chg24h || chg) >= 18.0) {
+          // 🛡️ AŞIRI ALIM & TEPE TUZAĞI ENGELİ: Koin zaten 3 saatte +%7 veya 24 saatte +%14 fırladıysa LONG YASAK!
+          if (chg3 >= 7.0 || (rInfo.chg24h || chg) >= 14.0) {
             radarOkLong = false;
             isDirectRadarLong = false;
           }
@@ -788,37 +786,35 @@ async function scanLoop() {
 
           // 🚫 24s-3s YÖN UYUMSUZLUĞU FİLTRESİ: Günlük trend işlem yönüne ters ise girme!
           const chg24 = rInfo.chg24h || chg;
-          if (isDirectRadarShort && chg24 >= 8.0) {
+          if (isDirectRadarShort && chg24 >= 6.0) {
             isDirectRadarShort = false;
             radarOkShort = false;
           }
-          if (isDirectRadarLong && chg24 <= -8.0) {
+          if (isDirectRadarLong && chg24 <= -6.0) {
             isDirectRadarLong = false;
             radarOkLong = false;
           }
         }
 
         // 🕐 1. ANLIK MUM TEYİDİ & FRESH MOMENTUM (Bayatlamış Pompaları Ele!)
-        // Coinin 3 saatlik geçmişi ne kadar güzel olursa olsun, ŞU ANKİ 3dk mumunda alım ivmesi yoksa GİRİLMEZ!
-        const curCandleGreen = curP > curO && curMovePct >= 0.35;
-        const curCandleRed = curP < curO && curMovePct <= -0.35;
-        const freshVolumeLong = curV >= avgVol20 * 2.0 || (curV + prevV) >= avgVol20 * 3.0;
-        const freshVolumeShort = curV >= avgVol20 * 2.0 || (curV + prevV) >= avgVol20 * 3.0;
+        const curCandleGreen = curP > curO && curMovePct >= 0.30;
+        const curCandleRed = curP < curO && curMovePct <= -0.30;
+        const freshVolumeLong = curV >= avgVol20 * 1.6 || (curV + prevV) >= avgVol20 * 2.4;
+        const freshVolumeShort = curV >= avgVol20 * 1.6 || (curV + prevV) >= avgVol20 * 2.4;
 
         // İğne tuzağı kontrolü: Mumun en tepesinden veya en dibinden iğneye atlamayı engelle
         const validWickLong = curP >= curH * 0.990;
         const validWickShort = curP <= curL * 1.010;
 
         // 🟢 BOĞA GİRİŞ KOŞULLARI:
-        // Radar teyidi varsa bile taze mum ve hacim ŞART! Radar yoksa daha sert momentum şart!
         let finalLongSignal = false;
         if (isDirectRadarLong && curCandleGreen && freshVolumeLong) {
           finalLongSignal = true;
         } else if (hasMomentum && isWhaleVol) {
-          const hasTakerSupport = rInfo ? (rInfo.takerBuyRatio || 50) >= 50.8 : false;
-          const hasVolume = rInfo ? (rInfo.vol3hM || 0) >= 12.0 : false;
-          const notOverbought = chg < 15.0;
-          const strongMomentum = curMovePct >= 0.50;
+          const hasTakerSupport = rInfo ? (rInfo.takerBuyRatio || 50) >= 53.0 : false;
+          const hasVolume = rInfo ? (rInfo.vol3hM || 0) >= 5.0 : false;
+          const notOverbought = chg < 12.0;
+          const strongMomentum = curMovePct >= 0.40;
           if (hasTakerSupport && hasVolume && notOverbought && strongMomentum) {
             finalLongSignal = true;
           }
@@ -829,41 +825,43 @@ async function scanLoop() {
         if (isDirectRadarShort && curCandleRed && freshVolumeShort) {
           finalShortSignal = true;
         } else if ((curMovePct <= -minJump && curP < curO) && isWhaleVol) {
-          const hasTakerSell = rInfo ? (rInfo.takerBuyRatio || 50) <= 48.5 : false;
-          const hasVolume = rInfo ? (rInfo.vol3hM || 0) >= 12.0 : false;
-          const strongMomentumDown = curMovePct <= -0.50;
+          const hasTakerSell = rInfo ? (rInfo.takerBuyRatio || 50) <= 47.0 : false;
+          const hasVolume = rInfo ? (rInfo.vol3hM || 0) >= 5.0 : false;
+          const strongMomentumDown = curMovePct <= -0.40;
           const notOversold = chg > -8.0;
           if (hasTakerSell && hasVolume && strongMomentumDown && notOversold) {
             finalShortSignal = true;
           }
         }
 
-        // 🛡️ DERS 2: Günlük (24s) ve 3s Trend Filtresi (Tükenmiş Roket / Dipte Short Engeli)
-        const strictTrendOkLong = (chg < 18.0) && (chg > -12.0) && (!rInfo || (rInfo.chg3h || 0) < 12.0); 
-        const strictTrendOkShort = (chg > -12.0) && (chg < 4.0);
+        // 🛡️ DERS 2: Günlük (24s) ve 3s Trend Filtresi
+        const strictTrendOkLong = (chg < 14.0) && (chg > -10.0) && (!rInfo || (rInfo.chg3h || 0) < 10.0); 
+        const strictTrendOkShort = (chg > -10.0) && (chg < 4.0);
 
-        // 🛡️ TEPE VE DİP TUZAĞI KORUMASI (Genişletildi: %1.5 üzeri tüm hareketlerde tavan kontrolü)
+        // 🛡️ TEPE VE DİP TUZAĞI KORUMASI (Düzeltildi: Çelişki giderildi)
+        // Sadece 24 saatte aşırı şişmişse (>= %12) veya mum üstünde sert ret (%40+ iğne) varsa tepe tuzağı sayılır.
         let isNearPeakTrap = false;
         let isNearDipTrap = false;
         if (rInfo) {
-          // 🛡️ TAVAN / DİP DUVARI ENGELİ (CSV 04.10 kanıtı):
-          // 3 saatlik tavanın %1.0'dan daha yakınına (veya üstüne) geldiyse LONG açma! (Direnç duvarına toslayıp stop oluyor)
-          // 3 saatlik tabanın %1.0'dan daha yakınına (veya altına) geldiyse SHORT açma! (Destek duvarına toslayıp stop oluyor)
-          if (rInfo.high3h && curP >= rInfo.high3h * 0.990) isNearPeakTrap = true;
-          if (rInfo.low3h && curP <= rInfo.low3h * 1.010) isNearDipTrap = true;
+          const chg24 = rInfo.chg24h || chg;
+          const candleRange = curH - curL;
+          const upperWickReject = candleRange > 0 && (curH - Math.max(curP, curO)) / candleRange > 0.40;
+          const lowerWickReject = candleRange > 0 && (Math.min(curP, curO) - curL) / candleRange > 0.40;
+
+          if ((chg24 >= 12.0 && curP >= (rInfo.high3h || curH) * 0.995) || upperWickReject) {
+            isNearPeakTrap = true;
+          }
+          if ((chg24 <= -8.0 && curP <= (rInfo.low3h || curL) * 1.005) || lowerWickReject) {
+            isNearDipTrap = true;
+          }
         }
 
-        // 🛡️ BTC TREND KORUMASI (BTC Çakılırken Asla LONG Açma!)
-        // Hem 5 dakikalık hem de 15 dakikalık trendi kontrol ediyoruz.
-        // Eğer kısa vadede (5m) çok sert bir düşüş varsa (-0.15% altı), LONG açma.
-        // Eğer genel trend (15m) kötüyse (-0.25% altı), LONG açma.
-        const btcSafeForLong = (btc5mNumeric > -0.20) && (btc15mNumeric > -0.30);
-        const btcSafeForShort = (btc5mNumeric < 0.25) && (btc15mNumeric < 0.35);
+        // 🛡️ BTC TREND KORUMASI (BTC Çakılırken LONG Açma, BTC Yükselirken SHORT Açma!)
+        const btcSafeForLong = (btc5mNumeric > -0.20) && (btc15mNumeric > -0.25);
+        const btcSafeForShort = (btc5mNumeric < 0.10) && (btc15mNumeric < 0.15);
 
-        // 🎯 TREND ŞARTI (27 LONG işlemlik CSV analizi, 04.10): radar 3s değişimi >= +%4 olan 12 işlemde 3 stop (net +$24.78),
-        // altındaki 15 işlemde 7 stop (net -$32.41). Eşik veriden seçildi, örnek küçük: yeni verilerle yeniden test edilmeli.
-        // LONG için 3s >= +%4, SHORT için 3s <= -%1.2 olmayan koine girilmez (radar profili yoksa da girilmez).
-        const longTrendOk = !!rInfo && (rInfo.chg3h || 0) >= 4.0;
+        // 🎯 TREND ŞARTI: LONG için 3s >= +%1.8, SHORT için 3s <= -%1.2
+        const longTrendOk = !!rInfo && (rInfo.chg3h || 0) >= 1.8;
         const shortTrendOk = !!rInfo && (rInfo.chg3h || 0) <= -1.2;
 
         const isLongPump = finalLongSignal && longTrendOk && validWickLong && radarOkLong && strictTrendOkLong && !isNearPeakTrap && btcSafeForLong;
@@ -1019,8 +1017,14 @@ async function fastRiskLoop() {
         if (!exitReason && mfe >= 1.5 && (mfe - move) >= pullbackLimit) {
           exitReason = `🏆 Dinamik İzleyen Stop (+%${pos.roi.toFixed(1)} ROI / Zirve: +%${mfe.toFixed(2)} Spot)`;
         }
-  
-        // 4. STOP LOSS VEYA KİLİTLİ STOP TETİKLENMESİ
+
+        // 4. MOMENTUM TÜKENMESİ KORUMASI (FET Dersi: 10 dk geçti ama MFE <%0.25 ise ve eksiye kayıyorsa erken kes)
+        const durMinLive = (now - pos.entryTime) / 60000;
+        if (!exitReason && durMinLive >= 10 && (pos.mfe || 0) < 0.25 && move <= -0.70) {
+          exitReason = `⏱️ Momentum Tükenmesi Çıkışı (10 Dk Boyunca İvme Yok / MFE: +%${(pos.mfe || 0).toFixed(2)})`;
+        }
+
+        // 5. STOP LOSS VEYA KİLİTLİ STOP TETİKLENMESİ
         if (!exitReason && ((isLong && curP <= pos.stopPrice) || (!isLong && curP >= pos.stopPrice))) {
         if ((isLong && pos.stopPrice > pos.entryPrice * 1.003) || (!isLong && pos.stopPrice < pos.entryPrice * 0.997)) {
           exitReason = `🔒 Garanti Kilitli Kâr Çıkışı (+%${pos.roi.toFixed(1)} ROI)`;
@@ -1051,14 +1055,12 @@ function closeTrade(pos, exitReason) {
   balance += pos.pnl;
 
   // 🛡️ ÇOKLAMA / YENİDEN GİRİŞ TUZAĞI ENGELİ (COOLDOWN KORUMASI)
-  // Pozisyon nasıl kapanırsa kapansın (kâr, stop, başabaş, manuel), aynı koine hemen tekrar girmesini engelle!
-  // CSV 03.10 dersi: Aynı koine 2. kez girişler (ZRO x2, NIGHT, SAND) toplamda zarar etti.
   if (exitReason.includes("Stop Loss")) {
-    coinCooldowns[pos.symbol] = now + (12 * 60 * 60 * 1000); // Stop olduysa 12 saat (SAND/ZRO/NIGHT 3 saat sonra tekrar girip yine stop oldu)
+    coinCooldowns[pos.symbol] = now + (2 * 60 * 60 * 1000); // Stop olduysa 2 saat ceza (12 saat havuzu kurutuyordu)
   } else if (pos.pnl < 0) {
-    coinCooldowns[pos.symbol] = now + (3 * 60 * 60 * 1000); // Diğer zararlı çıkışlarda 3 saat
+    coinCooldowns[pos.symbol] = now + (1 * 60 * 60 * 1000); // Diğer zararlı çıkışlarda 1 saat
   } else {
-    coinCooldowns[pos.symbol] = now + (2 * 60 * 60 * 1000); // Kâr/başabaş çıkışında 2 saat
+    coinCooldowns[pos.symbol] = now + (45 * 60 * 1000); // Kâr/başabaş çıkışında 45 dk
   }
 
   // 🛡️ ARDIŞ ZARAR SAYACI: Aynı koine 2 kez üst üste zarar edince yasakla, kâr ederse sıfırla
@@ -2476,5 +2478,5 @@ server.listen(PORT, () => {
     try {
       await fetch(`${KEEP_ALIVE_URL}/ping`);
     } catch(e) {}
-  }, 8 * 60 * 1000);
+  }, 4 * 60 * 1000);
 });
