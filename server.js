@@ -900,9 +900,9 @@ async function scanLoop() {
         const btcSafeForLong = (btc5mNumeric > -0.10) && (btc15mNumeric > -0.12);
         const btcSafeForShort = (btc5mNumeric < 0.08) && (btc15mNumeric < 0.10);
 
-        // 🎯 TREND ŞARTI: LONG için 3s >= +%2.5 ve 24s >= 0%, SHORT için 3s <= -%1.5 ve 24s <= 0%
-        const longTrendOk = !!rInfo && (rInfo.chg3h || 0) >= 2.5 && chg24Val >= 0.0;
-        const shortTrendOk = !!rInfo && (rInfo.chg3h || 0) <= -1.5 && chg24Val <= 0.0;
+        // 🎯 TREND ŞARTI: LONG için (3s >= +%1.8 VEYA 15m >= +%1.2 VEYA Balina Sinyali) ve 24s >= 0%
+        const longTrendOk = !!rInfo && ((rInfo.chg3h || 0) >= 1.8 || (rInfo.chg15m || 0) >= 1.2 || (rInfo.signal && rInfo.signal.includes("BALİNA"))) && chg24Val >= 0.0;
+        const shortTrendOk = !!rInfo && ((rInfo.chg3h || 0) <= -1.5 || (rInfo.chg15m || 0) <= -1.2 || (rInfo.signal && rInfo.signal.includes("BALİNA"))) && chg24Val <= 0.0;
 
         const isLongPump = finalLongSignal && longTrendOk && validWickLong && radarOkLong && strictTrendOkLong && !isNearPeakTrap && btcSafeForLong;
         const isShortDump = finalShortSignal && shortTrendOk && validWickShort && radarOkShort && strictTrendOkShort && !isNearDipTrap && btcSafeForShort;
