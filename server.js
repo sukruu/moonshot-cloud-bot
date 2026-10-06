@@ -130,6 +130,9 @@ function loadSettings() {
       slots: saved.maxSlots, margin: saved.marginPerTrade, lev: saved.leverage,
       sl: saved.slPct, be: saved.bePct, moon: saved.moonPct, tp1: saved.tp1Pct
     });
+    // 🛡️ ESKİ ZARARLI AYAR ENGELİ: Eğer diskte eski 2.50% SL veya 1.20% BE kalmışsa zorla kalibre ayarlara çek
+    if (clean.slPct && clean.slPct > 1.50) clean.slPct = 1.25;
+    if (clean.bePct && clean.bePct > 0.90) clean.bePct = 0.60;
     Object.assign(CONFIG, clean);
     settingsCustomized = true;
   } catch (e) {}
@@ -2100,19 +2103,17 @@ function serveDashboardHtml() {
     }
 
     async function syncSettings(serverSettings, customized) {
-      if (settingsSynced || !serverSettings) return;
+      if (!serverSettings) return;
       settingsSynced = true;
       try {
-        const saved = JSON.parse(localStorage.getItem(LS_SET) || 'null');
-        if (!customized && saved) {
-          // Sunucu varsayılanda (deploy/yeniden başlatma) -> tarayıcıdaki kayıtlı ayarları sunucuya geri yükle
-          Object.keys(SET_IDS).forEach(k => {
-            if (saved[k] !== undefined && saved[k] !== '') document.getElementById(SET_IDS[k]).value = saved[k];
-          });
-          await pushSettings(readSettingsFromInputs());
-        } else if (customized) {
-          localStorage.setItem(LS_SET, JSON.stringify(serverSettings));
-        }
+        // Sunucu daima kaynaktır (Master). Sunucudaki kalibre ayarları ekrana yazar.
+        Object.keys(SET_IDS).forEach(k => {
+          if (serverSettings[k] !== undefined && serverSettings[k] !== '') {
+            const el = document.getElementById(SET_IDS[k]);
+            if (el && document.activeElement !== el) el.value = serverSettings[k];
+          }
+        });
+        localStorage.setItem(LS_SET, JSON.stringify(serverSettings));
       } catch (e) {}
     }
 
