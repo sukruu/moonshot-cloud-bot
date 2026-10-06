@@ -20,13 +20,13 @@ const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
 
 // --- EKRAN 1 BİREBİR AYARLARI ---
 let CONFIG = {
-  initialBalance: 1000.0,    // Bakiye 1000 Dolar
+  initialBalance: 100.0,     // Bakiye 100 Dolar
   marginPerTrade: 20.0,      // Teminat 20$ (20x ile $400 pozisyon büyüklüğü)
   leverage: 20,              // Kaldıraç 20x
   maxSlots: 4,               // Max Slot 4 Adet
-  slPct: 1.50,               // Stop Loss %1.50 Spot (20x ile -%30 ROI)
-  bePct: 0.75,               // Erken Başabaş Kilidi %0.75 Spot (+%15 ROI görünce $0 Riske kitle)
-  moonPct: 1.80,             // Sert Vur-Kaç TP2 Hedefi %1.80 Spot (+%36 ROI ile Kalanı Kapat)
+  slPct: 1.25,               // Stop Loss %1.25 Spot (20x ile -%25 ROI)
+  bePct: 0.60,               // Erken Başabaş Kilidi %0.60 Spot (+%12 ROI görünce $0 Riske kitle)
+  moonPct: 2.50,             // Moonshot TP2 Hedefi %2.50 Spot (+%50 ROI)
   tp1Pct: 1.00,              // Kademeli Kâr Alma TP1 Hedefi %1.00 Spot (+%20 ROI ile %50 Kâr Cebe)
   feeRate: 0.0008,           // 0.04% Giriş + 0.04% Çıkış Taker
   scanIntervalMs: 3500,
@@ -142,16 +142,13 @@ function getSettingsPayload() {
   };
 }
 
-// Depolamayı Başlat & Bakiye Eşitle ($1000)
+// Depolamayı Başlat & Bakiye Eşitle ($100)
 function initStorage() {
   loadSettings();
   try {
     if (fs.existsSync(STATE_FILE)) {
       const saved = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
       balance = (saved.balance !== undefined && !isNaN(saved.balance)) ? saved.balance : CONFIG.initialBalance;
-      if (balance < 500 && CONFIG.initialBalance >= 1000) {
-        balance = CONFIG.initialBalance + (balance - 100.0);
-      }
       activePositions = saved.activePositions || [];
       coinCooldowns = saved.coinCooldowns || {};
       coinLossCount = saved.coinLossCount || {};
@@ -1026,15 +1023,21 @@ async function fastRiskLoop() {
           : `🎯 VUR-KAÇ HEDEFİ VURULDU (+%${pos.roi.toFixed(1)} ROI / +%${move.toFixed(2)} Spot)`;
       }
 
-      // 4. DİNAMİK ZİRVEDEN DÖNÜŞ KÂR KORUMASI (Zirveden 0.18-0.25 Gevşerse Kârı Bırakma, Anında Kapat!)
+      // 4. DİNAMİK ZİRVEDEN DÖNÜŞ KÂR KORUMASI
       const mfe = pos.mfe || 0;
       let pullbackLimit = 0.80;
       if (mfe >= 2.5) pullbackLimit = 0.50;
       else if (mfe >= 1.5) pullbackLimit = 0.40;
       else if (mfe >= 1.0) pullbackLimit = 0.35;
 
-      if (!exitReason && mfe >= 1.0 && (mfe - move) >= pullbackLimit) {
-        exitReason = `🏆 Lazer Vur-Kaç Kâr Kilidi (+%${pos.roi.toFixed(1)} ROI / Zirve: +%${mfe.toFixed(2)} Spot)`;
+      // Eğer TP1 (%50 kâr) zaten cebe girdiyse kalan %50 pozisyona Moonshot (dev kâr) için daha geniş alan tanı!
+      const effectivePullback = pos.tp1Taken ? Math.max(0.60, pullbackLimit) : pullbackLimit;
+      const minMfeForLock = pos.tp1Taken ? 1.60 : 1.00;
+
+      if (!exitReason && mfe >= minMfeForLock && (mfe - move) >= effectivePullback) {
+        exitReason = pos.tp1Taken
+          ? `🏆 TP1 CEPTE + Kalan Lazer Kâr Kilidi (+%${pos.roi.toFixed(1)} ROI / Zirve: +%${mfe.toFixed(2)} Spot)`
+          : `🏆 Lazer Vur-Kaç Kâr Kilidi (+%${pos.roi.toFixed(1)} ROI / Zirve: +%${mfe.toFixed(2)} Spot)`;
       }
 
       // (Zaman stopu kaldırıldı - coinlere hareket için alan tanınıyor)
@@ -1720,20 +1723,31 @@ function serveDashboardHtml() {
           </div>
         </div>
 
+        <div style="background:linear-gradient(90deg, rgba(56,189,248,0.1) 0%, rgba(56,189,248,0.02) 100%); border-left:3px solid #38bdf8; border-radius:4px; padding:10px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center; box-shadow: 0 2px 8px rgba(0,0,0,0.2);">
+          <div>
+            <div style="font-size:11px;font-weight:800;color:#38bdf8;letter-spacing:0.3px;">🎯 İLK KÂR ALMA (TP1)</div>
+            <div style="font-size:9px;color:#64748b;margin-top:2px;">%50 Kâr Cebe, Kalan Başabaşa</div>
+          </div>
+          <div style="display:flex;align-items:baseline;gap:2px;background:rgba(0,0,0,0.2);padding:4px 8px;border-radius:4px;border:1px solid rgba(56,189,248,0.2);">
+            <input type="number" id="inpTp1" value="${(CONFIG.tp1Pct || 1.00).toFixed(2)}" step="0.1" style="width:40px;background:none;border:none;color:#38bdf8;font-family:'JetBrains Mono';font-size:14px;font-weight:800;text-align:right;outline:none;">
+            <span style="font-size:11px;color:#38bdf8;opacity:0.7;">%</span>
+          </div>
+        </div>
+
         <div style="background:linear-gradient(90deg, rgba(250,204,21,0.1) 0%, rgba(250,204,21,0.02) 100%); border-left:3px solid #facc15; border-radius:4px; padding:10px; margin-bottom:14px; display:flex; justify-content:space-between; align-items:center; box-shadow: 0 2px 8px rgba(0,0,0,0.2);">
           <div>
             <div style="font-size:11px;font-weight:800;color:#facc15;letter-spacing:0.3px;">🏆 VUR-KAÇ MOONSHOT</div>
             <div style="font-size:9px;color:#64748b;margin-top:2px;">Kâr hedefinde tamamen çıkılır</div>
           </div>
           <div style="display:flex;align-items:baseline;gap:2px;background:rgba(0,0,0,0.2);padding:4px 8px;border-radius:4px;border:1px solid rgba(250,204,21,0.2);">
-            <input type="number" id="inpMoon" value="${CONFIG.moonPct.toFixed(2)}" step="1" style="width:40px;background:none;border:none;color:#facc15;font-family:'JetBrains Mono';font-size:14px;font-weight:800;text-align:right;outline:none;">
+            <input type="number" id="inpMoon" value="${CONFIG.moonPct.toFixed(2)}" step="0.1" style="width:40px;background:none;border:none;color:#facc15;font-family:'JetBrains Mono';font-size:14px;font-weight:800;text-align:right;outline:none;">
             <span style="font-size:11px;color:#facc15;opacity:0.7;">%</span>
           </div>
         </div>
 
         <div class="action-buttons-grid">
           <a href="/api/download-csv" class="btn-action btn-secondary">📊 CSV İNDİR</a>
-          <button onclick="resetBalance()" class="btn-action btn-reset">🧹 SIFIRLA ($1000)</button>
+          <button onclick="resetBalance()" class="btn-action btn-reset">🧹 SIFIRLA ($100)</button>
         </div>
       </div>
 
@@ -2040,13 +2054,13 @@ function serveDashboardHtml() {
     }
 
     async function resetBalance() {
-      if (!confirm("DİKKAT: Bakiye $1000.00 olarak sıfırlanacak ve tüm geçmiş kalıcı olarak silinecektir. Emin misiniz?")) return;
+      if (!confirm("DİKKAT: Bakiye $100.00 olarak sıfırlanacak ve tüm geçmiş kalıcı olarak silinecektir. Emin misiniz?")) return;
       window.isResetting = true;
       localStorage.removeItem(LS_HIST);
       localStorage.removeItem(LS_BAL);
       sessionStorage.clear();
       try {
-        const res = await fetch('/api/reset-balance');
+        const res = await fetch('/api/reset-balance?amount=100');
         const data = await res.json();
         if (data && data.resetEpoch) {
           localStorage.setItem('moon_reset_epoch', data.resetEpoch.toString());
@@ -2058,7 +2072,7 @@ function serveDashboardHtml() {
 
     // Parametreleri Dinamik Güncelleme (sunucuya + tarayıcı hafızasına kaydeder)
     const LS_SET = 'moon_settings';
-    const SET_IDS = { slots: 'inpSlots', margin: 'inpMargin', lev: 'inpLev', sl: 'inpSl', be: 'inpBe', moon: 'inpMoon' };
+    const SET_IDS = { slots: 'inpSlots', margin: 'inpMargin', lev: 'inpLev', sl: 'inpSl', be: 'inpBe', moon: 'inpMoon', tp1: 'inpTp1' };
     let settingsSynced = false;
 
     function readSettingsFromInputs() {
@@ -2434,7 +2448,9 @@ const server = http.createServer(async (req, res) => {
 
   if (pathname === '/api/reset-balance') {
     resetEpoch = Date.now();
-    balance = CONFIG.initialBalance;
+    const amt = parseFloat(parsedUrl.searchParams.get('amount'));
+    balance = (!isNaN(amt) && amt > 0) ? amt : (CONFIG.initialBalance || 100.0);
+    CONFIG.initialBalance = balance;
     activePositions = [];
     history = [];
     coinLossCount = {};
