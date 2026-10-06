@@ -538,7 +538,7 @@ async function updateRadar() {
       const chunk = valid.slice(i, i + chunkSize);
       await Promise.all(chunk.map(async item => {
         const sym = item.symbol;
-        const klines = await fetchBinance(`/fapi/v1/klines?symbol=${sym}&interval=1h&limit=3`);
+        const klines = await fetchBinance(`/fapi/v1/klines?symbol=${sym}&interval=15m&limit=12`);
         if (klines && klines.length > 0) {
           const open3h = parseFloat(klines[0][1]);
           const close3h = parseFloat(klines[klines.length - 1][4]);
@@ -549,24 +549,39 @@ async function updateRadar() {
 
           const takerRatio = volUsdt > 0 ? (takerBuyUsdt / volUsdt) * 100 : 50;
           const chg3h = open3h > 0 ? ((close3h - open3h) / open3h) * 100 : 0;
+
+          // ⚡ GERÇEK ANLIK 15M BALİNA & İVME TESPİTİ
+          const last15 = klines[klines.length - 1];
+          const open15 = parseFloat(last15[1]);
+          const close15 = parseFloat(last15[4]);
+          const vol15 = parseFloat(last15[7]) || 0;
+          const takerBuy15 = parseFloat(last15[10]) || 0;
+          const chg15m = open15 > 0 ? ((close15 - open15) / open15) * 100 : 0;
+          const taker15m = vol15 > 0 ? (takerBuy15 / vol15) * 100 : 50;
+
           const tInfo = tickerMap[sym] || {};
 
           let signal = "⚖️ NÖTR";
-          if (chg3h >= 4.0) signal = "🚀 SÜPER ROKET";
-          else if (chg3h >= 1.5) signal = "🟢 GÜÇLÜ BOĞA";
-          else if (chg3h <= -4.0) signal = "🩸 ŞELALE";
-          else if (chg3h <= -1.5) signal = "🔴 GÜÇLÜ AYI";
+          const isWhaleBull = (chg15m >= 1.2 && taker15m >= 54.0) || (chg3h >= 3.5 && takerRatio >= 54.0);
+          const isWhaleBear = (chg15m <= -1.2 && taker15m <= 46.0) || (chg3h <= -3.5 && takerRatio <= 46.0);
+
+          if (isWhaleBull) signal = "🐋🚀 BALİNA BOĞA";
+          else if (isWhaleBear) signal = "🐋🩸 BALİNA AYI";
+          else if (chg3h >= 1.8 && takerRatio >= 51.5) signal = "🟢 GÜÇLÜ BOĞA";
+          else if (chg3h <= -1.8 && takerRatio <= 48.5) signal = "🔴 GÜÇLÜ AYI";
+          else if (chg15m >= 1.5) signal = "⚡ ANLIK SIÇRAMA";
 
           const rItem = {
             symbol: sym,
             lastPrice: close3h,
             chg3h,
-            chg15m: chg3h / 4, // Tahmini 15m alt momentum
+            chg15m,
             vol3hM: volUsdt / 1e6,
             range3h: `$${low3h.toFixed(4)} - $${high3h.toFixed(4)}`,
             low3h,
             high3h,
             takerBuyRatio: takerRatio,
+            taker15m,
             chg24h: tInfo.chg24h || 0,
             vol24hM: tInfo.vol24hM || 0,
             signal,
@@ -645,12 +660,13 @@ async function scanLoop() {
       const rInfo = radarMap[sym];
       let radarBoost = 0;
       if (rInfo) {
+        if (rInfo.signal && rInfo.signal.includes("BALİNA")) radarBoost += 60; // 🐋 Balina tespitine devasa öncelik!
+        else if (rInfo.signal && (rInfo.signal.includes("ROKET") || rInfo.signal.includes("BOĞA") || rInfo.signal.includes("SIÇRAMA"))) radarBoost += 30;
+        else if (rInfo.signal && (rInfo.signal.includes("ŞELALE") || rInfo.signal.includes("AYI"))) radarBoost += 30;
         if (rInfo.chg15m >= 1.0 && rInfo.takerBuyRatio >= 50) {
-          radarBoost = (rInfo.chg15m * 20) + ((rInfo.takerBuyRatio - 50) * 4.0);
-          if (rInfo.signal && (rInfo.signal.includes("ROKET") || rInfo.signal.includes("BOĞA"))) radarBoost += 30;
+          radarBoost += (rInfo.chg15m * 20) + ((rInfo.takerBuyRatio - 50) * 4.0);
         } else if (rInfo.chg15m <= -1.0 && rInfo.takerBuyRatio <= 50) {
-          radarBoost = (Math.abs(rInfo.chg15m) * 16) + ((50 - rInfo.takerBuyRatio) * 3.5);
-          if (rInfo.signal && (rInfo.signal.includes("ŞELALE") || rInfo.signal.includes("AYI"))) radarBoost += 30;
+          radarBoost += (Math.abs(rInfo.chg15m) * 16) + ((50 - rInfo.takerBuyRatio) * 3.5);
         }
       }
 
@@ -757,16 +773,18 @@ async function scanLoop() {
           const chg3 = rInfo.chg3h || 0;
           const sig = rInfo.signal || "";
 
-          // 1. YÜKSELİRKEN VUR-KAÇ (LONG): 3s Değişim %2.5 - %12.0 + 24s Pozitif (>= 0%) + Alıcı Baskısı >= %51.5 + Boğa/Roket
-          if (chg3 >= 2.5 && chg3 <= 12.0 && chg24Val >= 0.0 && chg24Val < 30.0 && taker >= 51.5 && (sig.includes("ROKET") || sig.includes("BOĞA"))) {
+          // 1. YÜKSELİRKEN VUR-KAÇ (LONG): Balina Boğa / Güçlü Boğa / Anlık Sıçrama + Taker >= 51.5% + 24s Pozitif
+          if (chg3 >= 1.5 && chg3 <= 14.0 && chg24Val >= 0.0 && chg24Val < 30.0 && taker >= 51.5 && 
+              (sig.includes("BOĞA") || sig.includes("ROKET") || sig.includes("SIÇRAMA") || sig.includes("BALİNA"))) {
             isDirectRadarLong = true;
-            radarTag = `[3s: +%${chg3.toFixed(1)} / %${taker.toFixed(0)} Alıcı - ${sig}]`;
+            radarTag = `[${sig} | 3s: +%${chg3.toFixed(1)} / 15m: +%${(rInfo.chg15m || 0).toFixed(1)} / %${taker.toFixed(0)} Alıcı]`;
           }
 
-          // 2. DÜŞERKEN VUR-KAÇ (SHORT): Taze Kırılım (% -1.5 ile -6.0 arası) + 24s Negatif (<= 0%) + Satıcı Baskısı >= %52.0 (Alıcı <= %48.0)
-          if (chg3 <= -1.5 && chg3 >= -6.0 && chg24Val <= 0.0 && chg24Val > -18.0 && taker <= 48.0 && (sig.includes("ŞELALE") || sig.includes("AYI"))) {
+          // 2. DÜŞERKEN VUR-KAÇ (SHORT): Balina Ayı / Güçlü Ayı + Taker <= 48.5% + 24s Negatif
+          if (chg3 <= -1.5 && chg3 >= -8.0 && chg24Val <= 0.0 && chg24Val > -18.0 && taker <= 48.5 && 
+              (sig.includes("AYI") || sig.includes("ŞELALE") || sig.includes("BALİNA"))) {
             isDirectRadarShort = true;
-            radarTag = `[3s: %${chg3.toFixed(1)} / %${(100 - taker).toFixed(0)} Satıcı - ${sig}]`;
+            radarTag = `[${sig} | 3s: %${chg3.toFixed(1)} / 15m: %${(rInfo.chg15m || 0).toFixed(1)} / %${(100 - taker).toFixed(0)} Satıcı]`;
           }
 
           // 🛡️ AŞIRI SATIM & DİP TUZAĞI ENGELİ: Koin zaten 3 saatte -%8 veya 24 saatte -%20 çöktüyse SHORT YASAK!
@@ -781,7 +799,7 @@ async function scanLoop() {
           }
 
           // 🛡️ SİNYAL TERSİNE İŞLEM AÇMA YASAĞI
-          if (chg3 >= 1.5 || sig.includes("ROKET") || sig.includes("BOĞA")) {
+          if (chg3 >= 1.5 || sig.includes("ROKET") || sig.includes("BOĞA") || sig.includes("SIÇRAMA")) {
             radarOkShort = false;
             isDirectRadarShort = false;
           }
