@@ -25,7 +25,7 @@ let CONFIG = {
   leverage: 20,              // Kaldıraç 20x
   maxSlots: 4,               // Max Slot 4 Adet
   slPct: 1.25,               // Stop Loss %1.25 Spot (20x ile -%25 ROI)
-  bePct: 0.60,               // Erken Başabaş Kilidi %0.60 Spot (+%12 ROI görünce $0 Riske kitle)
+  bePct: 0.50,               // Erken Başabaş Kilidi %0.50 Spot (+%10 ROI görünce $0 Riske kitle)
   moonPct: 2.50,             // Moonshot TP2 Hedefi %2.50 Spot (+%50 ROI)
   tp1Pct: 1.00,              // Kademeli Kâr Alma TP1 Hedefi %1.00 Spot (+%20 ROI ile %50 Kâr Cebe)
   feeRate: 0.0008,           // 0.04% Giriş + 0.04% Çıkış Taker
@@ -63,6 +63,7 @@ let history = [];
 let coinCooldowns = {};
 let coinLossCount = {};  // 🛡️ Aynı koine ardışık zarar sayısı (2 zarar → yasakla, kâr ederse sıfırla)
 let resetEpoch = 0;      // 🛡️ Bilinçli sıfırlama zaman damgası (Zombi geçmiş kurtarmayı engeller)
+let lastTradeOpenTime = 0; // 🛡️ Kümeleme koruması: İşlemler arası en az 60 sn mesafe
 let rollingTickerPrices = {};
 let radarMap = {};
 let logs = [];
@@ -132,7 +133,7 @@ function loadSettings() {
     });
     // 🛡️ ESKİ ZARARLI AYAR ENGELİ: Eğer diskte eski 2.50% SL veya 1.20% BE kalmışsa zorla kalibre ayarlara çek
     if (clean.slPct && clean.slPct > 1.50) clean.slPct = 1.25;
-    if (clean.bePct && clean.bePct > 0.90) clean.bePct = 0.60;
+    if (clean.bePct && clean.bePct > 0.60) clean.bePct = 0.50;
     Object.assign(CONFIG, clean);
     settingsCustomized = true;
   } catch (e) {}
@@ -598,6 +599,11 @@ async function scanLoop() {
       return;
     }
 
+    // 🛡️ KÜMELEME RİSKİ KORUMASI: Aynı 60 saniye içinde peş peşe birden fazla pozisyon açıp sıkışmayı engelle
+    if (Date.now() - lastTradeOpenTime < 60000) {
+      return;
+    }
+
     const tickers = await fetchBinance("https://fapi.binance.com/fapi/v1/ticker/24hr");
     if (!tickers || !Array.isArray(tickers)) return;
 
@@ -857,24 +863,24 @@ async function scanLoop() {
           const high3 = rInfo.high3h || curH;
           const low3 = rInfo.low3h || curL;
 
-          // 1. Zaten %18+ uçmuş veya 3 saatlik zirvenin %99.4'üne yapışmış aşırı alım tuzakları (CAP, ADA, ZHIPU engeli)
-          const isAtExtremeHigh = high3 > 0 && (curP >= high3 * 0.994);
-          const isOverheatedPump = chg24Val >= 18.0 || (rInfo.chg3h || 0) >= 9.0;
-          if ((isOverheatedPump && isAtExtremeHigh) || (isAtExtremeHigh && (rInfo.takerBuyRatio || 50) < 53.5) || upperWickReject) {
+          // 1. Zaten %15+ uçmuş veya 3 saatlik zirvenin %99.3'üne yapışmış aşırı alım tuzakları (CAP, ADA, ZHIPU, RKLB, NBIS engeli)
+          const isAtExtremeHigh = high3 > 0 && (curP >= high3 * 0.993);
+          const isOverheatedPump = chg24Val >= 15.0 || (rInfo.chg3h || 0) >= 8.0;
+          if ((isOverheatedPump && isAtExtremeHigh) || (isAtExtremeHigh && (rInfo.takerBuyRatio || 50) < 56.0) || upperWickReject) {
             isNearPeakTrap = true;
           }
 
-          // 2. Zaten %14+ çökmüş veya 3 saatlik dibin %100.6'sına yapışmış aşırı satım tuzakları
-          const isAtExtremeLow = low3 > 0 && (curP <= low3 * 1.006);
-          const isOverheatedDump = chg24Val <= -14.0 || (rInfo.chg3h || 0) <= -7.0;
-          if ((isOverheatedDump && isAtExtremeLow) || (isAtExtremeLow && (rInfo.takerBuyRatio || 50) > 46.5) || lowerWickReject) {
+          // 2. Zaten %12+ çökmüş veya 3 saatlik dibin %100.7'sine yapışmış aşırı satım tuzakları
+          const isAtExtremeLow = low3 > 0 && (curP <= low3 * 1.007);
+          const isOverheatedDump = chg24Val <= -12.0 || (rInfo.chg3h || 0) <= -6.0;
+          if ((isOverheatedDump && isAtExtremeLow) || (isAtExtremeLow && (rInfo.takerBuyRatio || 50) > 44.0) || lowerWickReject) {
             isNearDipTrap = true;
           }
         }
 
         // 🛡️ BTC TREND KORUMASI (BTC Çakılırken LONG Açma, BTC Yükselirken SHORT Açma!)
-        const btcSafeForLong = (btc5mNumeric > -0.20) && (btc15mNumeric > -0.25);
-        const btcSafeForShort = (btc5mNumeric < 0.10) && (btc15mNumeric < 0.15);
+        const btcSafeForLong = (btc5mNumeric > -0.10) && (btc15mNumeric > -0.12);
+        const btcSafeForShort = (btc5mNumeric < 0.08) && (btc15mNumeric < 0.10);
 
         // 🎯 TREND ŞARTI: LONG için 3s >= +%2.5 ve 24s >= 0%, SHORT için 3s <= -%1.5 ve 24s <= 0%
         const longTrendOk = !!rInfo && (rInfo.chg3h || 0) >= 2.5 && chg24Val >= 0.0;
@@ -922,6 +928,7 @@ async function scanLoop() {
           activePositions.push(position);
           activeSyms.add(sym);
           signalFound = true;
+          lastTradeOpenTime = Date.now();
           persistState();
 
           addLog(`🚀 POZİSYON AÇILDI: [${side}] ${sym} @ $${curP.toFixed(4)} (SL: $${stopPrice.toFixed(4)}) ${radarTag}`, 'TRADE');
