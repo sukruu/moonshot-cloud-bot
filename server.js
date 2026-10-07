@@ -531,9 +531,10 @@ async function updateRadar() {
       return volM >= 3.0;
     }).sort((a, b) => Math.abs(parseFloat(b.priceChangePercent) || 0) - Math.abs(parseFloat(a.priceChangePercent) || 0));
 
-    // Top 80 koinin 3 saatlik (3x 1h) kline ve alıcı baskısını çek
+    // Top 80 koinin 3 saatlik (12x 15m) kline ve alıcı baskısını çek
     const chunkSize = 15;
     const scanned = [];
+    const freshRadarMap = {};
     for (let i = 0; i < Math.min(valid.length, 75); i += chunkSize) {
       const chunk = valid.slice(i, i + chunkSize);
       await Promise.all(chunk.map(async item => {
@@ -588,13 +589,14 @@ async function updateRadar() {
             lastUpdate: Date.now()
           };
 
-          radarMap[sym] = rItem;
+          freshRadarMap[sym] = rItem;
           scanned.push(rItem);
         }
       }));
     }
 
     if (scanned.length > 0) {
+      radarMap = freshRadarMap;
       radarList = scanned.sort((a, b) => Math.abs(b.chg3h) - Math.abs(a.chg3h));
     }
   } catch (err) {
@@ -720,6 +722,9 @@ async function scanLoop() {
         if (coinLossCount[sym] >= 2) continue;
 
         const rInfo = radarMap[sym];
+        // 🛡️ BAYAT VERİ & HAYALET KOİN ENGELİ: Radarda olmayan veya 8 dakikadan eski verileri içeren coinleri ele!
+        if (!rInfo || (now - (rInfo.lastUpdate || 0) > 8 * 60 * 1000)) continue;
+
         // 🛡️ KURUMSAL HACİM KALKANI ($10M altındaki sığ tahtalı koinlerde fakeout ve kayma yaşanır, girme!)
         if (rInfo && rInfo.vol3hM !== null && rInfo.vol3hM !== undefined && rInfo.vol3hM < 10.0) continue;
 
@@ -896,9 +901,9 @@ async function scanLoop() {
           }
         }
 
-        // 🛡️ BTC TREND KORUMASI (BTC Çakılırken LONG Açma, BTC Yükselirken SHORT Açma!)
-        const btcSafeForLong = (btc5mNumeric > -0.10) && (btc15mNumeric > -0.12);
-        const btcSafeForShort = (btc5mNumeric < 0.08) && (btc15mNumeric < 0.10);
+        // 🛡️ BTC TREND KORUMASI (BTC Çakılırken LONG Açma, BTC Yükselirken SHORT Açma; Aşırı Düşüş Sıkışmasında SHORT'a Atlama!)
+        const btcSafeForLong = (btc5mNumeric > -0.10) && (btc15mNumeric > -0.12) && (btc15mNumeric < 0.80) && (btc5mNumeric < 0.50);
+        const btcSafeForShort = (btc5mNumeric < 0.08) && (btc15mNumeric < 0.10) && (btc15mNumeric > -0.80) && (btc5mNumeric > -0.50);
 
         // 🎯 TREND ŞARTI: LONG için (3s >= +%1.8 VEYA 15m >= +%1.2 VEYA Balina Sinyali) ve 24s >= 0%
         const longTrendOk = !!rInfo && ((rInfo.chg3h || 0) >= 1.8 || (rInfo.chg15m || 0) >= 1.2 || (rInfo.signal && rInfo.signal.includes("BALİNA"))) && chg24Val >= 0.0;
@@ -1129,23 +1134,25 @@ function closeTrade(pos, exitReason) {
     formattedExitReason = `🎯 KADEMELİ MOONSHOT ALINDI (Toplam: +$${totalTradePnl.toFixed(2)} / +%${totalTradeRoi.toFixed(1)} ROI)`;
   }
 
-  // 🛡️ ÇOKLAMA / YENİDEN GİRİŞ TUZAĞI ENGELİ (COOLDOWN KORUMASI)
-  if (exitReason.includes("Stop Loss")) {
-    coinCooldowns[pos.symbol] = now + (2 * 60 * 60 * 1000); // Stop olduysa 2 saat ceza
-  } else if (totalTradePnl < 0) {
-    coinCooldowns[pos.symbol] = now + (1 * 60 * 60 * 1000); // Diğer zararlı çıkışlarda 1 saat
-  } else {
-    coinCooldowns[pos.symbol] = now + (45 * 60 * 1000); // Kâr/başabaş çıkışında 45 dk
-  }
-
-  // 🛡️ ARDIŞ ZARAR SAYACI: Aynı koine 2 kez üst üste zarar edince yasakla, kâr ederse sıfırla
-  if (exitReason.includes("Stop Loss")) {
+  // 🛡️ ÇOKLAMA / YENİDEN GİRİŞ VE ARDIŞIK ZARAR KORUMASI (COOLDOWN)
+  const isRealLoss = (totalTradePnl <= -0.40) || exitReason.includes("Stop Loss");
+  if (isRealLoss) {
     coinLossCount[pos.symbol] = (coinLossCount[pos.symbol] || 0) + 1;
     if (coinLossCount[pos.symbol] >= 2) {
-      addLog(`🚫 ${pos.symbol} ardışık ${coinLossCount[pos.symbol]} zarar — koin yasaklandı!`, 'TRADE');
+      // 2 kez zarar eden koin 12 saat kilitlenir!
+      coinCooldowns[pos.symbol] = now + (12 * 60 * 60 * 1000);
+      addLog(`🚫 ${pos.symbol} ardışık ${coinLossCount[pos.symbol]} zarar verdi — koin 12 saat boyunca yasaklandı!`, 'TRADE');
+    } else {
+      // İlk zararda 2 saat ceza
+      coinCooldowns[pos.symbol] = now + (2 * 60 * 60 * 1000);
     }
-  } else if (totalTradePnl > 0) {
-    coinLossCount[pos.symbol] = 0; // Kâr edince sayaç sıfırlanır, tekrar girebilir
+  } else if (totalTradePnl > 0.20) {
+    // Kâr edince zarar sayacı sıfırlanır, 30 dk dinlenme
+    coinLossCount[pos.symbol] = 0;
+    coinCooldowns[pos.symbol] = now + (30 * 60 * 1000);
+  } else {
+    // Başabaş veya minik nötr çıkış
+    coinCooldowns[pos.symbol] = now + (45 * 60 * 1000);
   }
 
   const tradeRecord = {
