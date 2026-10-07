@@ -840,9 +840,12 @@ async function scanLoop() {
         const freshVolumeLong = projectedVol >= avgVol20 * 1.2 || curV >= avgVol20 * 1.05 || prevV >= avgVol20 * 1.2 || (curV + prevV) >= avgVol20 * 1.6;
         const freshVolumeShort = projectedVol >= avgVol20 * 1.2 || curV >= avgVol20 * 1.05 || prevV >= avgVol20 * 1.2 || (curV + prevV) >= avgVol20 * 1.6;
 
-        // İğne tuzağı kontrolü: Mumun en tepesinden veya en dibinden iğneye atlamayı engelle
-        const validWickLong = curP >= curH * 0.988;
-        const validWickShort = curP <= curL * 1.012;
+        // 🕯️ MUM FİTİL TEYİDİ & İĞNE TUZAKLARI (Satış/Alış Baskısı Retlerini Yakala)
+        const candleRange = curH - curL;
+        const upperWickReject = candleRange > 0 && (curH - Math.max(curP, curO)) / candleRange > 0.35;
+        const lowerWickReject = candleRange > 0 && (Math.min(curP, curO) - curL) / candleRange > 0.35;
+        const validWickLong = !upperWickReject;
+        const validWickShort = !lowerWickReject;
 
         // 🟢 BOĞA GİRİŞ KOŞULLARI:
         let finalLongSignal = false;
@@ -876,27 +879,35 @@ async function scanLoop() {
         const strictTrendOkLong = (chg24Val < 30.0) && (chg24Val >= 0.0) && (!rInfo || (rInfo.chg3h || 0) < 14.0); 
         const strictTrendOkShort = (chg24Val > -18.0) && (chg24Val <= 0.0);
 
-        // 🛡️ TEPE VE DİP TUZAĞI KORUMASI (Direnç ve Destek Uçlarında Ters Köşeyi Önle!)
+        // 🛡️ TEPE VE DİP TUZAĞI KORUMASI (Direnç ve Destek Uçlarında Ters Köşeyi Kesinlikle Önle!)
         let isNearPeakTrap = false;
         let isNearDipTrap = false;
         if (rInfo) {
-          const candleRange = curH - curL;
-          const upperWickReject = candleRange > 0 && (curH - Math.max(curP, curO)) / candleRange > 0.40;
-          const lowerWickReject = candleRange > 0 && (Math.min(curP, curO) - curL) / candleRange > 0.40;
           const high3 = rInfo.high3h || curH;
           const low3 = rInfo.low3h || curL;
+          const chg15 = rInfo.chg15m || 0;
 
-          // 1. Zaten %15+ uçmuş veya 3 saatlik zirvenin %99.3'üne yapışmış aşırı alım tuzakları (CAP, ADA, ZHIPU, RKLB, NBIS engeli)
-          const isAtExtremeHigh = high3 > 0 && (curP >= high3 * 0.993);
-          const isOverheatedPump = chg24Val >= 15.0 || (rInfo.chg3h || 0) >= 8.0;
-          if ((isOverheatedPump && isAtExtremeHigh) || (isAtExtremeHigh && (rInfo.takerBuyRatio || 50) < 56.0) || upperWickReject) {
+          // 1. LONG İÇİN TEPE & DİRENÇ TUZAĞI (BRUSDT vb. zirveden alma tuzaklarını engelle!)
+          // A) Zirveye çok yakınsa: 3 saatlik zirvenin %98.5'i veya üzerindeyse (BR engeli)
+          const isAtResistance = high3 > 0 && (curP >= high3 * 0.985);
+          // B) Son 15 dakikada dikey fırlamışsa (+%3.0 üzeri dikey mum - tepe kovalama engeli)
+          const is15mPumpClimax = chg15 >= 3.0;
+          // C) Günlükte veya 3 saatte aşırı şişmişse ve tepeye yakınsa
+          const isOverheatedPump = (chg24Val >= 10.0 || (rInfo.chg3h || 0) >= 6.0) && (high3 > 0 && curP >= high3 * 0.980);
+          
+          if (isAtResistance || is15mPumpClimax || isOverheatedPump || upperWickReject) {
             isNearPeakTrap = true;
           }
 
-          // 2. Zaten %12+ çökmüş veya 3 saatlik dibin %100.7'sine yapışmış aşırı satım tuzakları
-          const isAtExtremeLow = low3 > 0 && (curP <= low3 * 1.007);
-          const isOverheatedDump = chg24Val <= -12.0 || (rInfo.chg3h || 0) <= -6.0;
-          if ((isOverheatedDump && isAtExtremeLow) || (isAtExtremeLow && (rInfo.takerBuyRatio || 50) > 44.0) || lowerWickReject) {
+          // 2. SHORT İÇİN DİP & DESTEK TUZAĞI (FET, PROMUSDT, KORUUSDT vb. dipten shortlama tuzaklarını engelle!)
+          // A) Desteğe çok yakınsa: 3 saatlik dibin %101.5'i veya altındaysa (FET, KORU, FIL, TRUMP engeli)
+          const isAtSupport = low3 > 0 && (curP <= low3 * 1.015);
+          // B) Son 15 dakikada dikey çökmüşse (15m <= -2.8% - aşırı satım / PROMUSDT engeli)
+          const is15mDumpClimax = chg15 <= -2.8;
+          // C) Günlükte veya 3 saatte aşırı çökmüşse ve dibe yakınsa
+          const isOverheatedDump = (chg24Val <= -10.0 || (rInfo.chg3h || 0) <= -5.0) && (low3 > 0 && curP <= low3 * 1.020);
+
+          if (isAtSupport || is15mDumpClimax || isOverheatedDump || lowerWickReject) {
             isNearDipTrap = true;
           }
         }
@@ -1082,10 +1093,10 @@ async function fastRiskLoop() {
           : `🏆 Lazer Vur-Kaç Kâr Kilidi (+%${pos.roi.toFixed(1)} ROI / Zirve: +%${mfe.toFixed(2)} Spot)`;
       }
 
-      // 5. DURGUN KOİN KORUMA ÇIKIŞI: 45 dk boyunca hiç ivme alamamışsa (MFE < %0.40) ve eksiye kayıyorsa
-      // Saatlerce (4-5 saat) uykuda kalıp tam stopa sürüklenmesini engelle, ufak sıyrıkla çık ve slotu serbest bırak!
+      // 5. DURGUN KOİN KORUMA ÇIKIŞI: 25 dk boyunca hiç ivme alamamışsa (MFE < %0.35) ve eksiye kayıyorsa
+      // Saatlerce uykuda kalıp tam stopa sürüklenmesini engelle, ufak sıyrıkla çık ve slotu serbest bırak!
       const durMinLive = (now - pos.entryTime) / 60000;
-      if (!exitReason && durMinLive >= 45 && (pos.mfe || 0) < 0.40 && pos.roi <= -6.0 && pos.roi >= -22.0) {
+      if (!exitReason && durMinLive >= 25 && (pos.mfe || 0) < 0.35 && pos.roi <= -5.0 && pos.roi >= -22.0) {
         exitReason = `⏱️ Durgunluk Koruması (${durMinLive.toFixed(0)}dk İvme Yok / MFE: +%${(pos.mfe || 0).toFixed(2)} / Korumalı Çıkış)`;
       }
 
