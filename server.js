@@ -1058,34 +1058,46 @@ async function fastRiskLoop() {
         addLog(`💰 [TP1 ALINDI] ${pos.symbol} %50 Pozisyon Kapatıldı! +$${tp1Profit.toFixed(2)} Kâr Cebe İndi (+%${(move * pos.leverage).toFixed(1)} ROI). Kalan Stop Başabaşa Çekildi.`, 'TRADE');
       }
 
-      // 🛡️ 2. ERKEN BAŞABAŞ KORUMASI: +%0.45 Spot (+%9 ROI) Görünce Stopu Girişe Çek! (Zirveden Zarara Dönüşü Engeller)
-      if (!pos.beLocked && pos.mfe >= (CONFIG.bePct || 0.45)) {
-        pos.beLocked = true;
-        const lock0 = isLong ? pos.entryPrice * 1.0020 : pos.entryPrice * 0.9980;
-        if (!pos.stopPrice || (isLong && lock0 > pos.stopPrice) || (!isLong && lock0 < pos.stopPrice)) {
-          pos.stopPrice = lock0;
+      // 🛡️ 2. DİNAMİK İZ SÜREN STOP (TRAILING STOP) & ERKEN BAŞABAŞ KORUMASI
+      let targetStop = null;
+      if (mfe >= 1.40) {
+        targetStop = isLong ? pos.entryPrice * (1 + (mfe - 0.35) / 100) : pos.entryPrice * (1 - (mfe - 0.35) / 100);
+      } else if (mfe >= 0.90) {
+        targetStop = isLong ? pos.entryPrice * (1 + (mfe - 0.25) / 100) : pos.entryPrice * (1 - (mfe - 0.25) / 100);
+      } else if (mfe >= 0.65) {
+        targetStop = isLong ? pos.entryPrice * (1 + (mfe - 0.20) / 100) : pos.entryPrice * (1 - (mfe - 0.20) / 100);
+      } else if (mfe >= (CONFIG.bePct || 0.45)) {
+        targetStop = isLong ? pos.entryPrice * 1.0020 : pos.entryPrice * 0.9980;
+      }
+
+      if (targetStop) {
+        if (!pos.beLocked && mfe >= (CONFIG.bePct || 0.45)) {
+          pos.beLocked = true;
+          addLog(`🛡️ [BAŞABAŞ KİLİDİ] ${pos.symbol} +%${mfe.toFixed(2)} Gördü, Stop Girişe Çekildi ($0.00 Risk).`, 'TRADE');
+        }
+        if (!pos.stopPrice || (isLong && targetStop > pos.stopPrice) || (!isLong && targetStop < pos.stopPrice)) {
+          pos.stopPrice = targetStop;
           stateChanged = true;
-          addLog(`🛡️ [BAŞABAŞ KİLİDİ] ${pos.symbol} +%${pos.mfe.toFixed(2)} Gördü, Stop Girişe Çekildi ($0.00 Risk).`, 'TRADE');
         }
       }
 
-      // 🎯 3. SERT VUR-KAÇ HEDEFİ (+%1.00 Spot = +%20 ROI ile Anında Kapat!)
+      // 🎯 3. SERT VUR-KAÇ HEDEFİ (+%1.50 Spot = +%30 ROI ile Anında Kapat!)
       if (!exitReason && move >= CONFIG.moonPct) {
         exitReason = pos.tp1Taken
-          ? `🎯 KADEMELİ MOONSHOT ALINDI (TP1: +%16 ROI + TP2: +%${pos.roi.toFixed(1)} ROI)`
+          ? `🎯 KADEMELİ MOONSHOT ALINDI (TP1: +%15 ROI + TP2: +%${pos.roi.toFixed(1)} ROI)`
           : `🎯 VUR-KAÇ HEDEFİ VURULDU (+%${pos.roi.toFixed(1)} ROI / +%${move.toFixed(2)} Spot)`;
       }
 
-      // 4. DİNAMİK ZİRVEDEN DÖNÜŞ KÂR KORUMASI
-      const mfe = pos.mfe || 0;
-      let pullbackLimit = 0.80;
-      if (mfe >= 2.5) pullbackLimit = 0.50;
-      else if (mfe >= 1.5) pullbackLimit = 0.40;
-      else if (mfe >= 1.0) pullbackLimit = 0.35;
+      // 4. DİNAMİK ZİRVEDEN DÖNÜŞ KÂR KORUMASI (LAZER KÂR KİLİDİ)
+      let pullbackLimit = 0.50;
+      if (mfe >= 2.0) pullbackLimit = 0.40;
+      else if (mfe >= 1.2) pullbackLimit = 0.30;
+      else if (mfe >= 0.75) pullbackLimit = 0.22;
+      else if (mfe >= 0.55) pullbackLimit = 0.18;
 
       // Eğer TP1 (%50 kâr) zaten cebe girdiyse kalan %50 pozisyona Moonshot (dev kâr) için daha geniş alan tanı!
-      const effectivePullback = pos.tp1Taken ? Math.max(0.60, pullbackLimit) : pullbackLimit;
-      const minMfeForLock = pos.tp1Taken ? 1.60 : 1.00;
+      const effectivePullback = pos.tp1Taken ? Math.max(0.35, pullbackLimit) : pullbackLimit;
+      const minMfeForLock = pos.tp1Taken ? 0.90 : 0.60;
 
       if (!exitReason && mfe >= minMfeForLock && (mfe - move) >= effectivePullback) {
         exitReason = pos.tp1Taken
@@ -1102,8 +1114,8 @@ async function fastRiskLoop() {
 
       // 6. STOP LOSS VEYA KİLİTLİ STOP TETİKLENMESİ
       if (!exitReason && ((isLong && curP <= pos.stopPrice) || (!isLong && curP >= pos.stopPrice))) {
-        if ((isLong && pos.stopPrice > pos.entryPrice * 1.003) || (!isLong && pos.stopPrice < pos.entryPrice * 0.997)) {
-          exitReason = `🔒 Garanti Kilitli Kâr Çıkışı (+%${pos.roi.toFixed(1)} ROI)`;
+        if ((isLong && pos.stopPrice > pos.entryPrice * 1.0025) || (!isLong && pos.stopPrice < pos.entryPrice * 0.9975)) {
+          exitReason = `🔒 Garanti Kilitli Kâr Çıkışı (+%${pos.roi.toFixed(1)} ROI / Stop Tetiklendi)`;
         } else if (pos.beLocked) {
           exitReason = pos.tp1Taken
             ? `🛡️ TP1 KÂRI CEPTE + Kalan Başabaş Kapandı`
