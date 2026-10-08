@@ -25,9 +25,9 @@ let CONFIG = {
   leverage: 20,              // Kaldıraç 20x
   maxSlots: 4,               // Max Slot 4 Adet
   slPct: 1.25,               // Stop Loss %1.25 Spot (20x ile -%25 ROI)
-  bePct: 0.50,               // Erken Başabaş Kilidi %0.50 Spot (+%10 ROI görünce $0 Riske kitle)
-  moonPct: 2.50,             // Moonshot TP2 Hedefi %2.50 Spot (+%50 ROI)
-  tp1Pct: 1.00,              // Kademeli Kâr Alma TP1 Hedefi %1.00 Spot (+%20 ROI ile %50 Kâr Cebe)
+  bePct: 0.45,               // Erken Başabaş Kilidi %0.45 Spot (+%9 ROI görünce Riske kitle)
+  moonPct: 1.50,             // Moonshot TP2 Hedefi %1.50 Spot (+%30 ROI)
+  tp1Pct: 0.75,              // Kademeli Kâr Alma TP1 Hedefi %0.75 Spot (+%15 ROI ile %50 Kâr Cebe)
   feeRate: 0.0008,           // 0.04% Giriş + 0.04% Çıkış Taker
   scanIntervalMs: 3500,
   riskIntervalMs: 1000,
@@ -1058,10 +1058,10 @@ async function fastRiskLoop() {
         addLog(`💰 [TP1 ALINDI] ${pos.symbol} %50 Pozisyon Kapatıldı! +$${tp1Profit.toFixed(2)} Kâr Cebe İndi (+%${(move * pos.leverage).toFixed(1)} ROI). Kalan Stop Başabaşa Çekildi.`, 'TRADE');
       }
 
-      // 🛡️ 2. ERKEN BAŞABAŞ KORUMASI: +%0.75 Spot (+%15 ROI) Görünce Stopu Girişe Çek! (Zirveden Zarara Dönüşü Engeller)
-      if (!pos.beLocked && pos.mfe >= (CONFIG.bePct || 0.75)) {
+      // 🛡️ 2. ERKEN BAŞABAŞ KORUMASI: +%0.45 Spot (+%9 ROI) Görünce Stopu Girişe Çek! (Zirveden Zarara Dönüşü Engeller)
+      if (!pos.beLocked && pos.mfe >= (CONFIG.bePct || 0.45)) {
         pos.beLocked = true;
-        const lock0 = isLong ? pos.entryPrice * 1.0010 : pos.entryPrice * 0.9990;
+        const lock0 = isLong ? pos.entryPrice * 1.0020 : pos.entryPrice * 0.9980;
         if (!pos.stopPrice || (isLong && lock0 > pos.stopPrice) || (!isLong && lock0 < pos.stopPrice)) {
           pos.stopPrice = lock0;
           stateChanged = true;
