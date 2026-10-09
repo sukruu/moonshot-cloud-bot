@@ -2361,8 +2361,15 @@ const server = http.createServer(async (req, res) => {
     const urls = [
       "https://fapi.binance.com/fapi/v1/ticker/price?symbol=BTCUSDT",
       "https://fapi1.binance.com/fapi/v1/ticker/price?symbol=BTCUSDT",
+      "https://fapi2.binance.com/fapi/v1/ticker/price?symbol=BTCUSDT",
+      "https://fapi3.binance.com/fapi/v1/ticker/price?symbol=BTCUSDT",
+      "https://dapi.binance.com/dapi/v1/ticker/price?symbol=BTCUSD_PERP",
+      "https://data-api.binance.vision/api/v3/ticker/price?symbol=BTCUSDT",
+      "https://data-api.binance.vision/fapi/v1/ticker/price?symbol=BTCUSDT",
       "https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT",
-      "https://data-api.binance.vision/api/v3/ticker/price?symbol=BTCUSDT"
+      "https://api1.binance.com/api/v3/ticker/price?symbol=BTCUSDT",
+      "https://api2.binance.com/api/v3/ticker/price?symbol=BTCUSDT",
+      "https://api3.binance.com/api/v3/ticker/price?symbol=BTCUSDT"
     ];
     for (const u of urls) {
       try {
