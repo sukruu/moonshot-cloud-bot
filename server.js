@@ -2359,17 +2359,10 @@ const server = http.createServer(async (req, res) => {
   if (pathname === '/api/test-fetch') {
     const results = {};
     const urls = [
-      "https://fapi.binance.com/fapi/v1/ticker/price?symbol=BTCUSDT",
       "https://fapi1.binance.com/fapi/v1/ticker/price?symbol=BTCUSDT",
       "https://fapi2.binance.com/fapi/v1/ticker/price?symbol=BTCUSDT",
       "https://fapi3.binance.com/fapi/v1/ticker/price?symbol=BTCUSDT",
-      "https://dapi.binance.com/dapi/v1/ticker/price?symbol=BTCUSD_PERP",
-      "https://data-api.binance.vision/api/v3/ticker/price?symbol=BTCUSDT",
-      "https://data-api.binance.vision/fapi/v1/ticker/price?symbol=BTCUSDT",
-      "https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT",
-      "https://api1.binance.com/api/v3/ticker/price?symbol=BTCUSDT",
-      "https://api2.binance.com/api/v3/ticker/price?symbol=BTCUSDT",
-      "https://api3.binance.com/api/v3/ticker/price?symbol=BTCUSDT"
+      "https://data-api.binance.vision/api/v3/ticker/price?symbol=BTCUSDT"
     ];
     for (const u of urls) {
       try {
@@ -2378,7 +2371,9 @@ const server = http.createServer(async (req, res) => {
           headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36' }
         });
         const txt = await r.text();
-        results[u] = { status: r.status, statusText: r.statusText, ms: Date.now() - t0, sample: txt.slice(0, 100) };
+        const retryAfter = r.headers.get('retry-after');
+        const usedWeight = r.headers.get('x-mbx-used-weight-1m');
+        results[u] = { status: r.status, retryAfter, usedWeight, ms: Date.now() - t0, sample: txt.slice(0, 100) };
       } catch (err) {
         results[u] = { error: err.message };
       }
