@@ -29,8 +29,8 @@ let CONFIG = {
   moonPct: 1.50,             // Moonshot TP2 Hedefi %1.50 Spot (+%30 ROI)
   tp1Pct: 0.75,              // Kademeli Kâr Alma TP1 Hedefi %0.75 Spot (+%15 ROI ile %50 Kâr Cebe)
   feeRate: 0.0008,           // 0.04% Giriş + 0.04% Çıkış Taker
-  scanIntervalMs: 3500,
-  riskIntervalMs: 1000,
+  scanIntervalMs: 4000,
+  riskIntervalMs: 2500,
   radarIntervalMs: 60000
 };
 
@@ -329,11 +329,10 @@ function appendTradeToCsv(trade) {
 
 // BİNANCE RESMİ API & ISP/DPI/BULUT ENGELİNE KARŞI ÇOKLU AYNA SİSTEMİ
 const BINANCE_FAPI_MIRRORS = [
-  "https://www.binance.info",
-  "https://fapi.binance.com",
   "https://fapi1.binance.com",
   "https://fapi2.binance.com",
-  "https://fapi3.binance.com"
+  "https://fapi3.binance.com",
+  "https://fapi.binance.com"
 ];
 
 
@@ -460,11 +459,12 @@ async function fetchBinance(url) {
     }
   }
 
+  // 1. Önce Futures API aynalarını dene (fapi1, fapi2, fapi3...)
   for (const base of BINANCE_FAPI_MIRRORS) {
     try {
       const targetUrl = base + relativePath;
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 6000);
+      const timeoutId = setTimeout(() => controller.abort(), 3500);
       const res = await fetch(targetUrl, {
         signal: controller.signal,
         headers: {
@@ -473,13 +473,33 @@ async function fetchBinance(url) {
         }
       });
       clearTimeout(timeoutId);
+      if (res.status === 429 || res.status === 451) continue;
       if (!res.ok) continue;
       const data = await res.json();
       if (data) return data;
-    } catch(e) {
-      // Bir sonraki aynaya otomatik geç
-    }
+    } catch(e) {}
   }
+
+  // 2. 🛡️ KESİNTİSİZ ÇALIŞMA KALKANI: FAPI 429/451 engeline takılırsa Binance Vision Global CDN ile anında kurtar!
+  try {
+    const spotPath = relativePath.replace(/^\/fapi\/v1\//, '/api/v3/');
+    const visionUrl = "https://data-api.binance.vision" + spotPath;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3500);
+    const res = await fetch(visionUrl, {
+      signal: controller.signal,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'application/json'
+      }
+    });
+    clearTimeout(timeoutId);
+    if (res.ok) {
+      const data = await res.json();
+      if (data) return data;
+    }
+  } catch(e) {}
+
   return null;
 }
 
