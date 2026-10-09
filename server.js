@@ -473,7 +473,11 @@ async function fetchBinance(url) {
         }
       });
       clearTimeout(timeoutId);
-      if (res.status === 429 || res.status === 451) continue;
+      if (res.status === 429) {
+        // IP rate limit yedik, tüm fapi aynaları kilitlidir; hemen Vision CDN'e atla
+        break;
+      }
+      if (res.status === 451) continue;
       if (!res.ok) continue;
       const data = await res.json();
       if (data) return data;
@@ -485,7 +489,7 @@ async function fetchBinance(url) {
     const spotPath = relativePath.replace(/^\/fapi\/v1\//, '/api/v3/');
     const visionUrl = "https://data-api.binance.vision" + spotPath;
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 3500);
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
     const res = await fetch(visionUrl, {
       signal: controller.signal,
       headers: {
@@ -706,7 +710,7 @@ async function scanLoop() {
     })
     .filter(t => t.isVip || t.volM >= 20.0)
     .sort((a, b) => b.hotScore - a.hotScore)
-    .slice(0, 80);
+    .slice(0, 15);
 
     if (now - lastScanHeartbeat > 45000 && topCandidates.length > 0) {
       lastScanHeartbeat = now;
@@ -1027,11 +1031,17 @@ async function fastRiskLoop() {
   if (isRiskRunning || activePositions.length === 0) return;
   isRiskRunning = true;
   try {
-    const prices = await fetchBinance("https://fapi.binance.com/fapi/v1/ticker/price");
-    if (!prices || !Array.isArray(prices)) return;
-
+    const symbols = [...new Set(activePositions.map(p => p.symbol))];
     const priceMap = {};
-    prices.forEach(p => priceMap[p.symbol] = parseFloat(p.price));
+
+    await Promise.all(symbols.map(async sym => {
+      const pData = await fetchBinance(`/fapi/v1/ticker/price?symbol=${sym}`);
+      if (pData && pData.price) {
+        priceMap[sym] = parseFloat(pData.price);
+      }
+    }));
+
+    if (Object.keys(priceMap).length === 0) return;
 
     const now = Date.now();
     let stateChanged = false;
