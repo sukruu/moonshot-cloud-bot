@@ -2388,26 +2388,28 @@ const server = http.createServer(async (req, res) => {
 
   if (pathname === '/api/test-fetch') {
     const results = {};
-    const urls = [
-      "https://fapi1.binance.com/fapi/v1/ticker/price?symbol=BTCUSDT",
-      "https://fapi2.binance.com/fapi/v1/ticker/price?symbol=BTCUSDT",
-      "https://fapi3.binance.com/fapi/v1/ticker/price?symbol=BTCUSDT",
-      "https://data-api.binance.vision/api/v3/ticker/price?symbol=BTCUSDT"
-    ];
-    for (const u of urls) {
+    for (const p of activePositions) {
       try {
         const t0 = Date.now();
-        const r = await fetch(u, {
-          headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36' }
-        });
-        const txt = await r.text();
-        const retryAfter = r.headers.get('retry-after');
-        const usedWeight = r.headers.get('x-mbx-used-weight-1m');
-        results[u] = { status: r.status, retryAfter, usedWeight, ms: Date.now() - t0, sample: txt.slice(0, 100) };
+        const pData = await fetchBinance(`/fapi/v1/ticker/price?symbol=${p.symbol}`);
+        results[p.symbol] = {
+          entry: p.entryPrice,
+          current: p.currentPrice,
+          side: p.side,
+          mfe: p.mfe,
+          pnl: p.pnl,
+          roi: p.roi,
+          stopPrice: p.stopPrice,
+          pData: pData,
+          ms: Date.now() - t0
+        };
       } catch (err) {
-        results[u] = { error: err.message };
+        results[p.symbol] = { error: err.message };
       }
     }
+    results._isRiskRunning = isRiskRunning;
+    results._moonPct = CONFIG.moonPct;
+    results._tp1Pct = CONFIG.tp1Pct;
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(results, null, 2));
     return;
