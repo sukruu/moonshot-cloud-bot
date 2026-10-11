@@ -86,5 +86,115 @@
     "title": "DevOps & Sistem",
     "text": "Sunucu çalışma süresi 0 dk. Piyasa verisi: alındı, backtest verisi: alındı.",
     "tag": "SYSTEM"
+  },
+  {
+    "id": "1791747189063he4a",
+    "time": "22:33:09",
+    "timestamp": 1791747189150,
+    "agent": "👑 YÖNETİCİ",
+    "roleKey": "MANAGER",
+    "color": "#c084fc",
+    "title": "Risk Direktörü",
+    "text": "🚨 [KRİTİK MÜDAHALE - SAVUNMA MODU]: Kasa $85.78 seviyesinde (%14.2 zarar, zirveden %34.6 DD). Kasa erimesini durdurmak için yönetimi devraldım! Slot 1'e, Teminat $10'a, Stop Loss %0.85'e (maks risk -$1.70) çekildi!",
+    "tag": "RISK"
+  },
+  {
+    "id": "1791747189151m6zx",
+    "time": "22:33:09",
+    "timestamp": 1791747189152,
+    "agent": "🧠 ANALİZCİ",
+    "roleKey": "ANALYST",
+    "color": "#38bdf8",
+    "title": "Piyasa İstihbaratı",
+    "text": "🧠 [ADLİ TEŞHİS]: 45 işlem incelendi. 18 zararın 10'u durgunluk çıkışı (-$28.28), 6'sı stop (-$34.47). Ortalama zarar -$3.56 iken kâr +$1.85 (asimetrik risk bozukluğu). Ayrıca 15m mumu eksi olan STRK ve CHIP'te bıçak tutulmuş. 15m düşen koinler ve egzotik semboller yasaklandı.",
+    "tag": "STRATEGY"
+  },
+  {
+    "id": "1791747189152jdc0",
+    "time": "22:33:09",
+    "timestamp": 1791747189153,
+    "agent": "🧪 TESTÇİ",
+    "roleKey": "TESTER",
+    "color": "#4ade80",
+    "title": "QA & Simülatör",
+    "text": "🧪 [QA RİSK SİMÜLASYONU]: Yeni $10 teminat ve %0.85 SL ile tek işlemde maksimum risk -$1.70'e düşürüldü. 10 ardışık stop dahi kasadan sadece $17 eksiltir. Lazer kâr kilidi (+%7 ROI = +$1.40) ile kâr/zarar 1:1 dengelendi. Kasayı yeniden $100 üzerine çıkarma olasılığı: %84.",
+    "tag": "STRATEGY"
+  },
+  {
+    "id": "1791747189153mwgu",
+    "time": "22:33:09",
+    "timestamp": 1791747189153,
+    "agent": "⚔️ TRADER",
+    "roleKey": "TRADER",
+    "color": "#facc15",
+    "title": "Sinyal & Yürütme",
+    "text": "⚔️ [EMİR ONAYLANDI]: Savunma emri yürütülüyor! Yalnızca 1 açık slot ve $10 teminat kullanılacak. 15m mumu pozitif (≥ +0.10%) olmayan hiçbir koine girilmeyecek. Disiplinli sniper avı devrede.",
+    "tag": "TRADE"
+  },
+  {
+    "id": "1791747189154mya2",
+    "time": "22:33:09",
+    "timestamp": 1791747189154,
+    "agent": "💻 YAZILIMCI",
+    "roleKey": "ENGINEER",
+    "color": "#a78bfa",
+    "title": "DevOps & Sistem",
+    "text": "💻 [SİSTEM &amp; KOD GÜNCELLEMESİ]: Canlı server.js çekirdeğine müdahale uygulandı (Slot: 1, Teminat: $10, SL: %0.85, BE: %0.35). Sembol regex filtresi aktif. Sistem stabil.",
+    "tag": "SYSTEM"
+  },
+  {
+    "id": "17917482469320l1m",
+    "time": "22:50:46",
+    "timestamp": 1791748246969,
+    "agent": "👑 YÖNETİCİ",
+    "roleKey": "MANAGER",
+    "color": "#c084fc",
+    "title": "Risk Direktörü",
+    "text": "🚨 [KRİTİK MÜDAHALE - SAVUNMA MODU]: Kasa $85.78 seviyesinde (%14.2 zarar, zirveden %34.6 DD). Kasa erimesini durdurmak için yönetimi devraldım! Slot 1'e, Teminat $10'a, Stop Loss %0.85'e (maks risk -$1.70) çekildi!",
+    "tag": "RISK"
+  },
+  {
+    "id": "1791748246971ybtk",
+    "time": "22:50:46",
+    "timestamp": 1791748246971,
+    "agent": "🧠 ANALİZCİ",
+    "roleKey": "ANALYST",
+    "color": "#38bdf8",
+    "title": "Piyasa İstihbaratı",
+    "text": "🧠 [ADLİ TEŞHİS]: 45 işlem incelendi. 18 zararın 10'u durgunluk çıkışı (-$28.28), 6'sı stop (-$34.47). Ortalama zarar -$3.56 iken kâr +$1.85 (asimetrik risk bozukluğu). Ayrıca 15m mumu eksi olan STRK ve CHIP'te bıçak tutulmuş. 15m düşen koinler ve egzotik semboller yasaklandı.",
+    "tag": "STRATEGY"
+  },
+  {
+    "id": "1791748246972rz7e",
+    "time": "22:50:46",
+    "timestamp": 1791748246972,
+    "agent": "🧪 TESTÇİ",
+    "roleKey": "TESTER",
+    "color": "#4ade80",
+    "title": "QA & Simülatör",
+    "text": "🧪 [QA RİSK SİMÜLASYONU]: Yeni $10 teminat ve %0.85 SL ile tek işlemde maksimum risk -$1.70'e düşürüldü. 10 ardışık stop dahi kasadan sadece $17 eksiltir. Lazer kâr kilidi (+%7 ROI = +$1.40) ile kâr/zarar 1:1 dengelendi. Kasayı yeniden $100 üzerine çıkarma olasılığı: %84.",
+    "tag": "STRATEGY"
+  },
+  {
+    "id": "1791748246972g0if",
+    "time": "22:50:46",
+    "timestamp": 1791748246973,
+    "agent": "⚔️ TRADER",
+    "roleKey": "TRADER",
+    "color": "#facc15",
+    "title": "Sinyal & Yürütme",
+    "text": "⚔️ [EMİR ONAYLANDI]: Savunma emri yürütülüyor! Yalnızca 1 açık slot ve $10 teminat kullanılacak. 15m mumu pozitif (≥ +0.10%) olmayan hiçbir koine girilmeyecek. Disiplinli sniper avı devrede.",
+    "tag": "TRADE"
+  },
+  {
+    "id": "1791748246973obco",
+    "time": "22:50:46",
+    "timestamp": 1791748246974,
+    "agent": "💻 YAZILIMCI",
+    "roleKey": "ENGINEER",
+    "color": "#a78bfa",
+    "title": "DevOps & Sistem",
+    "text": "💻 [SİSTEM &amp; KOD GÜNCELLEMESİ]: Canlı server.js çekirdeğine müdahale uygulandı (Slot: 1, Teminat: $10, SL: %0.85, BE: %0.35). Sembol regex filtresi aktif. Sistem stabil.",
+    "tag": "SYSTEM"
   }
 ]

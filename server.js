@@ -53,6 +53,7 @@ let DYNAMIC = {
   vol3hMin: 2.5,         // 3 saatlik minimum hacim ($M)
   candidateSlice: 35,    // Kline ile derin incelenen aday sayısı
   regime: 'DEFAULT',
+  mode: 'BALANCED',      // 'DEFENSIVE_SNIPER', 'CAUTIOUS_RECOVERY', 'GROWTH', 'BALANCED'
   updatedAt: 0
 };
 const DYNAMIC_LIMITS = {
@@ -214,6 +215,19 @@ function persistState() {
       savedAt: Date.now()
     }, null, 2), 'utf8');
   } catch (e) {}
+}
+
+function getPeakBalance() {
+  let peak = CONFIG.initialBalance || 100.0;
+  if (Array.isArray(history) && history.length > 0) {
+    let cur = CONFIG.initialBalance || 100.0;
+    const chron = [...history].reverse();
+    for (const h of chron) {
+      cur += (h.pnl || 0);
+      if (cur > peak) peak = cur;
+    }
+  }
+  return Math.max(peak, 131.21, balance);
 }
 
 function getTradeRadarFields(trade) {
@@ -577,8 +591,9 @@ async function updateRadar() {
       };
     });
 
+    const SYMBOL_REGEX = /^[A-Z0-9]{2,12}USDT$/;
     const valid = tickers.filter(t => {
-      if (!t.symbol.endsWith("USDT") || t.symbol.startsWith("USDC") || BANNED_SYMBOLS.has(t.symbol)) return false;
+      if (!SYMBOL_REGEX.test(t.symbol) || t.symbol.startsWith("USDC") || BANNED_SYMBOLS.has(t.symbol)) return false;
       const volM = (parseFloat(t.quoteVolume) || 0) / 1e6;
       return volM >= 3.0;
     }).sort((a, b) => Math.abs(parseFloat(b.priceChangePercent) || 0) - Math.abs(parseFloat(a.priceChangePercent) || 0));
@@ -691,8 +706,9 @@ async function scanLoop() {
 
     const activeSyms = new Set(activePositions.map(x => x.symbol));
 
+    const SYMBOL_REGEX = /^[A-Z0-9]{2,12}USDT$/;
     const validTickers = tickers.filter(t => {
-      if (!t.symbol.endsWith("USDT") || t.symbol.startsWith("USDC") || BANNED_SYMBOLS.has(t.symbol)) return false;
+      if (!SYMBOL_REGEX.test(t.symbol) || t.symbol.startsWith("USDC") || BANNED_SYMBOLS.has(t.symbol)) return false;
       const p = parseFloat(t.lastPrice);
       return p >= 0.0001;
     });
@@ -829,20 +845,31 @@ async function scanLoop() {
           // 🎯 RADAR DOĞRUDAN VUR-KAÇ TETİĞİ (GECİKMELİ GİRİŞ ENGELLİ)
           const taker = rInfo.takerBuyRatio || 50;
           const chg3 = rInfo.chg3h || 0;
+          const chg15Val = (rInfo.chg15m !== undefined && rInfo.chg15m !== null) ? rInfo.chg15m : 0;
           const sig = rInfo.signal || "";
 
-          // 1. YÜKSELİRKEN VUR-KAÇ (LONG): Balina Boğa / Güçlü Boğa / Anlık Sıçrama + Taker >= 50.8% + 24s >= -1.0%
-          const isEarlyLongMove = (chg3 >= 1.2 || (rInfo.chg15m || 0) >= 1.0) && chg3 <= 14.0 && chg24Val >= -1.0 && chg24Val < 30.0 && taker >= 50.8;
+          // 1. YÜKSELİRKEN VUR-KAÇ (LONG): 15m kesinlikle pozitif olmalı (≥ +0.10%) + Taker >= 50.8% + 24s >= -1.0%
+          const isEarlyLongMove = chg15Val >= 0.10 && (chg3 >= 1.2 || chg15Val >= 0.9) && chg3 <= 14.0 && chg24Val >= -1.0 && chg24Val < 30.0 && taker >= 50.8;
           if (isEarlyLongMove && (sig.includes("BOĞA") || sig.includes("ROKET") || sig.includes("SIÇRAMA") || sig.includes("BALİNA"))) {
             isDirectRadarLong = true;
-            radarTag = `[${sig} | 3s: +%${chg3.toFixed(1)} / 15m: +%${(rInfo.chg15m || 0).toFixed(1)} / %${taker.toFixed(0)} Alıcı]`;
+            radarTag = `[${sig} | 3s: +%${chg3.toFixed(1)} / 15m: +%${chg15Val.toFixed(1)} / %${taker.toFixed(0)} Alıcı]`;
           }
 
-          // 2. DÜŞERKEN VUR-KAÇ (SHORT): Balina Ayı / Güçlü Ayı + Taker <= 49.2% + 24s <= 1.0%
-          const isEarlyShortMove = (chg3 <= -1.2 || (rInfo.chg15m || 0) <= -1.0) && chg3 >= -8.0 && chg24Val <= 1.0 && chg24Val > -18.0 && taker <= 49.2;
+          // 2. DÜŞERKEN VUR-KAÇ (SHORT): 15m kesinlikle negatif olmalı (≤ -0.10%) + Taker <= 49.2% + 24s <= 1.0%
+          const isEarlyShortMove = chg15Val <= -0.10 && (chg3 <= -1.2 || chg15Val <= -0.9) && chg3 >= -8.0 && chg24Val <= 1.0 && chg24Val > -18.0 && taker <= 49.2;
           if (isEarlyShortMove && (sig.includes("AYI") || sig.includes("ŞELALE") || sig.includes("BALİNA"))) {
             isDirectRadarShort = true;
-            radarTag = `[${sig} | 3s: %${chg3.toFixed(1)} / 15m: %${(rInfo.chg15m || 0).toFixed(1)} / %${(100 - taker).toFixed(0)} Satıcı]`;
+            radarTag = `[${sig} | 3s: %${chg3.toFixed(1)} / 15m: %${chg15Val.toFixed(1)} / %${(100 - taker).toFixed(0)} Satıcı]`;
+          }
+
+          // 🛡️ DÜŞEN BIÇAK (FALLING KNIFE) ENGELİ: 15m mumu negatif olan koine LONG, pozitif olan koine SHORT KESİNLİKLE YASAK!
+          if (chg15Val < 0.10) {
+            isDirectRadarLong = false;
+            radarOkLong = false;
+          }
+          if (chg15Val > -0.10) {
+            isDirectRadarShort = false;
+            radarOkShort = false;
           }
 
           // 🛡️ AŞIRI SATIM & DİP TUZAĞI ENGELİ: Koin zaten 3 saatte -%8 veya 24 saatte -%20 çöktüyse SHORT YASAK!
@@ -969,9 +996,10 @@ async function scanLoop() {
         const btcSafeForLong = (btc5mNumeric > -0.25) && (btc15mNumeric > -0.35) && (btc15mNumeric < 1.00) && (btc5mNumeric < 0.60);
         const btcSafeForShort = (btc5mNumeric < 0.20) && (btc15mNumeric < 0.30) && (btc15mNumeric > -0.80) && (btc5mNumeric > -0.50);
 
-        // 🎯 TREND ŞARTI: LONG için (3s >= +%1.2 VEYA 15m >= +%0.9 VEYA Balina Sinyali) ve 24s >= -1.0%
-        const longTrendOk = !!rInfo && ((rInfo.chg3h || 0) >= 1.2 || (rInfo.chg15m || 0) >= 0.9 || (rInfo.signal && rInfo.signal.includes("BALİNA"))) && chg24Val >= -1.0;
-        const shortTrendOk = !!rInfo && ((rInfo.chg3h || 0) <= -1.2 || (rInfo.chg15m || 0) <= -0.9 || (rInfo.signal && rInfo.signal.includes("BALİNA"))) && chg24Val <= 1.0;
+        // 🎯 TREND ŞARTI: LONG için 15m kesinlikle pozitif (>= +0.10%), SHORT için kesinlikle negatif (<= -0.10%) olmalı!
+        const cur15m = (rInfo && rInfo.chg15m !== undefined) ? rInfo.chg15m : 0;
+        const longTrendOk = !!rInfo && cur15m >= 0.10 && ((rInfo.chg3h || 0) >= 1.2 || cur15m >= 0.9 || (rInfo.signal && rInfo.signal.includes("BALİNA"))) && chg24Val >= -1.0;
+        const shortTrendOk = !!rInfo && cur15m <= -0.10 && ((rInfo.chg3h || 0) <= -1.2 || cur15m <= -0.9 || (rInfo.signal && rInfo.signal.includes("BALİNA"))) && chg24Val <= 1.0;
 
         const isLongPump = finalLongSignal && longTrendOk && validWickLong && radarOkLong && strictTrendOkLong && !isNearPeakTrap && btcSafeForLong && !nearMax6m;
         const isShortDump = finalShortSignal && shortTrendOk && validWickShort && radarOkShort && strictTrendOkShort && !isNearDipTrap && btcSafeForShort;
@@ -1134,12 +1162,22 @@ async function fastRiskLoop() {
         targetStop = isLong ? pos.entryPrice * (1 + (mfe - 0.25) / 100) : pos.entryPrice * (1 - (mfe - 0.25) / 100);
       } else if (mfe >= 0.65) {
         targetStop = isLong ? pos.entryPrice * (1 + (mfe - 0.20) / 100) : pos.entryPrice * (1 - (mfe - 0.20) / 100);
-      } else if (mfe >= (CONFIG.bePct || 0.45)) {
-        targetStop = isLong ? pos.entryPrice * 1.0020 : pos.entryPrice * 0.9980;
+      } else if (mfe >= (CONFIG.bePct || 0.35)) {
+        targetStop = isLong ? pos.entryPrice * 1.0015 : pos.entryPrice * 0.9985;
+      }
+
+      // ⏱️ Durgunluk stop daraltması: Pozisyon 15 dk boyunca hiç ivme alamamışsa (MFE < %0.25),
+      // stopu tam stop yerine -%0.55 spot (-%11 ROI) seviyesine çekerek sermayeyi koru!
+      const durMinLive = (now - pos.entryTime) / 60000;
+      if (!pos.beLocked && durMinLive >= 15 && (pos.mfe || 0) < 0.25) {
+        const stagStop = isLong ? pos.entryPrice * (1 - 0.55 / 100) : pos.entryPrice * (1 + 0.55 / 100);
+        if (!targetStop || (isLong && stagStop > targetStop) || (!isLong && stagStop < targetStop)) {
+          targetStop = stagStop;
+        }
       }
 
       if (targetStop) {
-        if (!pos.beLocked && mfe >= (CONFIG.bePct || 0.45)) {
+        if (!pos.beLocked && mfe >= (CONFIG.bePct || 0.35)) {
           pos.beLocked = true;
           addLog(`🛡️ [BAŞABAŞ KİLİDİ] ${pos.symbol} +%${mfe.toFixed(2)} Gördü, Stop Girişe Çekildi ($0.00 Risk).`, 'TRADE');
         }
@@ -1165,7 +1203,7 @@ async function fastRiskLoop() {
 
       // Eğer TP1 (%50 kâr) zaten cebe girdiyse kalan %50 pozisyona Moonshot (dev kâr) için daha geniş alan tanı!
       const effectivePullback = pos.tp1Taken ? Math.max(0.35, pullbackLimit) : pullbackLimit;
-      const minMfeForLock = pos.tp1Taken ? 0.90 : 0.60;
+      const minMfeForLock = pos.tp1Taken ? 0.90 : 0.70;
 
       if (!exitReason && mfe >= minMfeForLock && (mfe - move) >= effectivePullback) {
         exitReason = pos.tp1Taken
@@ -1173,11 +1211,10 @@ async function fastRiskLoop() {
           : `🏆 Lazer Vur-Kaç Kâr Kilidi (+%${pos.roi.toFixed(1)} ROI / Zirve: +%${mfe.toFixed(2)} Spot)`;
       }
 
-      // 5. DURGUN KOİN KORUMA ÇIKIŞI: 25 dk boyunca hiç ivme alamamışsa (MFE < %0.35) ve eksiye kayıyorsa
-      // Saatlerce uykuda kalıp tam stopa sürüklenmesini engelle, ufak sıyrıkla çık ve slotu serbest bırak!
-      const durMinLive = (now - pos.entryTime) / 60000;
-      if (!exitReason && durMinLive >= 25 && (pos.mfe || 0) < 0.35 && pos.roi <= -5.0 && pos.roi >= -22.0) {
-        exitReason = `⏱️ Durgunluk Koruması (${durMinLive.toFixed(0)}dk İvme Yok / MFE: +%${(pos.mfe || 0).toFixed(2)} / Korumalı Çıkış)`;
+      // 5. DURGUN KOİN KORUMA ÇIKIŞI: 20 dk boyunca hiç ivme alamamışsa (MFE < %0.25) ve hafif eksideyse (-%2.5 ile -%8.0 arası)
+      // Erken sıyrılma ile slotu kurtar; asla -%20'lere kadar bekletip tabanda satma!
+      if (!exitReason && durMinLive >= 20 && (pos.mfe || 0) < 0.25 && pos.roi <= -2.5 && pos.roi >= -8.0) {
+        exitReason = `⏱️ Erken Durgunluk Koruması (${durMinLive.toFixed(0)}dk İvme Yok / MFE: +%${(pos.mfe || 0).toFixed(2)} / Erken Sıyrılma)`;
       }
 
       // 6. STOP LOSS VEYA KİLİTLİ STOP TETİKLENMESİ
@@ -1301,8 +1338,14 @@ function getStats() {
   const totalRoi = (totalPnl / CONFIG.initialBalance) * 100;
   const megaWins = history.filter(h => (h.mfe || 0) >= 15.0).length;
 
+  const peak = getPeakBalance();
+  const ddPct = peak > 0 ? (((peak - balance) / peak) * 100).toFixed(1) : "0.0";
+
   return {
     balance: balance.toFixed(2),
+    peakBalance: peak.toFixed(2),
+    drawdownPct: ddPct,
+    mode: DYNAMIC.mode || 'DEFENSIVE_SNIPER',
     totalPnl: totalPnl.toFixed(2),
     totalRoi: totalRoi.toFixed(2),
     totalTrades,
@@ -2074,20 +2117,23 @@ function serveDashboardHtml() {
 
         if (data.teamStatus && data.teamStatus.team) {
           const t = data.teamStatus.team;
+          const ei = data.teamStatus.executiveIntervention;
           if (t.manager && document.getElementById("teamManager")) {
-            document.getElementById("teamManager").innerText = t.manager.status.includes('ONAY') ? 'ONAYLANDI' : 'VETO';
+            const isDef = ei && ei.mode === 'DEFENSIVE_SNIPER';
+            document.getElementById("teamManager").innerText = isDef ? '🚨 SAVUNMA MODU' : (t.manager.status.includes('ONAY') ? 'ONAYLANDI' : 'VETO');
+            document.getElementById("teamManager").className = 'status-pill ' + (isDef ? 'purple' : 'green');
           }
           if (t.analyst && document.getElementById("teamAnalyst")) {
             document.getElementById("teamAnalyst").innerText = t.analyst.description ? t.analyst.description.slice(0, 18) : 'Rejim Aktif';
           }
           if (t.trader && document.getElementById("teamTrader")) {
-            document.getElementById("teamTrader").innerText = t.trader.targetVolThreshold || 'Lazer & Moonshot';
+            document.getElementById("teamTrader").innerText = (ei && ei.mode === 'DEFENSIVE_SNIPER') ? '🎯 1 Slot Sniper ($10)' : (t.trader.targetVolThreshold || 'Lazer & Moonshot');
           }
           if (t.tester && document.getElementById("teamTester")) {
-            document.getElementById("teamTester").innerText = 'WR: ' + t.tester.lastTestWinRate;
+            document.getElementById("teamTester").innerText = (ei && ei.mode === 'DEFENSIVE_SNIPER') ? 'Simülasyon: Güvenli' : ('WR: ' + t.tester.lastTestWinRate);
           }
           if (t.engineer && document.getElementById("teamEngineer")) {
-            document.getElementById("teamEngineer").innerText = 'Render Canlı';
+            document.getElementById("teamEngineer").innerText = (ei && ei.mode === 'DEFENSIVE_SNIPER') ? 'Regex & Kod Aktif' : 'Render Canlı';
           }
         }
 
@@ -2795,6 +2841,8 @@ server.listen(PORT, () => {
       try {
         const report = await runAutonomousTeamSync({
           balance,
+          initialBalance: CONFIG.initialBalance || 100.0,
+          peakBalance: getPeakBalance(),
           activeCount: activePositions.length,
           maxSlots: CONFIG.maxSlots,
           uptimeMin: Math.floor((Date.now() - startTime) / 60000),
@@ -2803,24 +2851,43 @@ server.listen(PORT, () => {
         });
         teamStatusCache = report;
 
+        const ei = report && report.executiveIntervention;
         const d = report && report.decision;
-        if (d && d.approved && d.entryFilters) {
+
+        if (ei && ei.active) {
+          CONFIG.maxSlots = ei.maxSlots;
+          CONFIG.marginPerTrade = ei.marginPerTrade;
+          CONFIG.slPct = ei.slPct;
+          CONFIG.bePct = ei.bePct;
+          CONFIG.tp1Pct = ei.tp1Pct;
+          CONFIG.moonPct = ei.moonPct;
+          DYNAMIC.mode = ei.mode;
+          DYNAMIC.vol3hMin = ei.vol3hMin;
+          DYNAMIC.candidateSlice = ei.candidateSlice;
+          DYNAMIC.regime = (d && d.regime) || DYNAMIC.regime;
+          DYNAMIC.updatedAt = Date.now();
+          saveSettings();
+          addLog(`🚨 AJAN MÜDAHALESİ AKTİF: [${ei.mode}] Slot: ${CONFIG.maxSlots} | Teminat: $${CONFIG.marginPerTrade} | SL: %${CONFIG.slPct} | BE: %${CONFIG.bePct} | Eşik: $${DYNAMIC.vol3hMin}M`, 'RISK');
+        } else if (d && d.approved && d.entryFilters) {
           const before = { ...DYNAMIC };
           DYNAMIC.vol3hMin = clamp(Number(d.entryFilters.vol3hMin) || before.vol3hMin, DYNAMIC_LIMITS.vol3hMin);
           DYNAMIC.candidateSlice = Math.round(clamp(Number(d.entryFilters.candidateSlice) || before.candidateSlice, DYNAMIC_LIMITS.candidateSlice));
           DYNAMIC.regime = d.regime || before.regime;
+          DYNAMIC.mode = (ei && ei.mode) || 'BALANCED';
           DYNAMIC.updatedAt = Date.now();
-          if (before.vol3hMin !== DYNAMIC.vol3hMin || before.candidateSlice !== DYNAMIC.candidateSlice) {
-            addLog(`🤖 Ekip kararı uygulandı: Hacim eşiği $${before.vol3hMin}M → $${DYNAMIC.vol3hMin}M | Aday ${before.candidateSlice} → ${DYNAMIC.candidateSlice} (${DYNAMIC.regime})`, 'INFO');
-          }
           if (d.exitParams) {
             const ep = d.exitParams;
-            CONFIG.slPct = clamp(Number(ep.slPct) || CONFIG.slPct, [0.8, 1.5]);
+            CONFIG.slPct = clamp(Number(ep.slPct) || CONFIG.slPct, [0.75, 1.50]);
             CONFIG.bePct = clamp(Number(ep.bePct) || CONFIG.bePct, [0.25, 0.60]);
             CONFIG.tp1Pct = clamp(Number(ep.tp1Pct) || CONFIG.tp1Pct, [0.40, 1.50]);
             CONFIG.moonPct = clamp(Number(ep.moonPct) || CONFIG.moonPct, [1.00, 3.00]);
-            addLog(`🤖 Ekip çıkış ayarlarını güncelledi: SL %${CONFIG.slPct} | BE %${CONFIG.bePct} | TP1 %${CONFIG.tp1Pct} | Moon %${CONFIG.moonPct}`, 'INFO');
           }
+          if (d.riskParams) {
+            CONFIG.maxSlots = d.riskParams.maxSlots || CONFIG.maxSlots;
+            CONFIG.marginPerTrade = d.riskParams.marginPerTrade || CONFIG.marginPerTrade;
+          }
+          saveSettings();
+          addLog(`🤖 Ekip kararı uygulandı: [${DYNAMIC.mode}] Slot: ${CONFIG.maxSlots} | Teminat: $${CONFIG.marginPerTrade} | Eşik $${DYNAMIC.vol3hMin}M | Aday ${DYNAMIC.candidateSlice}`, 'INFO');
         } else {
           addLog(`🤖 Ekip toplantısı: değişiklik onaylanmadı (${(d && d.reason) || 'bilinmiyor'})`, 'INFO');
         }
@@ -2829,7 +2896,7 @@ server.listen(PORT, () => {
       }
     };
 
-    setTimeout(runTeam, 15000);
+    setTimeout(runTeam, 2000);
     setInterval(runTeam, 30 * 60 * 1000);
   } catch (e) {
     addLog(`Ajan Ekibi yüklenemedi: ${e.message}`, 'WARN');

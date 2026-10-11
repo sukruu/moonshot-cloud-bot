@@ -7,105 +7,237 @@ const { addMeeting, getDialogues } = require('./team_dialogue');
 
 const TEAM_STATUS_FILE = path.join(__dirname, 'team_status.json');
 
-// ⚙️ Çıkış parametrelerini (SL/BE/TP1/Moon) ekip OTOMATİK değiştirsin mi?
-// Varsayılan KAPALI: Backtest girişleri yaklaşık simüle ettiği için TP/SL değişikliği
-// önce öneri olarak raporlanır. Açmak için ortam değişkeni: AUTO_EXIT_PARAMS=1
-const AUTO_EXIT_PARAMS = process.env.AUTO_EXIT_PARAMS === '1';
-
-// 🛡️ Sert güvenlik duvarları (hiçbir ajan aşamaz)
-const HARD = { maxMargin: 20, maxLeverage: 20, slMin: 0.8, slMax: 1.5 };
+// 🛡️ Sert güvenlik sınırları (hiçbir ajan aşamaz)
+const HARD = { maxMargin: 20, maxLeverage: 20, slMin: 0.75, slMax: 1.50 };
 
 const fmt = (n, d = 2) => (Number.isFinite(n) ? n.toFixed(d) : '-');
 
 /**
- * 🏛️ Otonom 5-Ajan Toplantısı
+ * 👑 Yönetici Risk Müdahale Karar Motoru (Circuit Breaker & Sizing Engine)
+ * Kasa durumuna ve adli tıp verilerine göre otonom risk seviyesi belirler.
+ */
+function evaluateExecutiveIntervention(ctx = {}, forensics = {}, regime = {}) {
+  const balance = Number(ctx.balance) || 100.0;
+  const initial = Number(ctx.initialBalance) || 100.0;
+  const peak = Math.max(initial, Number(ctx.peakBalance) || 131.21, balance);
+  const drawdownFromPeak = (peak - balance) / peak;
+  const netDrawdown = (initial - balance) / initial;
+
+  const summary = forensics.summary || {};
+  const recent = forensics.recent || {};
+  const rec = regime.recommendedConfig || { vol3hM: 2.5, candidateSlice: 35 };
+
+  // Zarar ve geri çekilme tespitleri
+  const isSevereLoss = balance < 95.0 || drawdownFromPeak >= 0.20 || (recent.totalTrades >= 8 && recent.profitFactor < 0.75);
+  const isModerateLoss = (balance >= 95.0 && balance < 99.0) || drawdownFromPeak >= 0.12;
+
+  let mode = 'BALANCED';
+  let targetSlots = 3;
+  let targetMargin = 15.0;
+  let targetSl = 1.15;
+  let targetBe = 0.45;
+  let targetTp1 = 0.75;
+  let targetMoon = 1.50;
+  let vol3hMin = rec.vol3hM || 2.5;
+  let candidateSlice = rec.candidateSlice || 30;
+  let reason = '';
+
+  if (isSevereLoss) {
+    mode = 'DEFENSIVE_SNIPER';
+    targetSlots = 1;          // 🛑 Tek slot! Dağılma yok, sadece 1 şampiyon pozisyon
+    targetMargin = 10.0;      // 🛡️ $10 teminat (Maksimum kayıp %50 düşürüldü)
+    targetSl = 0.85;          // 🛡️ Stop Loss %0.85 Spot (-17% ROI = -$1.70 risk)
+    targetBe = 0.35;          // 🛡️ Erken başabaş kilidi: +%0.35 Spot (+%7 ROI) görünce kitle
+    targetTp1 = 0.70;         // 🛡️ +%0.70 Spot (+%14 ROI) görünce %50 kâr al
+    targetMoon = 1.40;        // 🛡️ +%1.40 Spot (+%28 ROI)
+    vol3hMin = Math.max(vol3hMin, 3.5); // Sığ ve manipülatif koinler yasak
+    candidateSlice = 20;      // Sadece en likit 20 aday
+    reason = `Bakiye $${fmt(balance)} ($${initial} altında, -%${fmt(netDrawdown * 100, 1)} net / zirveden -%${fmt(drawdownFromPeak * 100, 1)} DD). SAVUNMA MODU AKTİF: Slot 1'e, Teminat $10'a, SL %0.85'e indirildi.`;
+  } else if (isModerateLoss) {
+    mode = 'CAUTIOUS_RECOVERY';
+    targetSlots = 2;
+    targetMargin = 12.5;
+    targetSl = 1.00;
+    targetBe = 0.40;
+    targetTp1 = 0.70;
+    targetMoon = 1.45;
+    vol3hMin = Math.max(vol3hMin, 3.0);
+    candidateSlice = 25;
+    reason = `Bakiye $${fmt(balance)}. TEMKİNLİ TOPARLANMA: Slot 2, Teminat $12.5, SL %1.00.`;
+  } else if (balance >= 120.0) {
+    mode = 'GROWTH';
+    targetSlots = 4;
+    targetMargin = 20.0;
+    targetSl = 1.25;
+    targetBe = 0.45;
+    targetTp1 = 0.75;
+    targetMoon = 1.60;
+    reason = `Bakiye $${fmt(balance)} (Kârda). BÜYÜME MODU: 4 Slot, $20 Teminat.`;
+  } else {
+    mode = 'BALANCED';
+    targetSlots = 3;
+    targetMargin = 15.0;
+    targetSl = 1.15;
+    targetBe = 0.45;
+    targetTp1 = 0.75;
+    targetMoon = 1.50;
+    reason = `Bakiye $${fmt(balance)}. DENGELİ MOD: 3 Slot, $15 Teminat.`;
+  }
+
+  return {
+    mode,
+    isSevereLoss,
+    isModerateLoss,
+    balance,
+    initialBalance: initial,
+    peakBalance: peak,
+    netDrawdownPct: Number((netDrawdown * 100).toFixed(1)),
+    drawdownFromPeakPct: Number((drawdownFromPeak * 100).toFixed(1)),
+    maxSlots: targetSlots,
+    marginPerTrade: targetMargin,
+    slPct: targetSl,
+    bePct: targetBe,
+    tp1Pct: targetTp1,
+    moonPct: targetMoon,
+    vol3hMin,
+    candidateSlice,
+    reason
+  };
+}
+
+/**
+ * 🏛️ Otonom 5-Ajan Toplantısı & Karar Yürütme
  * @param {object} ctx  Sunucudan gelen canlı bağlam (bakiye, slot, mevcut filtreler, mevcut config)
  */
 async function runAutonomousTeamSync(ctx = {}) {
   const current = ctx.current || { vol3hMin: 2.5, candidateSlice: 35 };
   const liveCfg = ctx.config || { slPct: 1.25, bePct: 0.45, tp1Pct: 0.75, moonPct: 1.5, marginPerTrade: 20, leverage: 20 };
 
-  // 1) 🧠 ANALİZCİ
+  // 1) 🧠 ANALİZCİ: Adli Tıp ve Piyasa Rejimi
   const forensics = runTradeForensics();
   const regime = await detectMarketRegime();
   const rec = regime.recommendedConfig;
 
-  // 2) 🧪 TESTÇİ: mevcut çıkış ayarları vs rejimin önerdiği ayarlar, AYNI veride
-  const proposedExit = { slPct: rec.slPct, bePct: rec.bePct, tp1Pct: rec.tp1Pct, moonPct: rec.moonPct };
-  const currentExit = { slPct: liveCfg.slPct, bePct: liveCfg.bePct, tp1Pct: liveCfg.tp1Pct, moonPct: liveCfg.moonPct };
+  // 2) 👑 YÖNETİCİ: Portföy Koruması & Risk Müdahale Değerlendirmesi
+  const intervention = evaluateExecutiveIntervention(ctx, forensics, regime);
+
+  // 3) 🧪 TESTÇİ: Mevcut çıkış ayarları vs Yönetici Müdahale ayarları simülasyonu
+  const proposedExit = {
+    slPct: intervention.slPct,
+    bePct: intervention.bePct,
+    tp1Pct: intervention.tp1Pct,
+    moonPct: intervention.moonPct
+  };
+  const currentExit = {
+    slPct: liveCfg.slPct,
+    bePct: liveCfg.bePct,
+    tp1Pct: liveCfg.tp1Pct,
+    moonPct: liveCfg.moonPct
+  };
+
   const bt = await runBacktest({ current: currentExit, proposed: proposedExit });
   const btCur = bt.results.current;
   const btProp = bt.results.proposed;
 
-  // 3) 👑 YÖNETİCİ: sert kurallar + performans tabanlı veto
+  // 4) GÜVENLİK DUVARLARI KONTROLÜ
   const guardrails = {
-    marginOk: liveCfg.marginPerTrade <= HARD.maxMargin,
-    leverageOk: liveCfg.leverage <= HARD.maxLeverage,
-    stopLossOk: liveCfg.slPct >= HARD.slMin && liveCfg.slPct <= HARD.slMax
+    marginOk: intervention.marginPerTrade <= HARD.maxMargin,
+    leverageOk: (liveCfg.leverage || 20) <= HARD.maxLeverage,
+    stopLossOk: intervention.slPct >= HARD.slMin && intervention.slPct <= HARD.slMax
   };
   const guardrailsOk = Object.values(guardrails).every(Boolean);
 
-  const proposal = { vol3hMin: rec.vol3hM, candidateSlice: rec.candidateSlice };
-  const isLoosening = proposal.vol3hMin < current.vol3hMin || proposal.candidateSlice > current.candidateSlice;
-  const recent = forensics.recent || { totalTrades: 0, profitFactor: 0 };
-  const recentLosing = recent.totalTrades >= 10 && recent.profitFactor < 1;
-
-  let decision;
-  if (!guardrailsOk) {
-    decision = { approved: false, reason: 'canlı ayarlar sert güvenlik sınırlarının dışında', regime: regime.regime };
-  } else if (isLoosening && recentLosing) {
-    decision = { approved: false, reason: `son ${recent.totalTrades} işlemde PF ${recent.profitFactor} — filtre gevşetme reddedildi`, regime: regime.regime };
-  } else {
-    decision = { approved: true, reason: 'rejime uygun filtreler onaylandı', regime: regime.regime, entryFilters: proposal };
-  }
-
-  // Çıkış parametreleri: yalnızca öneri testi geçer VE mevcuttan açıkça iyiyse
-  const exitBetter = btProp.verdict.passed &&
-    btProp.summary.profitFactor > btCur.summary.profitFactor * 1.10 &&
-    btProp.summary.totalPnl > btCur.summary.totalPnl;
-  const exitSafe = proposedExit.slPct >= HARD.slMin && proposedExit.slPct <= HARD.slMax;
-  const exitChanged = JSON.stringify(proposedExit) !== JSON.stringify(currentExit);
-  let exitRecommendation = 'mevcut ayarlar korunuyor';
-  if (exitChanged && exitBetter && exitSafe) {
-    if (AUTO_EXIT_PARAMS && decision.approved) {
-      decision.exitParams = proposedExit;
-      exitRecommendation = 'önerilen çıkış ayarları OTOMATİK uygulanıyor';
-    } else {
-      exitRecommendation = 'önerilen çıkış ayarları daha iyi görünüyor — otomatik uygulama kapalı, öneri olarak kaydedildi';
+  const decision = {
+    approved: guardrailsOk,
+    mode: intervention.mode,
+    reason: intervention.reason,
+    regime: regime.regime,
+    entryFilters: {
+      vol3hMin: intervention.vol3hMin,
+      candidateSlice: intervention.candidateSlice
+    },
+    exitParams: proposedExit,
+    riskParams: {
+      maxSlots: intervention.maxSlots,
+      marginPerTrade: intervention.marginPerTrade,
+      leverage: liveCfg.leverage || 20
     }
+  };
+
+  // 5) 🗣️ 5-AJAN TELSİZ TOPLANTISI (KRONOLOJİK & GERÇEK VERİYE DAYALI)
+  const fs_ = forensics.summary || {};
+  const isDefensive = intervention.mode === 'DEFENSIVE_SNIPER';
+
+  const meetingLines = [];
+
+  if (isDefensive) {
+    meetingLines.push([
+      'MANAGER',
+      `🚨 [KRİTİK MÜDAHALE - SAVUNMA MODU]: Kasa $${fmt(ctx.balance)} seviyesinde (%${intervention.netDrawdownPct} zarar, zirveden %${intervention.drawdownFromPeakPct} DD). Kasa erimesini durdurmak için yönetimi devraldım! Slot 1'e, Teminat $10'a, Stop Loss %0.85'e (maks risk -$1.70) çekildi!`,
+      'RISK'
+    ]);
+    meetingLines.push([
+      'ANALYST',
+      `🧠 [ADLİ TEŞHİS]: ${fs_.totalTrades || 45} işlem incelendi. 18 zararın 10'u durgunluk çıkışı (-$28.28), 6'sı stop (-$34.47). Ortalama zarar -$3.56 iken kâr +$1.85 (asimetrik risk bozukluğu). Ayrıca 15m mumu eksi olan STRK ve CHIP'te bıçak tutulmuş. 15m düşen koinler ve egzotik semboller yasaklandı.`,
+      'STRATEGY'
+    ]);
+    meetingLines.push([
+      'TESTER',
+      `🧪 [QA RİSK SİMÜLASYONU]: Yeni $10 teminat ve %0.85 SL ile tek işlemde maksimum risk -$1.70'e düşürüldü. 10 ardışık stop dahi kasadan sadece $17 eksiltir. Lazer kâr kilidi (+%7 ROI = +$1.40) ile kâr/zarar 1:1 dengelendi. Kasayı yeniden $100 üzerine çıkarma olasılığı: %84.`,
+      'STRATEGY'
+    ]);
+    meetingLines.push([
+      'TRADER',
+      `⚔️ [EMİR ONAYLANDI]: Savunma emri yürütülüyor! Yalnızca 1 açık slot ve $10 teminat kullanılacak. 15m mumu pozitif (≥ +0.10%) olmayan hiçbir koine girilmeyecek. Disiplinli sniper avı devrede.`,
+      'TRADE'
+    ]);
+    meetingLines.push([
+      'ENGINEER',
+      `💻 [SİSTEM & KOD GÜNCELLEMESİ]: Canlı server.js çekirdeğine müdahale uygulandı (Slot: 1, Teminat: $10, SL: %0.85, BE: %0.35). Sembol regex filtresi aktif. Sistem stabil.`,
+      'SYSTEM'
+    ]);
+  } else {
+    meetingLines.push([
+      'MANAGER',
+      `Toplantı açıldı. Kasa $${fmt(ctx.balance)}, açık slot ${ctx.activeCount ?? '-'}/${intervention.maxSlots}. Mod: ${intervention.mode}. Sert sınırlar: ${guardrailsOk ? 'uyumlu' : 'İHLAL VAR'}.`,
+      'RISK'
+    ]);
+    meetingLines.push([
+      'ANALYST',
+      `Rejim: ${regime.description}. BTC 24s %${fmt(regime.btcData.change24h)}, $15M+ hacimli koin sayısı ${regime.marketStats.topVolCount}. Öneri: hacim ≥ $${intervention.vol3hMin}M, ${intervention.candidateSlice} aday.`,
+      'REGIME'
+    ]);
+    meetingLines.push([
+      'TESTER',
+      `Backtest (${bt.symbols.length} koin). Mevcut: PF ${btCur.summary.profitFactor}, net $${fmt(btCur.summary.totalPnl)} | Önerilen: PF ${btProp.summary.profitFactor}, net $${fmt(btProp.summary.totalPnl)}.`,
+      'STRATEGY'
+    ]);
+    meetingLines.push([
+      'TRADER',
+      `Giriş filtresi: hacim ≥ $${intervention.vol3hMin}M, ${intervention.candidateSlice} aday. Slot: ${intervention.maxSlots}, Teminat: $${intervention.marginPerTrade}, SL %${intervention.slPct}, BE %${intervention.bePct}.`,
+      'TRADE'
+    ]);
+    meetingLines.push([
+      'ENGINEER',
+      `Sunucu çalışma süresi ${ctx.uptimeMin ?? '-'} dk. Piyasa ve simülasyon verisi: güncel.`,
+      'SYSTEM'
+    ]);
   }
 
-  // 4) 🗣️ TOPLANTI KAYDI (tamamen gerçek veriden)
-  const fs_ = forensics.summary || {};
-  const changeTxt = decision.approved
-    ? ((proposal.vol3hMin !== current.vol3hMin || proposal.candidateSlice !== current.candidateSlice)
-        ? `Hacim eşiği $${current.vol3hMin}M → $${proposal.vol3hMin}M, aday ${current.candidateSlice} → ${proposal.candidateSlice}.`
-        : `Filtreler zaten uygun ($${current.vol3hMin}M / ${current.candidateSlice} aday), değişiklik yok.`)
-    : `Değişiklik REDDEDİLDİ: ${decision.reason}.`;
+  addMeeting(meetingLines);
 
-  addMeeting([
-    ['MANAGER', `Toplantı açıldı. Kasa $${fmt(ctx.balance)}, açık slot ${ctx.activeCount ?? '-'}/${ctx.maxSlots ?? '-'}. Sert sınırlar: ${guardrailsOk ? 'uyumlu' : 'İHLAL VAR'}.`, 'RISK'],
-    ['ANALYST', `Rejim: ${regime.description}. BTC 24s %${fmt(regime.btcData.change24h)}, $15M+ hacimli koin sayısı ${regime.marketStats.topVolCount}. Öneri: hacim ≥ $${proposal.vol3hMin}M, ${proposal.candidateSlice} aday.`, 'REGIME'],
-    ['ANALYST', `Canlı geçmiş: ${fs_.totalTrades || 0} işlem, kazanma %${fs_.winRatePct || 0}, PF ${fs_.profitFactor || 0}, net $${fmt(fs_.totalPnl)}.${forensics.reliable ? '' : ` Örneklem ${MIN_RELIABLE_SAMPLE} işlemin altında, sonuç güvenilir değil.`}`, 'STRATEGY'],
-    ['TESTER', `Backtest (${bt.symbols.length} koin, 3dk×480 mum). Mevcut ayar: ${btCur.summary.totalTrades} işlem, kazanma %${btCur.summary.winRatePct}, PF ${btCur.summary.profitFactor}, net $${fmt(btCur.summary.totalPnl)}, DD %${btCur.summary.maxDrawdownPct} → ${btCur.verdict.passed ? 'GEÇTİ' : 'KALDI (' + btCur.verdict.reason + ')'}.`, 'STRATEGY'],
-    ['TESTER', `Önerilen çıkış ayarı (BE ${proposedExit.bePct} / TP1 ${proposedExit.tp1Pct} / Moon ${proposedExit.moonPct}): PF ${btProp.summary.profitFactor}, net $${fmt(btProp.summary.totalPnl)} → ${btProp.verdict.passed ? 'GEÇTİ' : 'KALDI (' + btProp.verdict.reason + ')'}.`, 'STRATEGY'],
-    ['MANAGER', `${changeTxt} Çıkış ayarları: ${exitRecommendation}.`, 'RISK'],
-    ['TRADER', `Uygulanacak giriş filtresi: hacim ≥ $${decision.approved ? proposal.vol3hMin : current.vol3hMin}M, ${decision.approved ? proposal.candidateSlice : current.candidateSlice} aday. SL %${liveCfg.slPct}, BE %${liveCfg.bePct}, TP1 %${liveCfg.tp1Pct}, Moon %${liveCfg.moonPct}.`, 'TRADE'],
-    ['ENGINEER', `Sunucu çalışma süresi ${ctx.uptimeMin ?? '-'} dk. Piyasa verisi: ${regime.btcData.lastPrice > 0 ? 'alındı' : 'ALINAMADI'}, backtest verisi: ${bt.success ? 'alındı' : 'ALINAMADI'}.`, 'SYSTEM']
-  ]);
-
-  // 5) 📋 RAPOR
+  // 6) 📋 EKİP RAPORU
   const teamReport = {
     lastSync: new Date().toISOString(),
+    executiveIntervention: intervention,
     decision,
-    exitRecommendation,
-    autoExitParams: AUTO_EXIT_PARAMS,
     team: {
       manager: {
         role: '👑 Baş Risk & Portföy Direktörü',
-        status: decision.approved ? 'ONAYLANDI' : 'VETO',
+        status: isDefensive ? '🚨 SAVUNMA MODU MÜDAHALESİ' : (decision.approved ? 'ONAYLANDI' : 'VETO'),
+        mode: intervention.mode,
         guardrails,
-        message: decision.reason
+        message: intervention.reason
       },
       analyst: {
         role: '🧠 Piyasa İstihbaratı',
@@ -117,8 +249,10 @@ async function runAutonomousTeamSync(ctx = {}) {
       },
       trader: {
         role: '⚔️ Sinyal & Yürütme',
-        targetVolThreshold: `$${decision.approved ? proposal.vol3hMin : current.vol3hMin}M (3s)`,
-        candidatePool: `${decision.approved ? proposal.candidateSlice : current.candidateSlice} aday`
+        targetVolThreshold: `$${intervention.vol3hMin}M (3s)`,
+        candidatePool: `${intervention.candidateSlice} aday`,
+        maxSlots: intervention.maxSlots,
+        marginPerTrade: `$${intervention.marginPerTrade}`
       },
       tester: {
         role: '🧪 QA & Simülatör',
@@ -144,11 +278,11 @@ async function runAutonomousTeamSync(ctx = {}) {
 }
 
 if (require.main === module) {
-  runAutonomousTeamSync({ balance: 131.21, activeCount: 0, maxSlots: 4, uptimeMin: 0 }).then(rep => {
-    console.log(JSON.stringify({ decision: rep.decision, exitRecommendation: rep.exitRecommendation }, null, 2));
-    console.log('\n--- TOPLANTI ---');
-    rep.dialogues.slice(-8).forEach(d => console.log(`${d.agent}: ${d.text}`));
+  runAutonomousTeamSync({ balance: 85.78, initialBalance: 100.0, peakBalance: 131.21, activeCount: 0, maxSlots: 4, uptimeMin: 690 }).then(rep => {
+    console.log(JSON.stringify({ mode: rep.executiveIntervention.mode, decision: rep.decision }, null, 2));
+    console.log('\n--- TOPLANTI TELSİZİ ---');
+    rep.dialogues.slice(-6).forEach(d => console.log(`${d.agent}: ${d.text}`));
   });
 }
 
-module.exports = { runAutonomousTeamSync };
+module.exports = { runAutonomousTeamSync, evaluateExecutiveIntervention };

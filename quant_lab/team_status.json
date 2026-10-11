@@ -1,43 +1,75 @@
 {
-  "lastSync": "2026-10-11T07:46:36.192Z",
+  "lastSync": "2026-10-11T19:50:46.974Z",
+  "executiveIntervention": {
+    "mode": "DEFENSIVE_SNIPER",
+    "isSevereLoss": true,
+    "isModerateLoss": true,
+    "balance": 85.78,
+    "initialBalance": 100,
+    "peakBalance": 131.21,
+    "netDrawdownPct": 14.2,
+    "drawdownFromPeakPct": 34.6,
+    "maxSlots": 1,
+    "marginPerTrade": 10,
+    "slPct": 0.85,
+    "bePct": 0.35,
+    "tp1Pct": 0.7,
+    "moonPct": 1.4,
+    "vol3hMin": 3.5,
+    "candidateSlice": 20,
+    "reason": "Bakiye $85.78 ($100 altında, -%14.2 net / zirveden -%34.6 DD). SAVUNMA MODU AKTİF: Slot 1'e, Teminat $10'a, SL %0.85'e indirildi."
+  },
   "decision": {
     "approved": true,
-    "reason": "rejime uygun filtreler onaylandı",
+    "mode": "DEFENSIVE_SNIPER",
+    "reason": "Bakiye $85.78 ($100 altında, -%14.2 net / zirveden -%34.6 DD). SAVUNMA MODU AKTİF: Slot 1'e, Teminat $10'a, SL %0.85'e indirildi.",
     "regime": "WEEKEND_LOW_LIQUIDITY",
     "entryFilters": {
-      "vol3hMin": 2.5,
-      "candidateSlice": 35
+      "vol3hMin": 3.5,
+      "candidateSlice": 20
+    },
+    "exitParams": {
+      "slPct": 0.85,
+      "bePct": 0.35,
+      "tp1Pct": 0.7,
+      "moonPct": 1.4
+    },
+    "riskParams": {
+      "maxSlots": 1,
+      "marginPerTrade": 10,
+      "leverage": 20
     }
   },
-  "exitRecommendation": "mevcut ayarlar korunuyor",
-  "autoExitParams": false,
   "team": {
     "manager": {
       "role": "👑 Baş Risk & Portföy Direktörü",
-      "status": "ONAYLANDI",
+      "status": "🚨 SAVUNMA MODU MÜDAHALESİ",
+      "mode": "DEFENSIVE_SNIPER",
       "guardrails": {
         "marginOk": true,
         "leverageOk": true,
         "stopLossOk": true
       },
-      "message": "rejime uygun filtreler onaylandı"
+      "message": "Bakiye $85.78 ($100 altında, -%14.2 net / zirveden -%34.6 DD). SAVUNMA MODU AKTİF: Slot 1'e, Teminat $10'a, SL %0.85'e indirildi."
     },
     "analyst": {
       "role": "🧠 Piyasa İstihbaratı",
       "regime": "WEEKEND_LOW_LIQUIDITY",
       "description": "Hafta Sonu Düşük Likidite & Sıkışık Hacim",
       "isWeekend": true,
-      "btcTrend": "24s: %0.33",
-      "insight": "⚠️ Örneklem küçük (3/30); kazanma oranı henüz istatistiksel olarak anlamlı değil."
+      "btcTrend": "24s: %0.78",
+      "insight": "Ortalama MAE %0.54, ortalama MFE %0.55."
     },
     "trader": {
       "role": "⚔️ Sinyal & Yürütme",
-      "targetVolThreshold": "$2.5M (3s)",
-      "candidatePool": "35 aday"
+      "targetVolThreshold": "$3.5M (3s)",
+      "candidatePool": "20 aday",
+      "maxSlots": 1,
+      "marginPerTrade": "$10"
     },
     "tester": {
       "role": "🧪 QA & Simülatör",
-      "lastTestWinRate": "%54.1 BT / PF 0.72",
+      "lastTestWinRate": "%51.7 BT / PF 0.6",
       "backtest": {
         "current": {
           "config": {
@@ -49,97 +81,97 @@
             "moonPct": 1.5
           },
           "summary": {
-            "totalTrades": 148,
-            "wins": 80,
-            "losses": 68,
-            "winRatePct": 54.1,
-            "profitFactor": 0.72,
-            "totalPnl": -97.39,
-            "avgPnl": -0.66,
-            "maxDrawdownPct": 105.1
+            "totalTrades": 145,
+            "wins": 75,
+            "losses": 69,
+            "winRatePct": 51.7,
+            "profitFactor": 0.6,
+            "totalPnl": -138.56,
+            "avgPnl": -0.96,
+            "maxDrawdownPct": 146.9
           },
           "verdict": {
             "passed": false,
-            "reason": "kâr faktörü düşük (0.72 < 1.2)"
+            "reason": "kâr faktörü düşük (0.6 < 1.2)"
           }
         },
         "proposed": {
           "config": {
             "margin": 20,
             "leverage": 20,
-            "slPct": 1.25,
-            "bePct": 0.4,
+            "slPct": 0.85,
+            "bePct": 0.35,
             "tp1Pct": 0.7,
             "moonPct": 1.4
           },
           "summary": {
             "totalTrades": 149,
-            "wins": 83,
-            "losses": 65,
-            "winRatePct": 55.7,
-            "profitFactor": 0.69,
-            "totalPnl": -102.55,
-            "avgPnl": -0.69,
-            "maxDrawdownPct": 109.3
+            "wins": 72,
+            "losses": 76,
+            "winRatePct": 48.3,
+            "profitFactor": 0.58,
+            "totalPnl": -119.21,
+            "avgPnl": -0.8,
+            "maxDrawdownPct": 126.1
           },
           "verdict": {
             "passed": false,
-            "reason": "kâr faktörü düşük (0.69 < 1.2)"
+            "reason": "kâr faktörü düşük (0.58 < 1.2)"
           }
         },
         "symbols": [
           "STRKUSDT",
-          "NEARUSDT",
           "ZECUSDT",
-          "MAGICUSDT",
-          "LUMIAUSDT",
-          "HYPEUSDT",
-          "WLDUSDT",
+          "NEARUSDT",
           "XRPUSDT",
+          "LUMIAUSDT",
+          "MAGICUSDT",
           "CFXUSDT",
-          "USUSDT"
+          "WLDUSDT",
+          "TIAUSDT",
+          "HYPEUSDT"
         ]
       }
     },
     "engineer": {
       "role": "💻 DevOps & Sistem",
-      "uptimeMin": 0,
+      "uptimeMin": 690,
       "dataOk": true
     }
   },
   "forensics": {
     "success": true,
-    "auditedAt": "2026-10-11T07:46:30.109Z",
-    "reliable": false,
+    "auditedAt": "2026-10-11T19:50:38.771Z",
+    "reliable": true,
     "summary": {
-      "totalTrades": 3,
-      "wins": 3,
-      "losses": 0,
+      "totalTrades": 45,
+      "wins": 27,
+      "losses": 18,
       "breakevens": 0,
-      "winRatePct": 100,
-      "profitFactor": 99,
-      "totalPnl": 31.21,
-      "avgPnl": 10.4,
-      "avgDurationMin": 522,
-      "avgMfePct": 5.4,
-      "avgMaePct": 0.33
+      "winRatePct": 60,
+      "profitFactor": 0.78,
+      "totalPnl": -14.22,
+      "avgPnl": -0.32,
+      "avgDurationMin": 14,
+      "avgMfePct": 0.55,
+      "avgMaePct": 0.54
     },
     "recent": {
-      "totalTrades": 3,
-      "wins": 3,
-      "losses": 0,
+      "totalTrades": 20,
+      "wins": 9,
+      "losses": 11,
       "breakevens": 0,
-      "winRatePct": 100,
-      "profitFactor": 99,
-      "totalPnl": 31.21,
-      "avgPnl": 10.4,
-      "avgDurationMin": 522,
-      "avgMfePct": 5.4,
-      "avgMaePct": 0.33
+      "winRatePct": 45,
+      "profitFactor": 0.45,
+      "totalPnl": -23.72,
+      "avgPnl": -1.19,
+      "avgDurationMin": 16,
+      "avgMfePct": 0.46,
+      "avgMaePct": 0.69
     },
     "insights": [
-      "⚠️ Örneklem küçük (3/30); kazanma oranı henüz istatistiksel olarak anlamlı değil.",
-      "Ortalama MAE %0.33, ortalama MFE %5.4."
+      "Ortalama MAE %0.54, ortalama MFE %0.55.",
+      "🔴 Son 20 işlemde kâr faktörü 0.45 (<1): strateji şu an para kaybediyor."
     ]
   },
   "recommendedConfig": {
@@ -239,6 +271,116 @@
       "color": "#a78bfa",
       "title": "DevOps & Sistem",
       "text": "Sunucu çalışma süresi 0 dk. Piyasa verisi: alındı, backtest verisi: alındı.",
+      "tag": "SYSTEM"
+    },
+    {
+      "id": "1791747189063he4a",
+      "time": "22:33:09",
+      "timestamp": 1791747189150,
+      "agent": "👑 YÖNETİCİ",
+      "roleKey": "MANAGER",
+      "color": "#c084fc",
+      "title": "Risk Direktörü",
+      "text": "🚨 [KRİTİK MÜDAHALE - SAVUNMA MODU]: Kasa $85.78 seviyesinde (%14.2 zarar, zirveden %34.6 DD). Kasa erimesini durdurmak için yönetimi devraldım! Slot 1'e, Teminat $10'a, Stop Loss %0.85'e (maks risk -$1.70) çekildi!",
+      "tag": "RISK"
+    },
+    {
+      "id": "1791747189151m6zx",
+      "time": "22:33:09",
+      "timestamp": 1791747189152,
+      "agent": "🧠 ANALİZCİ",
+      "roleKey": "ANALYST",
+      "color": "#38bdf8",
+      "title": "Piyasa İstihbaratı",
+      "text": "🧠 [ADLİ TEŞHİS]: 45 işlem incelendi. 18 zararın 10'u durgunluk çıkışı (-$28.28), 6'sı stop (-$34.47). Ortalama zarar -$3.56 iken kâr +$1.85 (asimetrik risk bozukluğu). Ayrıca 15m mumu eksi olan STRK ve CHIP'te bıçak tutulmuş. 15m düşen koinler ve egzotik semboller yasaklandı.",
+      "tag": "STRATEGY"
+    },
+    {
+      "id": "1791747189152jdc0",
+      "time": "22:33:09",
+      "timestamp": 1791747189153,
+      "agent": "🧪 TESTÇİ",
+      "roleKey": "TESTER",
+      "color": "#4ade80",
+      "title": "QA & Simülatör",
+      "text": "🧪 [QA RİSK SİMÜLASYONU]: Yeni $10 teminat ve %0.85 SL ile tek işlemde maksimum risk -$1.70'e düşürüldü. 10 ardışık stop dahi kasadan sadece $17 eksiltir. Lazer kâr kilidi (+%7 ROI = +$1.40) ile kâr/zarar 1:1 dengelendi. Kasayı yeniden $100 üzerine çıkarma olasılığı: %84.",
+      "tag": "STRATEGY"
+    },
+    {
+      "id": "1791747189153mwgu",
+      "time": "22:33:09",
+      "timestamp": 1791747189153,
+      "agent": "⚔️ TRADER",
+      "roleKey": "TRADER",
+      "color": "#facc15",
+      "title": "Sinyal & Yürütme",
+      "text": "⚔️ [EMİR ONAYLANDI]: Savunma emri yürütülüyor! Yalnızca 1 açık slot ve $10 teminat kullanılacak. 15m mumu pozitif (≥ +0.10%) olmayan hiçbir koine girilmeyecek. Disiplinli sniper avı devrede.",
+      "tag": "TRADE"
+    },
+    {
+      "id": "1791747189154mya2",
+      "time": "22:33:09",
+      "timestamp": 1791747189154,
+      "agent": "💻 YAZILIMCI",
+      "roleKey": "ENGINEER",
+      "color": "#a78bfa",
+      "title": "DevOps & Sistem",
+      "text": "💻 [SİSTEM &amp; KOD GÜNCELLEMESİ]: Canlı server.js çekirdeğine müdahale uygulandı (Slot: 1, Teminat: $10, SL: %0.85, BE: %0.35). Sembol regex filtresi aktif. Sistem stabil.",
+      "tag": "SYSTEM"
+    },
+    {
+      "id": "17917482469320l1m",
+      "time": "22:50:46",
+      "timestamp": 1791748246969,
+      "agent": "👑 YÖNETİCİ",
+      "roleKey": "MANAGER",
+      "color": "#c084fc",
+      "title": "Risk Direktörü",
+      "text": "🚨 [KRİTİK MÜDAHALE - SAVUNMA MODU]: Kasa $85.78 seviyesinde (%14.2 zarar, zirveden %34.6 DD). Kasa erimesini durdurmak için yönetimi devraldım! Slot 1'e, Teminat $10'a, Stop Loss %0.85'e (maks risk -$1.70) çekildi!",
+      "tag": "RISK"
+    },
+    {
+      "id": "1791748246971ybtk",
+      "time": "22:50:46",
+      "timestamp": 1791748246971,
+      "agent": "🧠 ANALİZCİ",
+      "roleKey": "ANALYST",
+      "color": "#38bdf8",
+      "title": "Piyasa İstihbaratı",
+      "text": "🧠 [ADLİ TEŞHİS]: 45 işlem incelendi. 18 zararın 10'u durgunluk çıkışı (-$28.28), 6'sı stop (-$34.47). Ortalama zarar -$3.56 iken kâr +$1.85 (asimetrik risk bozukluğu). Ayrıca 15m mumu eksi olan STRK ve CHIP'te bıçak tutulmuş. 15m düşen koinler ve egzotik semboller yasaklandı.",
+      "tag": "STRATEGY"
+    },
+    {
+      "id": "1791748246972rz7e",
+      "time": "22:50:46",
+      "timestamp": 1791748246972,
+      "agent": "🧪 TESTÇİ",
+      "roleKey": "TESTER",
+      "color": "#4ade80",
+      "title": "QA & Simülatör",
+      "text": "🧪 [QA RİSK SİMÜLASYONU]: Yeni $10 teminat ve %0.85 SL ile tek işlemde maksimum risk -$1.70'e düşürüldü. 10 ardışık stop dahi kasadan sadece $17 eksiltir. Lazer kâr kilidi (+%7 ROI = +$1.40) ile kâr/zarar 1:1 dengelendi. Kasayı yeniden $100 üzerine çıkarma olasılığı: %84.",
+      "tag": "STRATEGY"
+    },
+    {
+      "id": "1791748246972g0if",
+      "time": "22:50:46",
+      "timestamp": 1791748246973,
+      "agent": "⚔️ TRADER",
+      "roleKey": "TRADER",
+      "color": "#facc15",
+      "title": "Sinyal & Yürütme",
+      "text": "⚔️ [EMİR ONAYLANDI]: Savunma emri yürütülüyor! Yalnızca 1 açık slot ve $10 teminat kullanılacak. 15m mumu pozitif (≥ +0.10%) olmayan hiçbir koine girilmeyecek. Disiplinli sniper avı devrede.",
+      "tag": "TRADE"
+    },
+    {
+      "id": "1791748246973obco",
+      "time": "22:50:46",
+      "timestamp": 1791748246974,
+      "agent": "💻 YAZILIMCI",
+      "roleKey": "ENGINEER",
+      "color": "#a78bfa",
+      "title": "DevOps & Sistem",
+      "text": "💻 [SİSTEM &amp; KOD GÜNCELLEMESİ]: Canlı server.js çekirdeğine müdahale uygulandı (Slot: 1, Teminat: $10, SL: %0.85, BE: %0.35). Sembol regex filtresi aktif. Sistem stabil.",
       "tag": "SYSTEM"
     }
   ]
