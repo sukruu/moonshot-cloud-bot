@@ -710,9 +710,9 @@ async function scanLoop() {
         isVip
       };
     })
-    .filter(t => t.isVip || t.volM >= 20.0)
+    .filter(t => t.isVip || t.volM >= 6.0)
     .sort((a, b) => b.hotScore - a.hotScore)
-    .slice(0, 15);
+    .slice(0, 35);
 
     if (now - lastScanHeartbeat > 45000 && topCandidates.length > 0) {
       lastScanHeartbeat = now;
@@ -751,8 +751,8 @@ async function scanLoop() {
         // 🛡️ BAYAT VERİ & HAYALET KOİN ENGELİ: Radarda olmayan veya 8 dakikadan eski verileri içeren coinleri ele!
         if (!rInfo || (now - (rInfo.lastUpdate || 0) > 8 * 60 * 1000)) continue;
 
-        // 🛡️ KURUMSAL HACİM KALKANI ($10M altındaki sığ tahtalı koinlerde fakeout ve kayma yaşanır, girme!)
-        if (rInfo && rInfo.vol3hM !== null && rInfo.vol3hM !== undefined && rInfo.vol3hM < 10.0) continue;
+        // 🛡️ KURUMSAL HACİM KALKANI ($2.5M altındaki aşırı sığ tahtalarda girme)
+        if (rInfo && rInfo.vol3hM !== null && rInfo.vol3hM !== undefined && rInfo.vol3hM < 2.5) continue;
 
         // 🧠 DEEP ANALYSIS FİLTRELERİ
         const intel = global.coinIntelligence[sym];
@@ -879,7 +879,7 @@ async function scanLoop() {
           finalLongSignal = true;
         } else if (hasMomentum && isWhaleVol) {
           const hasTakerSupport = rInfo ? (rInfo.takerBuyRatio || 50) >= 51.5 : false;
-          const hasVolume = rInfo ? (rInfo.vol3hM || 0) >= 10.0 : false;
+          const hasVolume = rInfo ? (rInfo.vol3hM || 0) >= 2.5 : false;
           const notOverbought = chg24Val >= 0.0 && chg24Val < 25.0;
           const strongMomentum = curMovePct >= 0.35;
           if (hasTakerSupport && hasVolume && notOverbought && strongMomentum) {
@@ -893,7 +893,7 @@ async function scanLoop() {
           finalShortSignal = true;
         } else if ((curMovePct <= -minJump && curP < curO) && isWhaleVol) {
           const hasTakerSell = rInfo ? (rInfo.takerBuyRatio || 50) <= 48.0 : false;
-          const hasVolume = rInfo ? (rInfo.vol3hM || 0) >= 10.0 : false;
+          const hasVolume = rInfo ? (rInfo.vol3hM || 0) >= 2.5 : false;
           const strongMomentumDown = curMovePct <= -0.35;
           const notOversold = chg24Val <= 0.0 && chg24Val > -15.0;
           if (hasTakerSell && hasVolume && strongMomentumDown && notOversold) {
