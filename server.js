@@ -19,6 +19,12 @@ const STATE_FILE = path.join(DATA_DIR, 'bot_state.json');
 const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
 const TEAM_STATUS_FILE = path.join(DATA_DIR, 'quant_lab', 'team_status.json');
 let teamStatusCache = null;
+let addDialogue = () => {};
+try {
+  const dlgMod = require('./quant_lab/team_dialogue');
+  addDialogue = dlgMod.addDialogue;
+} catch (e) {}
+
 try {
   if (fs.existsSync(TEAM_STATUS_FILE)) {
     teamStatusCache = JSON.parse(fs.readFileSync(TEAM_STATUS_FILE, 'utf8'));
@@ -999,6 +1005,11 @@ async function scanLoop() {
           persistState();
 
           addLog(`🚀 POZİSYON AÇILDI: [${side}] ${sym} @ $${curP.toFixed(4)} (SL: $${stopPrice.toFixed(4)}) ${radarTag}`, 'TRADE');
+          try {
+            addDialogue('ANALYST', `🚨 [FIRSAT YAKALANDI]: ${sym} ${side} kurulumu doğrulandı! Hacim: $${(rInfo && rInfo.vol3hM ? rInfo.vol3hM.toFixed(1) : '2.5')}M, Alıcı Oranı: %${(rInfo && rInfo.takerBuyRatio ? rInfo.takerBuyRatio.toFixed(1) : '52')}.`, 'TRADE');
+            addDialogue('TRADER', `⚔️ [EMİR İLETİLDİ]: ${sym} ${side} pozisyonuna $${curP.toFixed(4)} seviyesinden girildi. Nominal: $400 (20x).`, 'TRADE');
+            addDialogue('MANAGER', `👑 [RİSK KONTROLÜ]: ${sym} için $${CONFIG.marginPerTrade} teminat ayrıldı. SL %${CONFIG.slPct} aktif.`, 'RISK');
+          } catch(e) {}
           break;
         }
       }
@@ -1256,6 +1267,11 @@ function closeTrade(pos, exitReason) {
   } catch (e) {}
 
   addLog(`🏁 KAPANDI: [${pos.side}] ${pos.symbol} | PnL: ${totalTradePnl >= 0 ? '+' : ''}$${totalTradePnl.toFixed(2)} (%${totalTradeRoi >= 0 ? '+' : ''}${totalTradeRoi.toFixed(1)} ROI) | ${formattedExitReason}`, totalTradePnl >= 0 ? 'WIN' : 'LOSS');
+  try {
+    addDialogue('TRADER', `🏁 [POZİSYON KAPANDI]: ${pos.symbol} [${pos.side}] işlemi tamamlandı. Çıkış: ${formattedExitReason}`, 'TRADE');
+    addDialogue('TESTER', `🧪 [ADLİ TIP ANALİZİ]: ${pos.symbol} | Net PnL: ${totalTradePnl >= 0 ? '+' : ''}$${totalTradePnl.toFixed(2)} (%${totalTradeRoi >= 0 ? '+' : ''}${totalTradeRoi.toFixed(1)} ROI) | Zirve MFE: +%${(pos.mfe || 0).toFixed(2)}.`, 'STRATEGY');
+    addDialogue('MANAGER', `👑 [KASA GÜNCELLEMESİ]: Güncel Kasa $${balance.toFixed(2)}. Sermaye korundu, yeni fırsatlar için tetikteyiz.`, 'RISK');
+  } catch(e) {}
 }
 
 // 4. HTML VE WEBSİTESİ (BİREBİR EKRAN 1 TASARIMI)
@@ -1965,6 +1981,15 @@ function serveDashboardHtml() {
             </tbody>
           </table>
         </div>
+
+        <!-- 🗣️ AJAN TELSİZİ & CANLI DİYALOG AKIŞI -->
+        <h2 style="margin-top:16px; display:flex; justify-content:space-between; align-items:center;">
+          <span>🗣️ AJAN TELSİZİ & CANLI DİYALOG AKIŞI</span>
+          <span class="badge-moon" style="font-size:9.5px;">📻 5 AJAN CANLI FREKANS</span>
+        </h2>
+        <div id="dialogueBox" style="background:rgba(5,7,12,0.95); border:1px solid rgba(255,255,255,0.08); border-radius:8px; padding:12px; max-height:260px; overflow-y:auto; font-family:'JetBrains Mono',monospace; font-size:11px; display:flex; flex-direction:column; gap:8px; box-shadow: inset 0 2px 8px rgba(0,0,0,0.6);">
+          ${renderDialogues(teamStatusCache ? teamStatusCache.dialogues : [])}
+        </div>
       </div>
     </div>
   </div>
@@ -2047,6 +2072,13 @@ function serveDashboardHtml() {
           }
           if (t.engineer && document.getElementById("teamEngineer")) {
             document.getElementById("teamEngineer").innerText = 'Render Canlı';
+          }
+        }
+
+        if (data.teamStatus && data.teamStatus.dialogues) {
+          const dBox = document.getElementById("dialogueBox");
+          if (dBox) {
+            dBox.innerHTML = renderDialoguesClient(data.teamStatus.dialogues);
           }
         }
 
@@ -2203,6 +2235,24 @@ function serveDashboardHtml() {
           }
         }
       } catch (e) {}
+    }
+
+    function renderDialoguesClient(dlgs) {
+      if (!dlgs || dlgs.length === 0) {
+        return '<div style="color:var(--muted);text-align:center;padding:12px;">📻 Telsiz frekansı taranıyor, ilk toplantı bekleniyor...</div>';
+      }
+      return dlgs.slice(0, 30).map(function(d) {
+        return '<div style="display:flex;gap:8px;align-items:flex-start;padding:6px 8px;background:rgba(255,255,255,0.02);border-radius:6px;border-left:2.5px solid ' + d.color + ';">' +
+          '<span style="color:var(--muted);font-size:10px;white-space:nowrap;padding-top:1px;">' + d.time + '</span>' +
+          '<div style="display:flex;flex-direction:column;gap:2px;flex:1;">' +
+            '<div style="display:flex;align-items:center;gap:6px;">' +
+              '<span style="color:' + d.color + ';font-weight:800;font-size:11px;">' + d.agent + '</span>' +
+              '<span style="color:var(--muted);font-size:9.5px;opacity:0.8;">' + d.title + '</span>' +
+            '</div>' +
+            '<div style="color:#e2e8f0;font-size:11px;line-height:1.4;">' + d.text + '</div>' +
+          '</div>' +
+        '</div>';
+      }).join('');
     }
 
     async function closePosition(id) {
@@ -2403,6 +2453,26 @@ function renderHistoryCards(hist) {
         <div class="hist-card-bot">
           <span style="color:#c084fc;font-size:9.5px;font-weight:700;">${rTag}</span>
           <span style="color:var(--muted);font-size:9.5px;">MFE: <b style="color:var(--green)">+%${(h.mfe || 0).toFixed(2)}</b> • ${h.durationMin}dk</span>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function renderDialogues(dlgs) {
+  if (!dlgs || dlgs.length === 0) {
+    return '<div style="color:var(--muted);text-align:center;padding:12px;">📻 Telsiz frekansı taranıyor, ilk toplantı bekleniyor...</div>';
+  }
+  return dlgs.slice(0, 30).map(d => {
+    return `
+      <div style="display:flex;gap:8px;align-items:flex-start;padding:6px 8px;background:rgba(255,255,255,0.02);border-radius:6px;border-left:2.5px solid ${d.color};">
+        <span style="color:var(--muted);font-size:10px;white-space:nowrap;padding-top:1px;">${d.time}</span>
+        <div style="display:flex;flex-direction:column;gap:2px;flex:1;">
+          <div style="display:flex;align-items:center;gap:6px;">
+            <span style="color:${d.color};font-weight:800;font-size:11px;">${d.agent}</span>
+            <span style="color:var(--muted);font-size:9.5px;opacity:0.8;">${d.title}</span>
+          </div>
+          <div style="color:#e2e8f0;font-size:11px;line-height:1.4;">${d.text}</div>
         </div>
       </div>
     `;

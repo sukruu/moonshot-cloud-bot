@@ -3,6 +3,7 @@ const path = require('path');
 const { runTradeForensics } = require('./trade_forensics');
 const { detectMarketRegime } = require('./regime_detector');
 const { runBacktest } = require('./backtest_engine');
+const { generateMeetingDialogues, getDialogues, addDialogue } = require('./team_dialogue');
 
 const TEAM_STATUS_FILE = path.join(__dirname, 'team_status.json');
 
@@ -44,6 +45,9 @@ async function runAutonomousTeamSync() {
       : `⚠️ [Yönetici Veto]: Risk limitleri ihlal edildi.`
   };
 
+  // Toplantı diyaloglarını üret
+  generateMeetingDialogues(regime, forensics);
+
   // 5. 💻 YAZILIMCI: Raporu Konsolide Et ve Durumu Kaydet
   const teamReport = {
     lastSync: new Date().toISOString(),
@@ -81,7 +85,8 @@ async function runAutonomousTeamSync() {
       }
     },
     forensicsSummary: forensics.summary,
-    recommendedConfig
+    recommendedConfig,
+    dialogues: getDialogues()
   };
 
   try {

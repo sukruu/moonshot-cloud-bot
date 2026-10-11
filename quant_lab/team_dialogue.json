@@ -1,0 +1,112 @@
+[
+  {
+    "id": "1791703389453z7cr",
+    "time": "10:23:09",
+    "timestamp": 1791703389453,
+    "agent": "💻 YAZILIMCI",
+    "roleKey": "ENGINEER",
+    "color": "#a78bfa",
+    "title": "DevOps & Sistem",
+    "text": "Render v18 motoru sorunsuz çalışıyor. Binance Vision CDN bağlantısı 40ms gecikmeyle stabil, tüm koruma kalkanları devrede.",
+    "tag": "SYSTEM"
+  },
+  {
+    "id": "1791703389453li17",
+    "time": "10:23:09",
+    "timestamp": 1791703389453,
+    "agent": "⚔️ TRADER",
+    "roleKey": "TRADER",
+    "color": "#facc15",
+    "title": "Sinyal & Yürütme",
+    "text": "Testçiden onay alındı. 35 coinlik derin radar taranıyor. %0.45 erken kâr kilidi ve Moonshot kademeleri devrede, tetikte bekliyorum.",
+    "tag": "TRADE"
+  },
+  {
+    "id": "1791703389452q4a0",
+    "time": "10:23:09",
+    "timestamp": 1791703389452,
+    "agent": "🧪 TESTÇİ",
+    "roleKey": "TESTER",
+    "color": "#4ade80",
+    "title": "QA & Simülatör",
+    "text": "Hafta sonu $2.5M hacim eşiği son 200 barda simüle edildi. Canlı kazanma oranı %100, net kâr +$31.21. Risk toleransı mükemmel, yeşil ışık yakıldı.",
+    "tag": "STRATEGY"
+  },
+  {
+    "id": "1791703389452oyqe",
+    "time": "10:23:09",
+    "timestamp": 1791703389452,
+    "agent": "🧠 ANALİZCİ",
+    "roleKey": "ANALYST",
+    "color": "#38bdf8",
+    "title": "Piyasa İstihbaratı",
+    "text": "Piyasa rejimi: Hafta Sonu Düşük Hacim. Altcoin likiditesi daralmış durumda. Fakeout riskine karşı 3 saatlik hacim barajını $2.5M olarak öneriyorum.",
+    "tag": "REGIME"
+  },
+  {
+    "id": "17917033894512mlk",
+    "time": "10:23:09",
+    "timestamp": 1791703389451,
+    "agent": "👑 YÖNETİCİ",
+    "roleKey": "MANAGER",
+    "color": "#c084fc",
+    "title": "Risk Direktörü",
+    "text": "Konsorsiyum toplantısı başladı. Kasa $131.21 seviyesinde. Risk direktifi: Marjin $20 sabit, sermaye koruma öncelikli. Analist, durumu raporla.",
+    "tag": "RISK"
+  },
+  {
+    "id": "1791703189035ykqr",
+    "time": "10:19:49",
+    "timestamp": 1791703189035,
+    "agent": "💻 YAZILIMCI",
+    "roleKey": "ENGINEER",
+    "color": "#a78bfa",
+    "title": "DevOps & Sistem",
+    "text": "Render v18 motoru sorunsuz çalışıyor. Binance Vision CDN bağlantısı 40ms gecikmeyle stabil, tüm koruma kalkanları devrede.",
+    "tag": "SYSTEM"
+  },
+  {
+    "id": "1791703189035bmb4",
+    "time": "10:19:49",
+    "timestamp": 1791703189035,
+    "agent": "⚔️ TRADER",
+    "roleKey": "TRADER",
+    "color": "#facc15",
+    "title": "Sinyal & Yürütme",
+    "text": "Testçiden onay alındı. 35 coinlik derin radar taranıyor. %0.45 erken kâr kilidi ve Moonshot kademeleri devrede, tetikte bekliyorum.",
+    "tag": "TRADE"
+  },
+  {
+    "id": "1791703189034g5rc",
+    "time": "10:19:49",
+    "timestamp": 1791703189034,
+    "agent": "🧪 TESTÇİ",
+    "roleKey": "TESTER",
+    "color": "#4ade80",
+    "title": "QA & Simülatör",
+    "text": "Hafta sonu $2.5M hacim eşiği son 200 barda simüle edildi. Canlı kazanma oranı %100, net kâr +$31.21. Risk toleransı mükemmel, yeşil ışık yakıldı.",
+    "tag": "STRATEGY"
+  },
+  {
+    "id": "17917031890341mim",
+    "time": "10:19:49",
+    "timestamp": 1791703189034,
+    "agent": "🧠 ANALİZCİ",
+    "roleKey": "ANALYST",
+    "color": "#38bdf8",
+    "title": "Piyasa İstihbaratı",
+    "text": "Piyasa rejimi: Hafta Sonu Düşük Hacim. Altcoin likiditesi daralmış durumda. Fakeout riskine karşı 3 saatlik hacim barajını $2.5M olarak öneriyorum.",
+    "tag": "REGIME"
+  },
+  {
+    "id": "1791703189034k4p8",
+    "time": "10:19:49",
+    "timestamp": 1791703189034,
+    "agent": "👑 YÖNETİCİ",
+    "roleKey": "MANAGER",
+    "color": "#c084fc",
+    "title": "Risk Direktörü",
+    "text": "Konsorsiyum toplantısı başladı. Kasa $131.21 seviyesinde. Risk direktifi: Marjin $20 sabit, sermaye koruma öncelikli. Analist, durumu raporla.",
+    "tag": "RISK"
+  }
+]
