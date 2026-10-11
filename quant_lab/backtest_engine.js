@@ -1,221 +1,213 @@
 /**
  * 🧪 Backtest & Simulation Engine (Testçi / QA Motoru)
- * Önerilen parametreleri test eder. Minimum %70 Win Rate ve Max %5 Drawdown
- * şartını aramadan Yönetici onayına göndermez.
+ *
+ * Canlı botun ÇIKIŞ mantığını (SL, Başabaş, TP1 %50, iz süren stop, zirveden dönüş kilidi,
+ * Moonshot hedefi) birebir taklit eder; gerçek komisyon (%0.10 gidiş-dönüş) düşülür.
+ *
+ * ⚠️ SINIR: Giriş sinyali canlıdaki radar/taker/BTC filtrelerinin tamamını içermez —
+ * 3dk mum momentumu + hacim patlaması ile YAKLAŞIK simüle edilir. Bu yüzden sonuçlar
+ * "parametre karşılaştırması" için kullanılır, mutlak kâr tahmini olarak değil.
  */
 
-async function fetchKlines(symbol, interval = '5m', limit = 200) {
-  const urls = [
-    `https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`,
-    `https://data-api.binance.vision/fapi/v1/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`
-  ];
+const BANNED = new Set(['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'USDCUSDT', 'FDUSDUSDT', 'TUSDUSDT', 'EURUSDT']);
+const FEE_ROUND_TRIP = 0.0010; // %0.05 giriş + %0.05 çıkış (taker)
+const START_BALANCE = 100;
 
-  for (const url of urls) {
+async function fetchJson(paths) {
+  for (const url of paths) {
     try {
-      const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(5000) });
-      if (res.ok) {
-        const raw = await res.json();
-        return raw.map(k => ({
-          openTime: k[0],
-          open: parseFloat(k[1]),
-          high: parseFloat(k[2]),
-          low: parseFloat(k[3]),
-          close: parseFloat(k[4]),
-          volume: parseFloat(k[5]),
-          quoteVolume: parseFloat(k[7])
-        }));
-      }
+      const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(6000) });
+      if (res.ok) return await res.json();
     } catch (e) {}
   }
-  return [];
+  return null;
+}
+
+async function fetchKlines(symbol, interval = '3m', limit = 480) {
+  const raw = await fetchJson([
+    `https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`,
+    `https://data-api.binance.vision/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`
+  ]);
+  if (!Array.isArray(raw)) return [];
+  return raw.map(k => ({
+    open: parseFloat(k[1]), high: parseFloat(k[2]), low: parseFloat(k[3]),
+    close: parseFloat(k[4]), volume: parseFloat(k[5])
+  }));
+}
+
+async function pickSymbols(count = 10) {
+  const tickers = await fetchJson([
+    'https://fapi.binance.com/fapi/v1/ticker/24hr',
+    'https://data-api.binance.vision/api/v3/ticker/24hr'
+  ]);
+  if (!Array.isArray(tickers)) return ['NEARUSDT', 'ADAUSDT', 'TIAUSDT', 'SUIUSDT', 'ENAUSDT', 'SEIUSDT'];
+  return tickers
+    .filter(t => t.symbol.endsWith('USDT') && !BANNED.has(t.symbol) && parseFloat(t.lastPrice) >= 0.0001)
+    .sort((a, b) => parseFloat(b.quoteVolume) - parseFloat(a.quoteVolume))
+    .slice(0, count)
+    .map(t => t.symbol);
+}
+
+// Canlı fastRiskLoop ile aynı kademeler
+function trailingStopMove(mfe, bePct) {
+  if (mfe >= 1.40) return mfe - 0.35;
+  if (mfe >= 0.90) return mfe - 0.25;
+  if (mfe >= 0.65) return mfe - 0.20;
+  if (mfe >= bePct) return 0.20;
+  return null;
+}
+function pullbackLimitFor(mfe) {
+  if (mfe >= 2.0) return 0.40;
+  if (mfe >= 1.2) return 0.30;
+  if (mfe >= 0.75) return 0.22;
+  if (mfe >= 0.55) return 0.18;
+  return 0.50;
 }
 
 /**
- * Tek bir koin için simülasyon çalıştırır
+ * Tek koin simülasyonu. Hareketler "lehimize %" olarak hesaplanır (LONG/SHORT simetrik).
+ * Mum içi sıra belirsiz olduğu için TEMKİNLİ varsayım: önce aleyhe uç (stop), sonra lehe uç.
  */
-function simulateCoinStrategy(klines, config) {
-  const {
-    slPct = 1.25,
-    bePct = 0.45,
-    tp1Pct = 0.75,
-    moonPct = 1.50,
-    margin = 20.0,
-    leverage = 20,
-    minMovePct = 0.35
-  } = config;
-
+function simulateCoin(klines, cfg) {
+  const { slPct, bePct, tp1Pct, moonPct, margin, leverage } = cfg;
+  const nominal = margin * leverage;
   const trades = [];
-  let inPosition = null;
+  let pos = null;
 
-  for (let i = 20; i < klines.length; i++) {
+  const closeTrade = (exitMove, reason) => {
+    const remainFrac = pos.tp1Taken ? 0.5 : 1.0;
+    const pnlRemain = nominal * remainFrac * (exitMove / 100) - nominal * remainFrac * FEE_ROUND_TRIP;
+    const pnl = pnlRemain + (pos.tp1Pnl || 0);
+    trades.push({ pnl, mfe: pos.mfe, reason });
+    pos = null;
+  };
+
+  for (let i = 21; i < klines.length; i++) {
     const k = klines[i];
-    const prev = klines[i - 1];
 
-    if (!inPosition) {
-      // Basit momentum kırılım girişi simülasyonu
-      const priceChg = ((k.close - prev.close) / prev.close) * 100;
-      const volSpike = k.volume > (klines.slice(i - 10, i).reduce((a, b) => a + b.volume, 0) / 10) * 1.3;
+    if (!pos) {
+      const avgVol = klines.slice(i - 20, i).reduce((a, b) => a + b.volume, 0) / 20 || 1;
+      const move = ((k.close - k.open) / k.open) * 100;
+      const range = k.high - k.low;
+      const volSpike = k.volume >= avgVol * 1.5;
+      if (!volSpike || range <= 0) continue;
+      const upperWick = (k.high - Math.max(k.open, k.close)) / range;
+      const lowerWick = (Math.min(k.open, k.close) - k.low) / range;
+      if (move >= 0.60 && upperWick <= 0.35) pos = { side: 'LONG', entry: k.close, mfe: 0, stopMove: -slPct, tp1Taken: false, tp1Pnl: 0 };
+      else if (move <= -0.60 && lowerWick <= 0.35) pos = { side: 'SHORT', entry: k.close, mfe: 0, stopMove: -slPct, tp1Taken: false, tp1Pnl: 0 };
+      continue;
+    }
 
-      if (priceChg >= minMovePct && volSpike) {
-        inPosition = {
-          entryIndex: i,
-          entryPrice: k.close,
-          side: 'LONG',
-          mfe: 0,
-          mae: 0,
-          beLocked: false,
-          tp1Locked: false
-        };
-      }
-    } else {
-      // Pozisyon yönetimi
-      const entryP = inPosition.entryPrice;
-      const currentHighMove = ((k.high - entryP) / entryP) * 100;
-      const currentLowMove = ((k.low - entryP) / entryP) * 100;
+    const isLong = pos.side === 'LONG';
+    const favMove = isLong ? ((k.high - pos.entry) / pos.entry) * 100 : ((pos.entry - k.low) / pos.entry) * 100;
+    const advMove = isLong ? ((k.low - pos.entry) / pos.entry) * 100 : ((pos.entry - k.high) / pos.entry) * 100;
+    const closeMove = isLong ? ((k.close - pos.entry) / pos.entry) * 100 : ((pos.entry - k.close) / pos.entry) * 100;
 
-      if (currentHighMove > inPosition.mfe) inPosition.mfe = currentHighMove;
-      if (Math.abs(currentLowMove) > inPosition.mae && currentLowMove < 0) inPosition.mae = Math.abs(currentLowMove);
+    // 1) Temkinli: mevcut stop önce test edilir
+    if (advMove <= pos.stopMove) {
+      closeTrade(pos.stopMove, pos.stopMove < 0 ? 'STOP_LOSS' : 'LOCKED_STOP');
+      continue;
+    }
 
-      // 1. Stop Loss kontrolü
-      if (currentLowMove <= -slPct) {
-        const lossPnl = -(margin * (slPct / 100) * leverage);
-        trades.push({
-          pnl: Number(lossPnl.toFixed(2)),
-          roi: Number((-slPct * leverage).toFixed(1)),
-          result: 'LOSS',
-          mfe: inPosition.mfe,
-          mae: inPosition.mae,
-          exitReason: 'STOP_LOSS'
-        });
-        inPosition = null;
-        continue;
-      }
+    // 2) Lehe hareket
+    pos.mfe = Math.max(pos.mfe, favMove);
 
-      // 2. Erken Başabaş (BE) Kilidi
-      if (inPosition.mfe >= bePct) {
-        inPosition.beLocked = true;
-      }
+    if (!pos.tp1Taken && favMove >= tp1Pct) {
+      pos.tp1Taken = true;
+      pos.tp1Pnl = nominal * 0.5 * (tp1Pct / 100) - nominal * 0.5 * FEE_ROUND_TRIP;
+      pos.stopMove = Math.max(pos.stopMove, 0.20);
+    }
 
-      // 3. Başabaş Stop tetiklendi mi?
-      if (inPosition.beLocked && k.close <= entryP * 1.0005) {
-        trades.push({
-          pnl: 0.10,
-          roi: 0.5,
-          result: 'BE_WIN',
-          mfe: inPosition.mfe,
-          mae: inPosition.mae,
-          exitReason: 'BREAKEVEN_LOCK'
-        });
-        inPosition = null;
-        continue;
-      }
+    const trail = trailingStopMove(pos.mfe, bePct);
+    if (trail !== null) pos.stopMove = Math.max(pos.stopMove, trail);
 
-      // 4. TP1 Kademeli Kâr
-      if (currentHighMove >= tp1Pct && !inPosition.tp1Locked) {
-        inPosition.tp1Locked = true;
-      }
+    if (favMove >= moonPct) {
+      closeTrade(moonPct, 'MOON_TP');
+      continue;
+    }
 
-      // 5. Moonshot TP2 Hedefi
-      if (currentHighMove >= moonPct) {
-        const profitPnl = margin * (moonPct / 100) * leverage;
-        trades.push({
-          pnl: Number(profitPnl.toFixed(2)),
-          roi: Number((moonPct * leverage).toFixed(1)),
-          result: 'WIN',
-          mfe: inPosition.mfe,
-          mae: inPosition.mae,
-          exitReason: 'MOONSHOT_TP'
-        });
-        inPosition = null;
-        continue;
-      }
+    const effPull = pos.tp1Taken ? Math.max(0.35, pullbackLimitFor(pos.mfe)) : pullbackLimitFor(pos.mfe);
+    const minMfeLock = pos.tp1Taken ? 0.90 : 0.60;
+    if (pos.mfe >= minMfeLock && (pos.mfe - closeMove) >= effPull) {
+      closeTrade(closeMove, 'PULLBACK_LOCK');
+      continue;
+    }
 
-      // Max bar süresi (örneğin 30 bar sonra çıkış)
-      if (i - inPosition.entryIndex > 30) {
-        const exitMove = ((k.close - entryP) / entryP) * 100;
-        const pnl = margin * (exitMove / 100) * leverage;
-        trades.push({
-          pnl: Number(pnl.toFixed(2)),
-          roi: Number((exitMove * leverage).toFixed(1)),
-          result: pnl > 0 ? 'WIN' : 'LOSS',
-          mfe: inPosition.mfe,
-          mae: inPosition.mae,
-          exitReason: 'TIME_EXIT'
-        });
-        inPosition = null;
-      }
+    if (closeMove <= pos.stopMove) {
+      closeTrade(pos.stopMove, 'STOP_CLOSE');
     }
   }
-
   return trades;
 }
 
+function summarize(trades) {
+  const n = trades.length;
+  let wins = 0, losses = 0, grossP = 0, grossL = 0, equity = START_BALANCE, peak = START_BALANCE, maxDD = 0;
+  for (const t of trades) {
+    if (t.pnl > 0.05) { wins++; grossP += t.pnl; }
+    else if (t.pnl < -0.05) { losses++; grossL += Math.abs(t.pnl); }
+    equity += t.pnl;
+    if (equity > peak) peak = equity;
+    maxDD = Math.max(maxDD, (peak - equity) / peak * 100);
+  }
+  const totalPnl = equity - START_BALANCE;
+  return {
+    totalTrades: n,
+    wins,
+    losses,
+    winRatePct: n ? Number((wins / n * 100).toFixed(1)) : 0,
+    profitFactor: grossL > 0 ? Number((grossP / grossL).toFixed(2)) : (grossP > 0 ? 99 : 0),
+    totalPnl: Number(totalPnl.toFixed(2)),
+    avgPnl: n ? Number((totalPnl / n).toFixed(2)) : 0,
+    maxDrawdownPct: Number(maxDD.toFixed(1))
+  };
+}
+
+const PASS_RULES = { minTrades: 15, minProfitFactor: 1.2, maxDrawdownPct: 15 };
+
+function verdictOf(s) {
+  if (s.totalTrades < PASS_RULES.minTrades) return { passed: false, reason: `yetersiz örnek (${s.totalTrades}/${PASS_RULES.minTrades})` };
+  if (s.profitFactor < PASS_RULES.minProfitFactor) return { passed: false, reason: `kâr faktörü düşük (${s.profitFactor} < ${PASS_RULES.minProfitFactor})` };
+  if (s.maxDrawdownPct > PASS_RULES.maxDrawdownPct) return { passed: false, reason: `drawdown yüksek (%${s.maxDrawdownPct} > %${PASS_RULES.maxDrawdownPct})` };
+  return { passed: true, reason: 'tüm kriterler sağlandı' };
+}
+
 /**
- * Çoklu koinler üzerinde genel backtest yürütür
+ * Bir veya birden fazla parametre setini AYNI veri üzerinde test eder.
+ * @param {Object<string, Object>} configs  ör. { current: {...}, proposed: {...} }
  */
-async function runBacktest(config = {}) {
-  const symbols = ['NEARUSDT', 'ADAUSDT', 'SOLUSDT', 'CFXUSDT', 'TIAUSDT', 'STRKUSDT'];
-  const allTrades = [];
-
+async function runBacktest(configs) {
+  const symbols = await pickSymbols(10);
+  const data = [];
   for (const sym of symbols) {
-    const klines = await fetchKlines(sym, '5m', 200);
-    if (klines.length > 50) {
-      const symTrades = simulateCoinStrategy(klines, config);
-      allTrades.push(...symTrades);
-    }
+    const kl = await fetchKlines(sym, '3m', 480); // ~24 saat
+    if (kl.length > 60) data.push(kl);
   }
 
-  const totalTrades = allTrades.length;
-  if (totalTrades === 0) {
-    return {
-      success: true,
-      passed: true,
-      summary: { totalTrades: 0, winRatePct: 100, maxDrawdownPct: 0, totalPnl: 0, note: 'Yeterli bar verisi yok' }
-    };
+  const results = {};
+  for (const [name, cfg] of Object.entries(configs)) {
+    const full = { margin: 20, leverage: 20, ...cfg };
+    const trades = data.flatMap(kl => simulateCoin(kl, full));
+    const summary = summarize(trades);
+    results[name] = { config: full, summary, verdict: verdictOf(summary) };
   }
-
-  let wins = 0;
-  let losses = 0;
-  let totalPnl = 0;
-  let peakPnl = 0;
-  let maxDrawdown = 0;
-
-  for (const t of allTrades) {
-    totalPnl += t.pnl;
-    if (totalPnl > peakPnl) peakPnl = totalPnl;
-    const dd = peakPnl - totalPnl;
-    if (dd > maxDrawdown) maxDrawdown = dd;
-
-    if (t.pnl > 0) wins++;
-    else if (t.pnl < 0) losses++;
-  }
-
-  const winRate = Number(((wins / totalTrades) * 100).toFixed(1));
-  const maxDDPct = peakPnl > 0 ? Number(((maxDrawdown / peakPnl) * 100).toFixed(1)) : 0;
-  const passed = (winRate >= 70.0 && maxDDPct <= 10.0);
 
   return {
-    success: true,
-    passed,
+    success: data.length > 0,
     evaluatedAt: new Date().toISOString(),
-    configTested: config,
-    summary: {
-      totalTrades,
-      wins,
-      losses,
-      winRatePct: winRate,
-      totalPnl: Number(totalPnl.toFixed(2)),
-      maxDrawdownDollars: Number(maxDrawdown.toFixed(2)),
-      maxDrawdownPct: maxDDPct
-    },
-    qaVerdict: passed 
-      ? '✅ ONAYLANDI: Strateji %70+ kazanma oranı ve düşük risk şartını sağladı.' 
-      : '❌ REDDEDİLDİ: Risk metrikleri tolerans dışı.'
+    symbols,
+    barsPerSymbol: 480,
+    interval: '3m',
+    passRules: PASS_RULES,
+    results
   };
 }
 
 if (require.main === module) {
-  runBacktest({ slPct: 1.25, bePct: 0.40, tp1Pct: 0.75, moonPct: 1.50 }).then(r => console.log(JSON.stringify(r, null, 2)));
+  runBacktest({
+    current: { slPct: 1.25, bePct: 0.45, tp1Pct: 0.75, moonPct: 1.50 },
+    weekend: { slPct: 1.25, bePct: 0.40, tp1Pct: 0.70, moonPct: 1.40 }
+  }).then(r => console.log(JSON.stringify(r, null, 2)));
 }
 
-module.exports = { runBacktest };
+module.exports = { runBacktest, PASS_RULES };

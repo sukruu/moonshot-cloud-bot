@@ -1,55 +1,146 @@
 {
-  "lastSync": "2026-10-11T07:23:09.453Z",
+  "lastSync": "2026-10-11T07:37:11.143Z",
+  "decision": {
+    "approved": true,
+    "reason": "rejime uygun filtreler onaylandı",
+    "regime": "WEEKEND_LOW_LIQUIDITY",
+    "entryFilters": {
+      "vol3hMin": 2.5,
+      "candidateSlice": 35
+    }
+  },
+  "exitRecommendation": "mevcut ayarlar korunuyor",
+  "autoExitParams": false,
   "team": {
     "manager": {
-      "role": "👑 Baş Risk & Portföy Direktörü (Orchestrator)",
-      "status": "ONAYLANDI (Aktif Koruma)",
+      "role": "👑 Baş Risk & Portföy Direktörü",
+      "status": "ONAYLANDI",
       "guardrails": {
         "marginOk": true,
         "leverageOk": true,
-        "stopLossOk": true,
-        "maxSlotsOk": true
+        "stopLossOk": true
       },
-      "message": "👑 [Yönetici Onayı]: Risk parametreleri tam uyumlu. Hafta sonu rejimi ($2.5M hacim eşiği) onaylandı."
+      "message": "rejime uygun filtreler onaylandı"
     },
     "analyst": {
-      "role": "🧠 Makro Trend & Veri İstihbaratçısı (Quant Analyst)",
+      "role": "🧠 Piyasa İstihbaratı",
       "regime": "WEEKEND_LOW_LIQUIDITY",
       "description": "Hafta Sonu Düşük Likidite & Sıkışık Hacim",
       "isWeekend": true,
-      "btcTrend": "24s: %+0.53",
-      "insight": "🟢 Mükemmel giriş isabet oranı (%80+)"
+      "btcTrend": "24s: %0.35",
+      "insight": "⚠️ Örneklem küçük (3/30); kazanma oranı henüz istatistiksel olarak anlamlı değil."
     },
     "trader": {
-      "role": "⚔️ Sinyal & Yürütme Motoru (Execution Trader)",
-      "activeStyle": "Lazer Vur-Kaç & Moonshot Kademeli Kâr",
-      "targetVolThreshold": "$2.5M (3s Hacim)",
-      "candidatePool": "35 Coin Derinlik"
+      "role": "⚔️ Sinyal & Yürütme",
+      "targetVolThreshold": "$2.5M (3s)",
+      "candidatePool": "35 aday"
     },
     "tester": {
-      "role": "🧪 Simülatör & Kalite Güvence (QA Specialist)",
-      "lastTestWinRate": "100% (Canlı)",
-      "profitFactor": 99.9,
-      "simulationVerdict": "❌ REDDEDİLDİ: Risk metrikleri tolerans dışı."
+      "role": "🧪 QA & Simülatör",
+      "lastTestWinRate": "%54.1 BT / PF 0.72",
+      "backtest": {
+        "current": {
+          "config": {
+            "margin": 20,
+            "leverage": 20,
+            "slPct": 1.25,
+            "bePct": 0.45,
+            "tp1Pct": 0.75,
+            "moonPct": 1.5
+          },
+          "summary": {
+            "totalTrades": 148,
+            "wins": 80,
+            "losses": 68,
+            "winRatePct": 54.1,
+            "profitFactor": 0.72,
+            "totalPnl": -97.39,
+            "avgPnl": -0.66,
+            "maxDrawdownPct": 105.1
+          },
+          "verdict": {
+            "passed": false,
+            "reason": "kâr faktörü düşük (0.72 < 1.2)"
+          }
+        },
+        "proposed": {
+          "config": {
+            "margin": 20,
+            "leverage": 20,
+            "slPct": 1.25,
+            "bePct": 0.4,
+            "tp1Pct": 0.7,
+            "moonPct": 1.4
+          },
+          "summary": {
+            "totalTrades": 149,
+            "wins": 83,
+            "losses": 65,
+            "winRatePct": 55.7,
+            "profitFactor": 0.69,
+            "totalPnl": -102.55,
+            "avgPnl": -0.69,
+            "maxDrawdownPct": 109.3
+          },
+          "verdict": {
+            "passed": false,
+            "reason": "kâr faktörü düşük (0.69 < 1.2)"
+          }
+        },
+        "symbols": [
+          "STRKUSDT",
+          "NEARUSDT",
+          "MAGICUSDT",
+          "ZECUSDT",
+          "LUMIAUSDT",
+          "HYPEUSDT",
+          "WLDUSDT",
+          "XRPUSDT",
+          "CFXUSDT",
+          "USUSDT"
+        ]
+      }
     },
     "engineer": {
-      "role": "💻 Yazılım Mühendisi & DevOps (Software Engineer)",
-      "engineStatus": "Kesintisiz Çalışıyor (Node.js / Render)",
-      "apiGateway": "Binance Vision CDN Fallback Aktif"
+      "role": "💻 DevOps & Sistem",
+      "uptimeMin": 0,
+      "dataOk": true
     }
   },
-  "forensicsSummary": {
-    "totalTrades": 3,
-    "wins": 3,
-    "losses": 0,
-    "breakevens": 0,
-    "winRatePct": 100,
-    "profitFactor": 99.9,
-    "totalPnl": 31.21,
-    "totalRoi": 155.9,
-    "avgDurationMin": 522,
-    "avgMfePct": 5.4,
-    "avgMaePct": 0.33
+  "forensics": {
+    "success": true,
+    "auditedAt": "2026-10-11T07:37:05.840Z",
+    "reliable": false,
+    "summary": {
+      "totalTrades": 3,
+      "wins": 3,
+      "losses": 0,
+      "breakevens": 0,
+      "winRatePct": 100,
+      "profitFactor": 99,
+      "totalPnl": 31.21,
+      "avgPnl": 10.4,
+      "avgDurationMin": 522,
+      "avgMfePct": 5.4,
+      "avgMaePct": 0.33
+    },
+    "recent": {
+      "totalTrades": 3,
+      "wins": 3,
+      "losses": 0,
+      "breakevens": 0,
+      "winRatePct": 100,
+      "profitFactor": 99,
+      "totalPnl": 31.21,
+      "avgPnl": 10.4,
+      "avgDurationMin": 522,
+      "avgMfePct": 5.4,
+      "avgMaePct": 0.33
+    },
+    "insights": [
+      "⚠️ Örneklem küçük (3/30); kazanma oranı henüz istatistiksel olarak anlamlı değil.",
+      "Ortalama MAE %0.33, ortalama MFE %5.4."
+    ]
   },
   "recommendedConfig": {
     "vol3hM": 2.5,
@@ -62,6 +153,94 @@
     "marginPerTrade": 20
   },
   "dialogues": [
+    {
+      "id": "1791704231143g7pv",
+      "time": "10:37:11",
+      "timestamp": 1791704231143,
+      "agent": "💻 YAZILIMCI",
+      "roleKey": "ENGINEER",
+      "color": "#a78bfa",
+      "title": "DevOps & Sistem",
+      "text": "Sunucu çalışma süresi 0 dk. Piyasa verisi: alındı, backtest verisi: alındı.",
+      "tag": "SYSTEM"
+    },
+    {
+      "id": "1791704231143y3hs",
+      "time": "10:37:11",
+      "timestamp": 1791704231143,
+      "agent": "⚔️ TRADER",
+      "roleKey": "TRADER",
+      "color": "#facc15",
+      "title": "Sinyal & Yürütme",
+      "text": "Uygulanacak giriş filtresi: hacim ≥ $2.5M, 35 aday. SL %1.25, BE %0.45, TP1 %0.75, Moon %1.5.",
+      "tag": "TRADE"
+    },
+    {
+      "id": "17917042311425wg0",
+      "time": "10:37:11",
+      "timestamp": 1791704231142,
+      "agent": "👑 YÖNETİCİ",
+      "roleKey": "MANAGER",
+      "color": "#c084fc",
+      "title": "Risk Direktörü",
+      "text": "Filtreler zaten uygun ($2.5M / 35 aday), değişiklik yok. Çıkış ayarları: mevcut ayarlar korunuyor.",
+      "tag": "RISK"
+    },
+    {
+      "id": "17917042311429srz",
+      "time": "10:37:11",
+      "timestamp": 1791704231142,
+      "agent": "🧪 TESTÇİ",
+      "roleKey": "TESTER",
+      "color": "#4ade80",
+      "title": "QA & Simülatör",
+      "text": "Önerilen çıkış ayarı (BE 0.4 / TP1 0.7 / Moon 1.4): PF 0.69, net $-102.55 → KALDI (kâr faktörü düşük (0.69 &lt; 1.2)).",
+      "tag": "STRATEGY"
+    },
+    {
+      "id": "17917042311421iz9",
+      "time": "10:37:11",
+      "timestamp": 1791704231142,
+      "agent": "🧪 TESTÇİ",
+      "roleKey": "TESTER",
+      "color": "#4ade80",
+      "title": "QA & Simülatör",
+      "text": "Backtest (10 koin, 3dk×480 mum). Mevcut ayar: 148 işlem, kazanma %54.1, PF 0.72, net $-97.39, DD %105.1 → KALDI (kâr faktörü düşük (0.72 &lt; 1.2)).",
+      "tag": "STRATEGY"
+    },
+    {
+      "id": "179170423114177i2",
+      "time": "10:37:11",
+      "timestamp": 1791704231141,
+      "agent": "🧠 ANALİZCİ",
+      "roleKey": "ANALYST",
+      "color": "#38bdf8",
+      "title": "Piyasa İstihbaratı",
+      "text": "Canlı geçmiş: 3 işlem, kazanma %100, PF 99, net $31.21. Örneklem 30 işlemin altında, sonuç güvenilir değil.",
+      "tag": "STRATEGY"
+    },
+    {
+      "id": "1791704231141z4i7",
+      "time": "10:37:11",
+      "timestamp": 1791704231141,
+      "agent": "🧠 ANALİZCİ",
+      "roleKey": "ANALYST",
+      "color": "#38bdf8",
+      "title": "Piyasa İstihbaratı",
+      "text": "Rejim: Hafta Sonu Düşük Likidite &amp; Sıkışık Hacim. BTC 24s %0.35, $15M+ hacimli koin sayısı 118. Öneri: hacim ≥ $2.5M, 35 aday.",
+      "tag": "REGIME"
+    },
+    {
+      "id": "1791704231126an79",
+      "time": "10:37:11",
+      "timestamp": 1791704231140,
+      "agent": "👑 YÖNETİCİ",
+      "roleKey": "MANAGER",
+      "color": "#c084fc",
+      "title": "Risk Direktörü",
+      "text": "Toplantı açıldı. Kasa $131.21, açık slot 0/4. Sert sınırlar: uyumlu.",
+      "tag": "RISK"
+    },
     {
       "id": "1791703389453z7cr",
       "time": "10:23:09",

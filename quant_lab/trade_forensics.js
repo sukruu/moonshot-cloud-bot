@@ -2,123 +2,69 @@ const fs = require('fs');
 const path = require('path');
 
 const HISTORY_FILE = path.join(__dirname, '..', 'trades_history.json');
+const MIN_RELIABLE_SAMPLE = 30;
+
+function statsOf(trades) {
+  let wins = 0, losses = 0, be = 0, gp = 0, gl = 0, pnl = 0, mfe = 0, mae = 0, dur = 0;
+  for (const t of trades) {
+    const p = Number(t.pnl) || 0;
+    pnl += p;
+    mfe += Number(t.mfe) || 0;
+    mae += Number(t.mae) || 0;
+    dur += Number(t.durationMin) || 0;
+    if (p > 0.05) { wins++; gp += p; }
+    else if (p < -0.05) { losses++; gl += Math.abs(p); }
+    else be++;
+  }
+  const n = trades.length;
+  return {
+    totalTrades: n,
+    wins, losses, breakevens: be,
+    winRatePct: n ? Number((wins / n * 100).toFixed(1)) : 0,
+    profitFactor: gl > 0 ? Number((gp / gl).toFixed(2)) : (gp > 0 ? 99 : 0),
+    totalPnl: Number(pnl.toFixed(2)),
+    avgPnl: n ? Number((pnl / n).toFixed(2)) : 0,
+    avgDurationMin: n ? Math.round(dur / n) : 0,
+    avgMfePct: n ? Number((mfe / n).toFixed(2)) : 0,
+    avgMaePct: n ? Number((mae / n).toFixed(2)) : 0
+  };
+}
 
 /**
- * 🔬 Trade Forensics (Adli Tıp İşlem Analizi)
- * Son gerçekleşen işlemleri inceler, MFE/MAE oranlarını analiz eder ve istihbarat üretir.
+ * 🔬 Trade Forensics: Gerçek işlem geçmişini istatistiksel olarak inceler.
+ * Örneklem küçükse bunu AÇIKÇA belirtir (3 işlemle "%100 başarı" yanıltıcıdır).
  */
 function runTradeForensics() {
   if (!fs.existsSync(HISTORY_FILE)) {
-    return {
-      success: false,
-      message: 'trades_history.json bulunamadı.'
-    };
+    return { success: false, message: 'trades_history.json bulunamadı.', summary: statsOf([]), recent: statsOf([]), insights: [] };
   }
-
   try {
-    const raw = fs.readFileSync(HISTORY_FILE, 'utf8');
-    const trades = JSON.parse(raw);
+    const trades = JSON.parse(fs.readFileSync(HISTORY_FILE, 'utf8'));
+    if (!Array.isArray(trades)) throw new Error('Geçersiz format');
 
-    if (!Array.isArray(trades) || trades.length === 0) {
-      return {
-        success: true,
-        tradesCount: 0,
-        message: 'Henüz incelenecek tamamlanmış işlem yok.'
-      };
+    const summary = statsOf(trades);
+    const recent = statsOf(trades.slice(0, 20)); // en yeni 20 işlem (liste yeniden eskiye sıralı)
+    const reliable = summary.totalTrades >= MIN_RELIABLE_SAMPLE;
+
+    const insights = [];
+    if (!reliable) {
+      insights.push(`⚠️ Örneklem küçük (${summary.totalTrades}/${MIN_RELIABLE_SAMPLE}); kazanma oranı henüz istatistiksel olarak anlamlı değil.`);
+    }
+    if (summary.totalTrades > 0) {
+      insights.push(`Ortalama MAE %${summary.avgMaePct}, ortalama MFE %${summary.avgMfePct}.`);
+      if (recent.totalTrades >= 10 && recent.profitFactor < 1) {
+        insights.push(`🔴 Son ${recent.totalTrades} işlemde kâr faktörü ${recent.profitFactor} (<1): strateji şu an para kaybediyor.`);
+      }
     }
 
-    let wins = 0;
-    let losses = 0;
-    let beWins = 0;
-    let totalPnl = 0;
-    let totalRoi = 0;
-    let grossProfit = 0;
-    let grossLoss = 0;
-    let totalMfe = 0;
-    let totalMae = 0;
-    let totalDuration = 0;
-
-    const auditedTrades = trades.map(t => {
-      const pnl = Number(t.pnl) || 0;
-      const roi = Number(t.roi) || 0;
-      const mfe = Number(t.mfe) || 0;
-      const mae = Number(t.mae) || 0;
-      const dur = Number(t.durationMin) || 0;
-
-      totalPnl += pnl;
-      totalRoi += roi;
-      totalMfe += mfe;
-      totalMae += mae;
-      totalDuration += dur;
-
-      if (pnl > 0.05) {
-        wins++;
-        grossProfit += pnl;
-      } else if (pnl < -0.05) {
-        losses++;
-        grossLoss += Math.abs(pnl);
-      } else {
-        beWins++;
-      }
-
-      // Verimlilik: Zirveye (MFE) ne kadar yakın çıkıldı?
-      const efficiency = mfe > 0 ? Math.min(100, Math.round(((roi / 20) / mfe) * 100)) : 100;
-
-      return {
-        id: t.id,
-        symbol: t.symbol,
-        side: t.side,
-        pnl: Number(pnl.toFixed(2)),
-        roi: Number(roi.toFixed(1)),
-        mfePct: Number(mfe.toFixed(2)),
-        maePct: Number(mae.toFixed(2)),
-        durationMin: dur,
-        efficiencyPct: efficiency,
-        exitReason: t.exitReason || 'Bilinmiyor'
-      };
-    });
-
-    const totalTrades = trades.length;
-    const winRate = totalTrades > 0 ? Number(((wins / totalTrades) * 100).toFixed(1)) : 0;
-    const profitFactor = grossLoss > 0 ? Number((grossProfit / grossLoss).toFixed(2)) : (grossProfit > 0 ? 99.9 : 1.0);
-    const avgDurationMin = Math.round(totalDuration / totalTrades);
-    const avgMfe = Number((totalMfe / totalTrades).toFixed(2));
-    const avgMae = Number((totalMae / totalTrades).toFixed(2));
-
-    return {
-      success: true,
-      auditedAt: new Date().toISOString(),
-      summary: {
-        totalTrades,
-        wins,
-        losses,
-        breakevens: beWins,
-        winRatePct: winRate,
-        profitFactor,
-        totalPnl: Number(totalPnl.toFixed(2)),
-        totalRoi: Number(totalRoi.toFixed(1)),
-        avgDurationMin,
-        avgMfePct: avgMfe,
-        avgMaePct: avgMae
-      },
-      insights: [
-        winRate >= 80 ? '🟢 Mükemmel giriş isabet oranı (%80+)' : '🟡 Giriş filtreleri sıkılaştırılmalı',
-        avgMae <= 0.6 ? '🛡️ Düşük MAE: Pozisyonlar ters yönde çok az yıpranıyor' : '⚠️ Yüksek MAE: Giriş zamanlaması gecikmeli',
-        avgMfe >= 1.5 ? '🚀 Güçlü Moonshot potansiyeli yakalanıyor' : '🎯 Hedefler dar vur-kaç için uygun'
-      ],
-      trades: auditedTrades
-    };
+    return { success: true, auditedAt: new Date().toISOString(), reliable, summary, recent, insights };
   } catch (err) {
-    return {
-      success: false,
-      error: err.message
-    };
+    return { success: false, error: err.message, summary: statsOf([]), recent: statsOf([]), insights: [] };
   }
 }
 
 if (require.main === module) {
-  const result = runTradeForensics();
-  console.log(JSON.stringify(result, null, 2));
+  console.log(JSON.stringify(runTradeForensics(), null, 2));
 }
 
-module.exports = { runTradeForensics };
+module.exports = { runTradeForensics, MIN_RELIABLE_SAMPLE };

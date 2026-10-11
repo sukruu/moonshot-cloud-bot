@@ -41,10 +41,23 @@ let CONFIG = {
   bePct: 0.45,               // Erken Başabaş Kilidi %0.45 Spot (+%9 ROI görünce Riske kitle)
   moonPct: 1.50,             // Moonshot TP2 Hedefi %1.50 Spot (+%30 ROI)
   tp1Pct: 0.75,              // Kademeli Kâr Alma TP1 Hedefi %0.75 Spot (+%15 ROI ile %50 Kâr Cebe)
-  feeRate: 0.0008,           // 0.04% Giriş + 0.04% Çıkış Taker
+  feeRate: 0.0005,           // Binance Futures taker %0.05 (TEK YÖN). Kodda ×2 ile giriş+çıkış = %0.10 hesaplanır
   scanIntervalMs: 4000,
   riskIntervalMs: 2500,
   radarIntervalMs: 60000
+};
+
+// 🤖 AJAN EKİBİNİN CANLI OLARAK DEĞİŞTİREBİLDİĞİ GİRİŞ FİLTRELERİ
+// (Yönetici onayı + sert sınırlar dahilinde team_runner tarafından güncellenir)
+let DYNAMIC = {
+  vol3hMin: 2.5,         // 3 saatlik minimum hacim ($M)
+  candidateSlice: 35,    // Kline ile derin incelenen aday sayısı
+  regime: 'DEFAULT',
+  updatedAt: 0
+};
+const DYNAMIC_LIMITS = {
+  vol3hMin: [1.5, 15.0],
+  candidateSlice: [15, 50]
 };
 
 // ŞAMPİYON ÖNCELİKLİ KOİNLER (Ekran 1 VIP Listesi)
@@ -725,7 +738,7 @@ async function scanLoop() {
     })
     .filter(t => t.isVip || t.volM >= 6.0)
     .sort((a, b) => b.hotScore - a.hotScore)
-    .slice(0, 35);
+    .slice(0, DYNAMIC.candidateSlice);
 
     if (now - lastScanHeartbeat > 45000 && topCandidates.length > 0) {
       lastScanHeartbeat = now;
@@ -764,15 +777,16 @@ async function scanLoop() {
         // 🛡️ BAYAT VERİ & HAYALET KOİN ENGELİ: Radarda olmayan veya 8 dakikadan eski verileri içeren coinleri ele!
         if (!rInfo || (now - (rInfo.lastUpdate || 0) > 8 * 60 * 1000)) continue;
 
-        // 🛡️ KURUMSAL HACİM KALKANI ($2.5M altındaki aşırı sığ tahtalarda girme)
-        if (rInfo && rInfo.vol3hM !== null && rInfo.vol3hM !== undefined && rInfo.vol3hM < 2.5) continue;
+        // 🛡️ KURUMSAL HACİM KALKANI (Eşik ajan ekibi tarafından rejime göre ayarlanır)
+        if (rInfo && rInfo.vol3hM !== null && rInfo.vol3hM !== undefined && rInfo.vol3hM < DYNAMIC.vol3hMin) continue;
 
         // 🧠 DEEP ANALYSIS FİLTRELERİ
         const intel = global.coinIntelligence[sym];
+        let nearMax6m = false;
         if (intel) {
-           // 1. Tarihi Dirence Çok Yakınsa LONG Girme (Zirveden %3 uzağı riskli bölge)
+           // 1. Tarihi Dirence Çok Yakınsa sadece LONG engellenir (SHORT için engel değil)
            if (lastP >= intel.max6m * 0.97) {
-             continue; // Direnç reddi riski
+             nearMax6m = true;
            }
            // 2. Karakteri Fazla Yavaş Koinleri Ele (Günde ortalama %3'ten az hareket eden)
            if (intel.volatilityScore < 3.0) {
@@ -892,7 +906,7 @@ async function scanLoop() {
           finalLongSignal = true;
         } else if (hasMomentum && isWhaleVol) {
           const hasTakerSupport = rInfo ? (rInfo.takerBuyRatio || 50) >= 51.5 : false;
-          const hasVolume = rInfo ? (rInfo.vol3hM || 0) >= 2.5 : false;
+          const hasVolume = rInfo ? (rInfo.vol3hM || 0) >= DYNAMIC.vol3hMin : false;
           const notOverbought = chg24Val >= 0.0 && chg24Val < 25.0;
           const strongMomentum = curMovePct >= 0.35;
           if (hasTakerSupport && hasVolume && notOverbought && strongMomentum) {
@@ -906,7 +920,7 @@ async function scanLoop() {
           finalShortSignal = true;
         } else if ((curMovePct <= -minJump && curP < curO) && isWhaleVol) {
           const hasTakerSell = rInfo ? (rInfo.takerBuyRatio || 50) <= 48.0 : false;
-          const hasVolume = rInfo ? (rInfo.vol3hM || 0) >= 2.5 : false;
+          const hasVolume = rInfo ? (rInfo.vol3hM || 0) >= DYNAMIC.vol3hMin : false;
           const strongMomentumDown = curMovePct <= -0.35;
           const notOversold = chg24Val <= 0.0 && chg24Val > -15.0;
           if (hasTakerSell && hasVolume && strongMomentumDown && notOversold) {
@@ -959,7 +973,7 @@ async function scanLoop() {
         const longTrendOk = !!rInfo && ((rInfo.chg3h || 0) >= 1.2 || (rInfo.chg15m || 0) >= 0.9 || (rInfo.signal && rInfo.signal.includes("BALİNA"))) && chg24Val >= -1.0;
         const shortTrendOk = !!rInfo && ((rInfo.chg3h || 0) <= -1.2 || (rInfo.chg15m || 0) <= -0.9 || (rInfo.signal && rInfo.signal.includes("BALİNA"))) && chg24Val <= 1.0;
 
-        const isLongPump = finalLongSignal && longTrendOk && validWickLong && radarOkLong && strictTrendOkLong && !isNearPeakTrap && btcSafeForLong;
+        const isLongPump = finalLongSignal && longTrendOk && validWickLong && radarOkLong && strictTrendOkLong && !isNearPeakTrap && btcSafeForLong && !nearMax6m;
         const isShortDump = finalShortSignal && shortTrendOk && validWickShort && radarOkShort && strictTrendOkShort && !isNearDipTrap && btcSafeForShort;
 
         if (isLongPump || isShortDump) {
@@ -1006,9 +1020,11 @@ async function scanLoop() {
 
           addLog(`🚀 POZİSYON AÇILDI: [${side}] ${sym} @ $${curP.toFixed(4)} (SL: $${stopPrice.toFixed(4)}) ${radarTag}`, 'TRADE');
           try {
-            addDialogue('ANALYST', `🚨 [FIRSAT YAKALANDI]: ${sym} ${side} kurulumu doğrulandı! Hacim: $${(rInfo && rInfo.vol3hM ? rInfo.vol3hM.toFixed(1) : '2.5')}M, Alıcı Oranı: %${(rInfo && rInfo.takerBuyRatio ? rInfo.takerBuyRatio.toFixed(1) : '52')}.`, 'TRADE');
-            addDialogue('TRADER', `⚔️ [EMİR İLETİLDİ]: ${sym} ${side} pozisyonuna $${curP.toFixed(4)} seviyesinden girildi. Nominal: $400 (20x).`, 'TRADE');
-            addDialogue('MANAGER', `👑 [RİSK KONTROLÜ]: ${sym} için $${CONFIG.marginPerTrade} teminat ayrıldı. SL %${CONFIG.slPct} aktif.`, 'RISK');
+            const volTxt = (rInfo && rInfo.vol3hM != null) ? `$${rInfo.vol3hM.toFixed(1)}M` : 'bilinmiyor';
+            const takerTxt = (rInfo && rInfo.takerBuyRatio != null) ? `%${rInfo.takerBuyRatio.toFixed(1)}` : 'bilinmiyor';
+            addDialogue('ANALYST', `🚨 ${sym} ${side} sinyali: 3s hacim ${volTxt}, alıcı oranı ${takerTxt}, 24s %${chg24Val.toFixed(1)}, rejim: ${DYNAMIC.regime}.`, 'TRADE');
+            addDialogue('TRADER', `⚔️ ${sym} ${side} @ $${curP.toFixed(4)} | Nominal $${(CONFIG.marginPerTrade * CONFIG.leverage).toFixed(0)} (${CONFIG.leverage}x) | SL $${stopPrice.toFixed(4)}.`, 'TRADE');
+            addDialogue('MANAGER', `👑 Slot ${activePositions.length}/${CONFIG.maxSlots}. Bu işlemde maksimum risk: -$${(CONFIG.marginPerTrade * CONFIG.leverage * CONFIG.slPct / 100).toFixed(2)}.`, 'RISK');
           } catch(e) {}
           break;
         }
@@ -2558,7 +2574,8 @@ const server = http.createServer(async (req, res) => {
       resetEpoch: resetEpoch,
       settings: getSettingsPayload(),
       settingsCustomized: settingsCustomized,
-      teamStatus: teamStatusCache
+      teamStatus: teamStatusCache,
+      dynamic: DYNAMIC
     }));
     return;
   }
@@ -2750,7 +2767,7 @@ const server = http.createServer(async (req, res) => {
 initStorage();
 server.listen(PORT, () => {
   addLog(`🌐 Web Sunucusu hazır: http://localhost:${PORT}`);
-  addLog(`🚀 Moonshot 7/24 Bulut Test Laboratuvarı Başlatıldı! (Bakiye: $${CONFIG.initialBalance})`);
+  addLog(`🚀 Moonshot 7/24 Bulut Test Laboratuvarı Başlatıldı! (Bakiye: $${balance.toFixed(2)})`);
   updateRadar();
   setInterval(scanLoop, CONFIG.scanIntervalMs);
   setInterval(fastRiskLoop, CONFIG.riskIntervalMs);
@@ -2764,22 +2781,52 @@ server.listen(PORT, () => {
     } catch(e) {}
   }, 4 * 60 * 1000);
 
-  // 🤖 OTONOM 5-AJAN EKİBİ SENKRONİZASYONU
+  // 🤖 OTONOM 5-AJAN EKİBİ: Toplantı yap → Yönetici onaylarsa giriş filtrelerini CANLI uygula
   try {
     const { runAutonomousTeamSync } = require('./quant_lab/team_runner');
-    setTimeout(async () => {
+    const clamp = (v, [lo, hi]) => Math.min(hi, Math.max(lo, v));
+
+    const runTeam = async () => {
       try {
-        teamStatusCache = await runAutonomousTeamSync();
-        addLog(`🤖 5-Ajan Ekibi Senkron: ${teamStatusCache?.team?.analyst?.description || 'Aktif'}`, 'INFO');
+        const report = await runAutonomousTeamSync({
+          balance,
+          activeCount: activePositions.length,
+          maxSlots: CONFIG.maxSlots,
+          uptimeMin: Math.floor((Date.now() - startTime) / 60000),
+          current: { ...DYNAMIC },
+          config: { slPct: CONFIG.slPct, bePct: CONFIG.bePct, tp1Pct: CONFIG.tp1Pct, moonPct: CONFIG.moonPct, marginPerTrade: CONFIG.marginPerTrade, leverage: CONFIG.leverage }
+        });
+        teamStatusCache = report;
+
+        const d = report && report.decision;
+        if (d && d.approved && d.entryFilters) {
+          const before = { ...DYNAMIC };
+          DYNAMIC.vol3hMin = clamp(Number(d.entryFilters.vol3hMin) || before.vol3hMin, DYNAMIC_LIMITS.vol3hMin);
+          DYNAMIC.candidateSlice = Math.round(clamp(Number(d.entryFilters.candidateSlice) || before.candidateSlice, DYNAMIC_LIMITS.candidateSlice));
+          DYNAMIC.regime = d.regime || before.regime;
+          DYNAMIC.updatedAt = Date.now();
+          if (before.vol3hMin !== DYNAMIC.vol3hMin || before.candidateSlice !== DYNAMIC.candidateSlice) {
+            addLog(`🤖 Ekip kararı uygulandı: Hacim eşiği $${before.vol3hMin}M → $${DYNAMIC.vol3hMin}M | Aday ${before.candidateSlice} → ${DYNAMIC.candidateSlice} (${DYNAMIC.regime})`, 'INFO');
+          }
+          if (d.exitParams) {
+            const ep = d.exitParams;
+            CONFIG.slPct = clamp(Number(ep.slPct) || CONFIG.slPct, [0.8, 1.5]);
+            CONFIG.bePct = clamp(Number(ep.bePct) || CONFIG.bePct, [0.25, 0.60]);
+            CONFIG.tp1Pct = clamp(Number(ep.tp1Pct) || CONFIG.tp1Pct, [0.40, 1.50]);
+            CONFIG.moonPct = clamp(Number(ep.moonPct) || CONFIG.moonPct, [1.00, 3.00]);
+            addLog(`🤖 Ekip çıkış ayarlarını güncelledi: SL %${CONFIG.slPct} | BE %${CONFIG.bePct} | TP1 %${CONFIG.tp1Pct} | Moon %${CONFIG.moonPct}`, 'INFO');
+          }
+        } else {
+          addLog(`🤖 Ekip toplantısı: değişiklik onaylanmadı (${(d && d.reason) || 'bilinmiyor'})`, 'INFO');
+        }
       } catch (e) {
         addLog(`Ajan Ekibi Hatası: ${e.message}`, 'WARN');
       }
-    }, 5000);
+    };
 
-    setInterval(async () => {
-      try {
-        teamStatusCache = await runAutonomousTeamSync();
-      } catch (e) {}
-    }, 30 * 60 * 1000);
-  } catch (e) {}
+    setTimeout(runTeam, 15000);
+    setInterval(runTeam, 30 * 60 * 1000);
+  } catch (e) {
+    addLog(`Ajan Ekibi yüklenemedi: ${e.message}`, 'WARN');
+  }
 });
