@@ -17,6 +17,13 @@ const HISTORY_FILE = path.join(DATA_DIR, 'trades_history.json');
 const CSV_FILE = path.join(DATA_DIR, 'trades_history.csv');
 const STATE_FILE = path.join(DATA_DIR, 'bot_state.json');
 const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
+const TEAM_STATUS_FILE = path.join(DATA_DIR, 'quant_lab', 'team_status.json');
+let teamStatusCache = null;
+try {
+  if (fs.existsSync(TEAM_STATUS_FILE)) {
+    teamStatusCache = JSON.parse(fs.readFileSync(TEAM_STATUS_FILE, 'utf8'));
+  }
+} catch (e) {}
 
 // --- EKRAN 1 BİREBİR AYARLARI ---
 let CONFIG = {
@@ -1799,6 +1806,30 @@ function serveDashboardHtml() {
           </div>
         </div>
 
+        <div class="sidebar-section-title" style="margin-top:10px;">🤖 OTONOM QUANT EKİBİ (5 AJAN)</div>
+        <div style="background:rgba(15,23,42,0.65);border:1px solid rgba(168,85,247,0.3);border-radius:8px;padding:9px;margin-bottom:12px;font-size:11px;display:flex;flex-direction:column;gap:6px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span style="font-weight:800;color:#c084fc;">👑 1. YÖNETİCİ</span>
+            <span class="status-pill green" id="teamManager" style="font-size:9.5px;padding:2px 6px;">ONAYLANDI</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span style="font-weight:700;color:#38bdf8;">🧠 2. ANALİZCİ</span>
+            <span class="status-pill blue" id="teamAnalyst" style="font-size:9.5px;padding:2px 6px;">Hafta Sonu Rejimi</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span style="font-weight:700;color:#facc15;">⚔️ 3. TRADER</span>
+            <span class="status-pill purple" id="teamTrader" style="font-size:9.5px;padding:2px 6px;">Lazer & Moonshot</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span style="font-weight:700;color:#4ade80;">🧪 4. TESTÇİ</span>
+            <span class="status-pill green" id="teamTester" style="font-size:9.5px;padding:2px 6px;">Win Rate: %100</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span style="font-weight:700;color:#e2e8f0;">💻 5. YAZILIMCI</span>
+            <span class="status-pill green" id="teamEngineer" style="font-size:9.5px;padding:2px 6px;">Render Senkron</span>
+          </div>
+        </div>
+
         <div class="sidebar-section-title">⚙️ TEMEL RİSK & POZİSYON</div>
         <div class="param-grid-2x2">
           <div class="param-card">
@@ -1999,6 +2030,25 @@ function serveDashboardHtml() {
         const btcEl = document.getElementById("btcVal");
         btcEl.innerText = data.stats.btcTrend;
         btcEl.style.color = data.stats.btcIsGreen ? 'var(--green)' : 'var(--red)';
+
+        if (data.teamStatus && data.teamStatus.team) {
+          const t = data.teamStatus.team;
+          if (t.manager && document.getElementById("teamManager")) {
+            document.getElementById("teamManager").innerText = t.manager.status.includes('ONAY') ? 'ONAYLANDI' : 'VETO';
+          }
+          if (t.analyst && document.getElementById("teamAnalyst")) {
+            document.getElementById("teamAnalyst").innerText = t.analyst.description ? t.analyst.description.slice(0, 18) : 'Rejim Aktif';
+          }
+          if (t.trader && document.getElementById("teamTrader")) {
+            document.getElementById("teamTrader").innerText = t.trader.targetVolThreshold || 'Lazer & Moonshot';
+          }
+          if (t.tester && document.getElementById("teamTester")) {
+            document.getElementById("teamTester").innerText = 'WR: ' + t.tester.lastTestWinRate;
+          }
+          if (t.engineer && document.getElementById("teamEngineer")) {
+            document.getElementById("teamEngineer").innerText = 'Render Canlı';
+          }
+        }
 
         // Aktif Pozisyonlar Tablosu
         const tbody = document.getElementById("activeTbody");
@@ -2437,8 +2487,15 @@ const server = http.createServer(async (req, res) => {
       radar: radarList.slice(0, 30),
       resetEpoch: resetEpoch,
       settings: getSettingsPayload(),
-      settingsCustomized: settingsCustomized
+      settingsCustomized: settingsCustomized,
+      teamStatus: teamStatusCache
     }));
+    return;
+  }
+
+  if (pathname === '/api/team') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(teamStatusCache || { message: "Ajan ekibi senkronize ediliyor..." }, null, 2));
     return;
   }
 
@@ -2636,4 +2693,23 @@ server.listen(PORT, () => {
       await fetch(`${KEEP_ALIVE_URL}/ping`);
     } catch(e) {}
   }, 4 * 60 * 1000);
+
+  // 🤖 OTONOM 5-AJAN EKİBİ SENKRONİZASYONU
+  try {
+    const { runAutonomousTeamSync } = require('./quant_lab/team_runner');
+    setTimeout(async () => {
+      try {
+        teamStatusCache = await runAutonomousTeamSync();
+        addLog(`🤖 5-Ajan Ekibi Senkron: ${teamStatusCache?.team?.analyst?.description || 'Aktif'}`, 'INFO');
+      } catch (e) {
+        addLog(`Ajan Ekibi Hatası: ${e.message}`, 'WARN');
+      }
+    }, 5000);
+
+    setInterval(async () => {
+      try {
+        teamStatusCache = await runAutonomousTeamSync();
+      } catch (e) {}
+    }, 30 * 60 * 1000);
+  } catch (e) {}
 });

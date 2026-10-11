@@ -1,0 +1,64 @@
+{
+  "lastSync": "2026-10-11T07:08:30.064Z",
+  "team": {
+    "manager": {
+      "role": "👑 Baş Risk & Portföy Direktörü (Orchestrator)",
+      "status": "ONAYLANDI (Aktif Koruma)",
+      "guardrails": {
+        "marginOk": true,
+        "leverageOk": true,
+        "stopLossOk": true,
+        "maxSlotsOk": true
+      },
+      "message": "👑 [Yönetici Onayı]: Risk parametreleri tam uyumlu. Hafta sonu rejimi ($2.5M hacim eşiği) onaylandı."
+    },
+    "analyst": {
+      "role": "🧠 Makro Trend & Veri İstihbaratçısı (Quant Analyst)",
+      "regime": "WEEKEND_LOW_LIQUIDITY",
+      "description": "Hafta Sonu Düşük Likidite & Sıkışık Hacim",
+      "isWeekend": true,
+      "btcTrend": "24s: %0.00",
+      "insight": "🟢 Mükemmel giriş isabet oranı (%80+)"
+    },
+    "trader": {
+      "role": "⚔️ Sinyal & Yürütme Motoru (Execution Trader)",
+      "activeStyle": "Lazer Vur-Kaç & Moonshot Kademeli Kâr",
+      "targetVolThreshold": "$2.5M (3s Hacim)",
+      "candidatePool": "35 Coin Derinlik"
+    },
+    "tester": {
+      "role": "🧪 Simülatör & Kalite Güvence (QA Specialist)",
+      "lastTestWinRate": "100% (Canlı)",
+      "profitFactor": 99.9,
+      "simulationVerdict": "❌ REDDEDİLDİ: Risk metrikleri tolerans dışı."
+    },
+    "engineer": {
+      "role": "💻 Yazılım Mühendisi & DevOps (Software Engineer)",
+      "engineStatus": "Kesintisiz Çalışıyor (Node.js / Render)",
+      "apiGateway": "Binance Vision CDN Fallback Aktif"
+    }
+  },
+  "forensicsSummary": {
+    "totalTrades": 3,
+    "wins": 3,
+    "losses": 0,
+    "breakevens": 0,
+    "winRatePct": 100,
+    "profitFactor": 99.9,
+    "totalPnl": 31.21,
+    "totalRoi": 155.9,
+    "avgDurationMin": 522,
+    "avgMfePct": 5.4,
+    "avgMaePct": 0.33
+  },
+  "recommendedConfig": {
+    "vol3hM": 2.5,
+    "candidateSlice": 35,
+    "bePct": 0.4,
+    "tp1Pct": 0.7,
+    "moonPct": 1.4,
+    "slPct": 1.25,
+    "leverage": 20,
+    "marginPerTrade": 20
+  }
+}
