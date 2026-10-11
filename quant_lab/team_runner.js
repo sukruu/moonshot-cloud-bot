@@ -147,7 +147,7 @@ if (require.main === module) {
   runAutonomousTeamSync({ balance: 131.21, activeCount: 0, maxSlots: 4, uptimeMin: 0 }).then(rep => {
     console.log(JSON.stringify({ decision: rep.decision, exitRecommendation: rep.exitRecommendation }, null, 2));
     console.log('\n--- TOPLANTI ---');
-    rep.dialogues.slice(0, 8).reverse().forEach(d => console.log(`${d.agent}: ${d.text}`));
+    rep.dialogues.slice(-8).forEach(d => console.log(`${d.agent}: ${d.text}`));
   });
 }
 

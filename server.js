@@ -2094,7 +2094,12 @@ function serveDashboardHtml() {
         if (data.teamStatus && data.teamStatus.dialogues) {
           const dBox = document.getElementById("dialogueBox");
           if (dBox) {
+            const wasAtBottom = (dBox.scrollHeight - dBox.scrollTop - dBox.clientHeight) < 60;
             dBox.innerHTML = renderDialoguesClient(data.teamStatus.dialogues);
+            if (wasAtBottom || !window._dBoxInitialized) {
+              dBox.scrollTop = dBox.scrollHeight;
+              window._dBoxInitialized = true;
+            }
           }
         }
 
