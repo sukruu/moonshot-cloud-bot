@@ -5,14 +5,14 @@ const DIALOGUE_FILE = path.join(__dirname, 'team_dialogue.json');
 const MAX_DIALOGUES = 50;
 
 const AGENTS = {
-  MANAGER:  { name: '👑 YÖNETİCİ',  color: '#c084fc', title: 'Risk Direktörü' },
-  ANALYST:  { name: '🧠 ANALİZCİ',  color: '#38bdf8', title: 'Piyasa İstihbaratı' },
-  TRADER:   { name: '⚔️ TRADER',    color: '#facc15', title: 'Sinyal & Yürütme' },
-  TESTER:   { name: '🧪 TESTÇİ',    color: '#4ade80', title: 'QA & Simülatör' },
-  ENGINEER: { name: '💻 YAZILIMCI', color: '#a78bfa', title: 'DevOps & Sistem' },
-  WHALE_HUNTER: { name: '🐋 BALİNA AVCISI', color: '#06b6d4', title: 'Para Akışı & Fon' },
-  FREQAI: { name: '🎯 FREQ-AI & LİKİDASYON', color: '#ec4899', title: 'ML Olasılık & Fonlama' },
-  JUDGE:  { name: '🏛️ BAŞ YARGIÇ', color: '#eab308', title: 'Adli Denetçi (Aslan11)' }
+  MANAGER:  { name: '👑 YÖNETİCİ',  color: '#7c3aed', title: 'Risk Direktörü' },
+  ANALYST:  { name: '🧠 ANALİZCİ',  color: '#0284c7', title: 'Piyasa İstihbaratı' },
+  TRADER:   { name: '⚔️ TRADER',    color: '#b45309', title: 'Sinyal & Yürütme' },
+  TESTER:   { name: '🧪 TESTÇİ',    color: '#059669', title: 'QA & Simülatör' },
+  ENGINEER: { name: '💻 YAZILIMCI', color: '#475569', title: 'DevOps & Sistem' },
+  WHALE_HUNTER: { name: '🐋 BALİNA AVCISI', color: '#0891b2', title: 'Para Akışı & Fon' },
+  FREQAI: { name: '🎯 FREQ-AI & LİKİDASYON', color: '#db2777', title: 'ML Olasılık & Fonlama' },
+  JUDGE:  { name: '🏛️ BAŞ YARGIÇ', color: '#b45309', title: 'Adli Denetçi (Aslan11)' }
 };
 
 let dialogues = [];

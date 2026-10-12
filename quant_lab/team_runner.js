@@ -360,13 +360,13 @@ async function runAutonomousTeamSync(ctx = {}) {
       },
       freqai: {
         role: '🎯 FreqAI & Likidasyon Dedektifi',
-        status: `Model Aktif (%${freqAiStats.historicalWinRate} WR / ${freqAiStats.trainingSamples} İşlem)`,
+        status: `%${freqAiStats.historicalWinRate} WR (${freqAiStats.trainingSamples} İşlem)`,
         avgFunding: `%${fundingRates.avgFundingPct}`,
         topSqueeze: (fundingRates.topShortSqueezes && fundingRates.topShortSqueezes[0]) ? `${fundingRates.topShortSqueezes[0].symbol} (%${fundingRates.topShortSqueezes[0].fundingRatePct})` : '-'
       },
       judge: {
         role: '🏛️ Aslan11 Baş Adli Yargıç',
-        status: `Mahkeme Aktif (${judgeDossier.stats.averageJudicialScore}/100 Puan)`,
+        status: `Mahkeme: ${judgeDossier.stats.averageJudicialScore} Puan`,
         trials: judgeDossier.stats.totalTrials,
         convictions: judgeDossier.stats.convictions,
         acquittals: judgeDossier.stats.acquittals,

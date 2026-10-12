@@ -623,8 +623,8 @@ async function updateRadar() {
         const f15 = `${btc15mNumeric >= 0 ? '+' : ''}${btc15mNumeric.toFixed(2)}%`;
         const f5 = `${btc5mNumeric >= 0 ? '+' : ''}${btc5mNumeric.toFixed(2)}%`;
         
-        btc15mTrend = `5m: ${f5} | 15m: ${f15}`;
-        btc15mIsGreen = btc5mNumeric >= 0; // UI color based on 5m
+        btc15mTrend = `15m: ${f15}`;
+        btc15mIsGreen = btc15mNumeric >= 0; // UI color based on 15m trend
       }
     }
 
@@ -1531,6 +1531,89 @@ function getStats() {
   };
 }
 
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+function formatSignalCompact(rTag) {
+  if (!rTag || rTag === '-') return { short: '-', full: '-', badgeClass: 'badge-sig-neutral' };
+  const full = rTag;
+
+  let ratio = '';
+  const ratioMatch = rTag.match(/%([\d\.]+)\s*(Alıcı|Satıcı)/i);
+  if (ratioMatch) {
+    const rNum = Math.round(parseFloat(ratioMatch[1]));
+    ratio = `%${rNum} ${ratioMatch[2] === 'Alıcı' ? 'Alıcı' : 'Satıcı'}`;
+  }
+
+  let label = '';
+  let badgeClass = 'badge-sig-neutral';
+  if (rTag.includes('BALİNA BOĞA')) {
+    label = '🐋 BALİNA BOĞA';
+    badgeClass = 'badge-sig-bull';
+  } else if (rTag.includes('BALİNA AYI')) {
+    label = '🐋 BALİNA AYI';
+    badgeClass = 'badge-sig-bear';
+  } else if (rTag.includes('GÜÇLÜ BOĞA')) {
+    label = '🟢 GÜÇLÜ BOĞA';
+    badgeClass = 'badge-sig-bull';
+  } else if (rTag.includes('GÜÇLÜ AYI')) {
+    label = '🔴 GÜÇLÜ AYI';
+    badgeClass = 'badge-sig-bear';
+  } else if (rTag.includes('BOĞA')) {
+    label = '🟢 BOĞA';
+    badgeClass = 'badge-sig-bull';
+  } else if (rTag.includes('AYI')) {
+    label = '🔴 AYI';
+    badgeClass = 'badge-sig-bear';
+  } else {
+    label = rTag.replace(/[\[\]]/g, '').split('|')[0].trim().slice(0, 16);
+  }
+
+  const shortText = ratio ? `${label} (${ratio})` : label;
+  return { short: shortText, full: full, badgeClass };
+}
+
+function formatExitReasonCompact(reason) {
+  if (!reason || reason === '-') return { short: '-', full: '-', badgeClass: 'badge-exit-neutral' };
+  const full = reason;
+  let short = reason;
+  let badgeClass = 'badge-exit-neutral';
+
+  if (reason.includes('Durgunluk Koruması') || reason.includes('İvme Yok') || reason.includes('Durgunluk')) {
+    short = '⏱️ Durgunluk';
+    badgeClass = 'badge-exit-stagnant';
+  } else if (reason.includes('Başabaş') || reason.includes('$0.00 Risk')) {
+    short = '🛡️ Başabaş';
+    badgeClass = 'badge-exit-be';
+  } else if (reason.includes('MOONSHOT ALINDI') || reason.includes('VUR-KAÇ HEDEFİ')) {
+    short = '🎯 Moonshot TP';
+    badgeClass = 'badge-exit-tp';
+  } else if (reason.includes('Lazer Vur-Kaç') || reason.includes('Lazer Kâr Kilidi') || reason.includes('Kâr Kilidi')) {
+    short = '🏆 Kâr Kilidi';
+    badgeClass = 'badge-exit-profit';
+  } else if (reason.includes('Stop Loss') || reason.includes('STOP LOSS')) {
+    short = '🛑 Stop Loss';
+    badgeClass = 'badge-exit-sl';
+  } else if (reason.includes('Kilitli Kâr')) {
+    short = '🔒 Kilitli Kâr';
+    badgeClass = 'badge-exit-profit';
+  } else if (reason.includes('Manuel')) {
+    short = '⚡ Manuel';
+    badgeClass = 'badge-exit-manual';
+  } else {
+    short = reason.length > 20 ? reason.slice(0, 18) + '...' : reason;
+  }
+
+  return { short, full, badgeClass };
+}
+
 function serveDashboardHtml() {
   const stats = getStats();
   const vipKeys = Object.keys(VIP_TARGETS);
@@ -1551,6 +1634,40 @@ function serveDashboardHtml() {
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700;800;900&display=swap" rel="stylesheet">
   <style>
     :root {
+      --bg: #f8fafc;
+      --panel: #ffffff;
+      --panel2: #f1f5f9;
+      --panel-hover: #e2e8f0;
+      --border: #e2e8f0;
+      --border-accent: #cbd5e1;
+      --text: #0f172a;
+      --text-secondary: #334155;
+      --muted: #64748b;
+      --green: #059669;
+      --green-bg: #ecfdf5;
+      --green-border: #a7f3d0;
+      --red: #e11d48;
+      --red-bg: #fff1f2;
+      --red-border: #fecdd3;
+      --amber: #d97706;
+      --amber-bg: #fffbeb;
+      --amber-border: #fde68a;
+      --purple: #7c3aed;
+      --purple-bg: #f5f3ff;
+      --purple-border: #ddd6fe;
+      --blue: #0284c7;
+      --blue-bg: #f0f9ff;
+      --blue-border: #bae6fd;
+      --cyan: #0891b2;
+      --cyan-bg: #ecfeff;
+      --cyan-border: #a5f3fc;
+      --pink: #db2777;
+      --pink-bg: #fdf2f8;
+      --pink-border: #fbcfe8;
+      --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04);
+      --shadow-md: 0 4px 14px rgba(15, 23, 42, 0.05);
+    }
+    body.dark-theme {
       --bg: #07090e;
       --panel: #0e131f;
       --panel2: #141b2d;
@@ -1558,12 +1675,31 @@ function serveDashboardHtml() {
       --border: rgba(255, 255, 255, 0.08);
       --border-accent: rgba(168, 85, 247, 0.3);
       --text: #f8fafc;
+      --text-secondary: #cbd5e1;
       --muted: #94a3b8;
       --green: #10b981;
+      --green-bg: rgba(16,185,129,0.15);
+      --green-border: rgba(16,185,129,0.3);
       --red: #f43f5e;
+      --red-bg: rgba(244,63,94,0.15);
+      --red-border: rgba(244,63,94,0.3);
       --amber: #f59e0b;
+      --amber-bg: rgba(245,158,11,0.15);
+      --amber-border: rgba(245,158,11,0.3);
       --purple: #a855f7;
+      --purple-bg: rgba(168,85,247,0.15);
+      --purple-border: rgba(168,85,247,0.3);
       --blue: #38bdf8;
+      --blue-bg: rgba(56,189,248,0.15);
+      --blue-border: rgba(56,189,248,0.3);
+      --cyan: #06b6d4;
+      --cyan-bg: rgba(6,182,212,0.15);
+      --cyan-border: rgba(6,182,212,0.3);
+      --pink: #ec4899;
+      --pink-bg: rgba(236,72,153,0.15);
+      --pink-border: rgba(236,72,153,0.3);
+      --shadow-sm: 0 1px 3px rgba(0,0,0,0.3);
+      --shadow-md: 0 6px 20px rgba(0,0,0,0.45);
     }
     * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
     body {
@@ -1575,6 +1711,7 @@ function serveDashboardHtml() {
       zoom: 0.88;
       min-height: 100vh;
       -webkit-font-smoothing: antialiased;
+      transition: background 0.2s ease, color 0.2s ease;
     }
     .container { max-width: 1560px; margin: 0 auto; width: 100%; }
 
@@ -1605,9 +1742,28 @@ function serveDashboardHtml() {
     }
     .tab-btn.active {
       background: var(--panel2);
-      color: #fff;
-      border-color: rgba(168, 85, 247, 0.5);
-      box-shadow: 0 0 12px rgba(168, 85, 247, 0.25);
+      color: var(--text);
+      border-color: var(--purple);
+      box-shadow: 0 0 10px var(--purple-bg);
+    }
+
+    /* THEME TOGGLE */
+    .theme-toggle-btn {
+      background: var(--panel2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-size: 9.5px;
+      font-weight: 800;
+      padding: 3px 8px;
+      border-radius: 5px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      transition: 0.15s;
+    }
+    .theme-toggle-btn:hover {
+      background: var(--panel-hover);
     }
 
     /* GRID */
@@ -1626,13 +1782,14 @@ function serveDashboardHtml() {
       border: 1px solid var(--border);
       border-radius: 10px;
       padding: 8px 10px;
-      box-shadow: 0 6px 20px rgba(0,0,0,0.45);
+      box-shadow: var(--shadow-md);
     }
     .panel h2 {
       font-size: 11px;
       font-weight: 800;
       text-transform: uppercase;
       letter-spacing: 0.4px;
+      color: var(--text);
       margin-bottom: 6px;
       display: flex;
       justify-content: space-between;
@@ -1641,21 +1798,21 @@ function serveDashboardHtml() {
 
     /* UNIFIED AGENT & STATUS CARD */
     .unified-agent-box {
-      background: linear-gradient(180deg, rgba(15,23,42,0.7) 0%, rgba(8,11,18,0.85) 100%);
-      border: 1px solid rgba(168,85,247,0.3);
-      border-radius: 7px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
       padding: 5px 7px;
       margin-bottom: 6px;
-      box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
+      box-shadow: var(--shadow-sm);
     }
     .mini-status-bar {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      background: rgba(0,0,0,0.35);
+      background: var(--panel2);
       padding: 3px 5px;
       border-radius: 5px;
-      border: 1px solid rgba(255,255,255,0.06);
+      border: 1px solid var(--border);
       margin-bottom: 4px;
       gap: 3px;
     }
@@ -1680,8 +1837,10 @@ function serveDashboardHtml() {
       justify-content: space-between;
       align-items: center;
       font-size: 9.5px;
-      padding: 1px 0;
+      padding: 1.5px 3px;
+      border-radius: 4px;
     }
+    .agent-row:hover { background: var(--panel2); }
     .agent-name {
       font-weight: 700;
       white-space: nowrap;
@@ -1698,64 +1857,66 @@ function serveDashboardHtml() {
     .status-pill {
       font-family: 'JetBrains Mono', monospace;
       font-weight: 800;
-      font-size: 9px;
-      padding: 2px 5px;
+      font-size: 8.5px;
+      padding: 1.5px 5px;
       border-radius: 4px;
-      background: rgba(255,255,255,0.04);
-      color: #fff;
+      background: var(--panel2);
+      color: var(--text);
       text-transform: uppercase;
-      letter-spacing: 0.3px;
+      letter-spacing: 0.2px;
+      border: 1px solid var(--border);
     }
-    .status-pill.green { background: rgba(16,185,129,0.15); color: var(--green); border: 1px solid rgba(16,185,129,0.3); }
-    .status-pill.purple { background: rgba(168,85,247,0.15); color: var(--purple); border: 1px solid rgba(168,85,247,0.3); }
-    .status-pill.blue { background: rgba(56,189,248,0.15); color: #38bdf8; border: 1px solid rgba(56,189,248,0.3); }
-    .status-pill.cyan { background: rgba(6,182,212,0.15); color: #06b6d4; border: 1px solid rgba(6,182,212,0.3); }
-    .status-pill.pink { background: rgba(236,72,153,0.15); color: #ec4899; border: 1px solid rgba(236,72,153,0.3); }
-    .status-pill.yellow { background: rgba(234,179,8,0.15); color: #eab308; border: 1px solid rgba(234,179,8,0.3); }
+    .status-pill.green { background: var(--green-bg); color: var(--green); border-color: var(--green-border); }
+    .status-pill.purple { background: var(--purple-bg); color: var(--purple); border-color: var(--purple-border); }
+    .status-pill.blue { background: var(--blue-bg); color: var(--blue); border-color: var(--blue-border); }
+    .status-pill.cyan { background: var(--cyan-bg); color: var(--cyan); border-color: var(--cyan-border); }
+    .status-pill.pink { background: var(--pink-bg); color: var(--pink); border-color: var(--pink-border); }
+    .status-pill.yellow { background: var(--amber-bg); color: var(--amber); border-color: var(--amber-border); }
 
     /* STRATEGY BANNER */
     .strategy-banner-card {
-      background: linear-gradient(135deg, rgba(88,28,135,0.25), rgba(15,23,42,0.6));
-      border: 1px solid rgba(168,85,247,0.35);
+      background: var(--panel2);
+      border: 1px solid var(--border);
       border-radius: 7px;
       padding: 7px 9px;
       margin-bottom: 7px;
     }
     .strat-card-head { display: flex; justify-content: space-between; font-size: 9.5px; margin-bottom: 3px; }
     .strat-badge-pill { background: var(--purple); color: #fff; font-weight: 900; font-size: 8.5px; padding: 1.5px 5px; border-radius: 3px; }
-    .strat-card-title { font-weight: 800; font-size: 11px; color: #fff; }
+    .strat-card-title { font-weight: 800; font-size: 11px; color: var(--text); }
     .strat-card-sub { font-size: 9px; color: var(--muted); margin-top: 1px; }
 
     /* PARAMETERS */
-    .sidebar-section-title { font-size: 9px; font-weight: 800; color: #64748b; text-transform: uppercase; margin-bottom: 4px; margin-top: 6px; letter-spacing: 0.8px; display:flex; align-items:center; gap:5px; }
-    .sidebar-section-title::after { content: ''; flex-grow: 1; height: 1px; background: rgba(255,255,255,0.04); }
+    .sidebar-section-title { font-size: 9px; font-weight: 800; color: var(--muted); text-transform: uppercase; margin-bottom: 4px; margin-top: 6px; letter-spacing: 0.8px; display:flex; align-items:center; gap:5px; }
+    .sidebar-section-title::after { content: ''; flex-grow: 1; height: 1px; background: var(--border); }
     .param-grid-2x2 { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-bottom: 5px; }
-    .param-card { background: rgba(15, 23, 42, 0.4); border: 1px solid rgba(255,255,255,0.04); border-radius: 5px; padding: 5px 7px; transition: 0.2s ease; }
-    .param-card:hover { border-color: rgba(255,255,255,0.1); background: rgba(15, 23, 42, 0.6); }
-    .param-header { display: flex; justify-content: space-between; font-size: 8.5px; color: #94a3b8; font-weight: 700; margin-bottom: 2px; }
+    .param-card { background: var(--panel2); border: 1px solid var(--border); border-radius: 5px; padding: 5px 7px; transition: 0.15s ease; }
+    .param-card:hover { border-color: var(--border-accent); }
+    .param-header { display: flex; justify-content: space-between; font-size: 8.5px; color: var(--muted); font-weight: 700; margin-bottom: 2px; }
     .param-input-wrap { display: flex; align-items: baseline; justify-content: space-between; }
-    .param-input-wrap input { width: 50px; background: none; border: none; color: #fff; font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 800; outline: none; }
+    .param-input-wrap input { width: 50px; background: var(--panel); border: 1px solid var(--border); border-radius: 4px; padding: 1px 4px; color: var(--text); font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 800; outline: none; }
     .param-unit { font-size: 9px; color: var(--muted); }
 
     /* HERO PERF */
     .perf-hero-card {
-      background: linear-gradient(135deg, rgba(16,185,129,0.1), rgba(15,23,42,0.8));
-      border: 1px solid rgba(16,185,129,0.3);
+      background: linear-gradient(135deg, var(--green-bg) 0%, var(--panel) 100%);
+      border: 1px solid var(--green-border);
       border-radius: 7px;
       padding: 5px 8px;
       display: flex;
       justify-content: space-between;
       align-items: center;
       margin-bottom: 5px;
+      box-shadow: var(--shadow-sm);
     }
     .perf-hero-title { font-size: 8.5px; font-weight: 800; color: var(--muted); display: block; }
     .perf-hero-sub { font-size: 9.5px; font-weight: 700; color: var(--green); }
-    .perf-hero-val { font-family: 'JetBrains Mono', monospace; font-size: 14px; font-weight: 900; color: #fff; }
+    .perf-hero-val { font-family: 'JetBrains Mono', monospace; font-size: 14px; font-weight: 900; color: var(--text); }
 
     .perf-grid-4 { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-bottom: 5px; }
-    .perf-mini-card { background: rgba(8, 11, 18, 0.7); border: 1px solid rgba(255,255,255,0.08); border-radius: 5px; padding: 4px 6px; }
+    .perf-mini-card { background: var(--panel2); border: 1px solid var(--border); border-radius: 5px; padding: 4px 6px; }
     .perf-mini-label { font-size: 8px; color: var(--muted); display: block; }
-    .perf-mini-val { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; font-weight: 800; }
+    .perf-mini-val { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; font-weight: 800; color: var(--text); }
 
     /* BUTTONS GRID */
     .action-buttons-grid {
@@ -1784,8 +1945,8 @@ function serveDashboardHtml() {
     .btn-secondary { background: var(--panel2); color: var(--text); }
     .btn-secondary:hover { background: var(--panel-hover); }
     .btn-reset {
-      background: rgba(244, 63, 94, 0.12);
-      border-color: rgba(244, 63, 94, 0.35);
+      background: var(--red-bg);
+      border-color: var(--red-border);
       color: var(--red);
     }
     .btn-reset:hover { background: var(--red); color: #fff; }
@@ -1796,19 +1957,20 @@ function serveDashboardHtml() {
       overflow-x: auto;
       -webkit-overflow-scrolling: touch;
       border: 1px solid var(--border);
-      border-radius: 6px;
-      background: rgba(8, 11, 18, 0.4);
+      border-radius: 7px;
+      background: var(--panel);
       margin-bottom: 8px;
+      box-shadow: var(--shadow-sm);
     }
     .table-container::-webkit-scrollbar { height: 3px; }
-    .table-container::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 2px; }
+    .table-container::-webkit-scrollbar-thumb { background: var(--border-accent); border-radius: 2px; }
     table { width: 100%; border-collapse: collapse; font-size: 10px; white-space: nowrap; }
     th {
       position: sticky;
       top: 0;
-      background: #111724;
+      background: var(--panel2);
       text-align: left;
-      padding: 5px 7px;
+      padding: 5px 6px;
       color: var(--muted);
       font-weight: 800;
       font-size: 8.5px;
@@ -1816,31 +1978,63 @@ function serveDashboardHtml() {
       border-bottom: 1px solid var(--border);
       z-index: 2;
     }
-    td { padding: 4.5px 7px; border-bottom: 1px solid rgba(255, 255, 255, 0.03); font-family: 'JetBrains Mono', monospace; }
-    tr:hover td { background: rgba(255, 255, 255, 0.03); }
+    td { padding: 4px 6px; border-bottom: 1px solid var(--border); font-family: 'JetBrains Mono', monospace; color: var(--text); }
+    tr:hover td { background: var(--panel2); }
 
     /* BADGES */
-    .badge-moon { background: rgba(168,85,247,0.18); border: 1px solid rgba(168,85,247,0.4); color: #c084fc; padding: 2px 7px; border-radius: 4px; font-size: 10px; font-weight: 800; }
-    .badge-strat { background: rgba(250,204,21,0.12); border: 1px solid rgba(250,204,21,0.3); color: #facc15; font-size: 9px; padding: 2px 5px; border-radius: 3px; font-weight: 700; margin-left: 4px; }
-    .badge-side-long { background: rgba(16,185,129,0.2); border: 1px solid rgba(16,185,129,0.4); color: var(--green); font-size: 9.5px; padding: 2px 6px; border-radius: 4px; font-weight: 800; }
-    .badge-side-short { background: rgba(244,63,94,0.2); border: 1px solid rgba(244,63,94,0.4); color: var(--red); font-size: 9.5px; padding: 2px 6px; border-radius: 4px; font-weight: 800; }
-    .badge-sl { color: var(--red); font-weight: 800; font-size: 10.5px; }
-    .badge-be { color: var(--green); font-weight: 800; font-size: 10.5px; }
+    .badge-moon { background: var(--purple-bg); border: 1px solid var(--purple-border); color: var(--purple); padding: 2px 7px; border-radius: 4px; font-size: 10px; font-weight: 800; }
+    .badge-strat { background: var(--amber-bg); border: 1px solid var(--amber-border); color: var(--amber); font-size: 8.5px; padding: 2px 5px; border-radius: 3px; font-weight: 700; margin-left: 4px; }
+    .badge-side-long { background: var(--green-bg); border: 1px solid var(--green-border); color: var(--green); font-size: 9px; padding: 2px 6px; border-radius: 4px; font-weight: 800; }
+    .badge-side-short { background: var(--red-bg); border: 1px solid var(--red-border); color: var(--red); font-size: 9px; padding: 2px 6px; border-radius: 4px; font-weight: 800; }
+    .badge-sl { color: var(--red); font-weight: 800; font-size: 10px; }
+    .badge-be { color: var(--green); font-weight: 800; font-size: 10px; }
     .badge-pnl-pos { color: var(--green); font-weight: 800; font-size: 11px; }
     .badge-pnl-neg { color: var(--red); font-weight: 800; font-size: 11px; }
     .btn-close-pos {
-      background: rgba(244,63,94,0.15);
-      border: 1px solid rgba(244,63,94,0.35);
+      background: var(--red-bg);
+      border: 1px solid var(--red-border);
       color: var(--red);
       font-weight: 800;
-      font-size: 10.5px;
-      padding: 3px 8px;
+      font-size: 9.5px;
+      padding: 2.5px 7px;
       border-radius: 4px;
       cursor: pointer;
-      min-height: 28px;
+      min-height: 24px;
       transition: 0.15s;
     }
     .btn-close-pos:hover { background: var(--red); color: #fff; }
+
+    /* COMPACT SIGNAL & EXIT BADGES (HORIZONTALLY FIT) */
+    .badge-signal {
+      display: inline-flex;
+      align-items: center;
+      padding: 1.5px 5px;
+      border-radius: 4px;
+      font-size: 9px;
+      font-weight: 700;
+      cursor: help;
+      letter-spacing: 0.1px;
+    }
+    .badge-sig-bull { background: var(--green-bg); border: 1px solid var(--green-border); color: var(--green); }
+    .badge-sig-bear { background: var(--red-bg); border: 1px solid var(--red-border); color: var(--red); }
+    .badge-sig-neutral { background: var(--purple-bg); border: 1px solid var(--purple-border); color: var(--purple); }
+
+    .badge-exit {
+      display: inline-flex;
+      align-items: center;
+      padding: 1.5px 5px;
+      border-radius: 4px;
+      font-size: 9px;
+      font-weight: 700;
+      cursor: help;
+    }
+    .badge-exit-stagnant { background: var(--panel2); border: 1px solid var(--border); color: var(--muted); }
+    .badge-exit-be { background: var(--green-bg); border: 1px solid var(--green-border); color: var(--green); }
+    .badge-exit-profit { background: var(--amber-bg); border: 1px solid var(--amber-border); color: var(--amber); }
+    .badge-exit-tp { background: var(--purple-bg); border: 1px solid var(--purple-border); color: var(--purple); }
+    .badge-exit-sl { background: var(--red-bg); border: 1px solid var(--red-border); color: var(--red); }
+    .badge-exit-manual { background: var(--blue-bg); border: 1px solid var(--blue-border); color: var(--blue); }
+    .badge-exit-neutral { background: var(--panel2); border: 1px solid var(--border); color: var(--muted); }
 
     /* CHIPS */
     .chip { font-size: 9.5px; padding: 2px 6px; border-radius: 4px; background: rgba(16,185,129,0.15); border: 1px solid rgba(16,185,129,0.3); color: var(--green); font-family: 'JetBrains Mono', monospace; font-weight: 700; }
@@ -1897,11 +2091,11 @@ function serveDashboardHtml() {
       margin-bottom: 12px;
     }
     .pos-card-mobile {
-      background: var(--panel2);
+      background: var(--panel);
       border: 1px solid var(--border);
       border-radius: 10px;
       padding: 10px 12px;
-      box-shadow: 0 4px 14px rgba(0,0,0,0.35);
+      box-shadow: var(--shadow-sm);
     }
     .pos-card-mobile.card-long { border-left: 3.5px solid var(--green); }
     .pos-card-mobile.card-short { border-left: 3.5px solid var(--red); }
@@ -1914,7 +2108,7 @@ function serveDashboardHtml() {
     .pos-card-sym {
       font-weight: 900;
       font-size: 13.5px;
-      color: #fff;
+      color: var(--text);
     }
     .pos-card-grid {
       display: grid;
@@ -1922,22 +2116,23 @@ function serveDashboardHtml() {
       gap: 5px 8px;
       font-size: 11px;
       margin-bottom: 8px;
-      background: rgba(0,0,0,0.25);
+      background: var(--panel2);
       padding: 7px 9px;
       border-radius: 6px;
     }
     .card-lbl { color: var(--muted); font-size: 10px; }
-    .card-val { font-family: 'JetBrains Mono', monospace; font-weight: 700; color: #fff; }
+    .card-val { font-family: 'JetBrains Mono', monospace; font-weight: 700; color: var(--text); }
     .pos-card-footer {
       display: flex;
       justify-content: flex-end;
     }
 
     .hist-card-mobile {
-      background: rgba(15, 23, 42, 0.55);
-      border: 1px solid rgba(255,255,255,0.06);
+      background: var(--panel);
+      border: 1px solid var(--border);
       border-radius: 8px;
       padding: 9px 11px;
+      box-shadow: var(--shadow-sm);
     }
     .hist-card-mobile.hist-win { border-left: 3.5px solid var(--green); }
     .hist-card-mobile.hist-loss { border-left: 3.5px solid var(--red); }
@@ -1947,14 +2142,14 @@ function serveDashboardHtml() {
       align-items: center;
       margin-bottom: 4px;
     }
-    .hist-card-sym { font-weight: 800; font-size: 12px; color: #fff; }
+    .hist-card-sym { font-weight: 800; font-size: 12px; color: var(--text); }
     .hist-card-time { font-size: 9.5px; color: var(--muted); }
     .hist-card-mid { font-size: 10.5px; color: var(--muted); margin-bottom: 4px; }
     .hist-card-bot {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      border-top: 1px solid rgba(255,255,255,0.05);
+      border-top: 1px solid var(--border);
       padding-top: 5px;
       font-size: 10px;
     }
@@ -1963,7 +2158,7 @@ function serveDashboardHtml() {
       color: var(--muted);
       padding: 18px 12px;
       font-size: 11px;
-      background: rgba(8,11,18,0.4);
+      background: var(--panel2);
       border-radius: 8px;
       border: 1px dashed var(--border);
     }
@@ -2033,6 +2228,7 @@ function serveDashboardHtml() {
       <div class="panel">
         <h2>
           <span>🎛️ MOTOR KONTROLÜ</span>
+          <button id="themeToggleBtn" onclick="toggleTheme()" class="theme-toggle-btn">☀️ Açık Mod</button>
         </h2>
 
         <!-- TEK BİRLEŞİK KART: SİSTEM & 8 AJAN KOMUTASI -->
@@ -2054,35 +2250,35 @@ function serveDashboardHtml() {
           </div>
           <div class="agent-compact-list">
             <div class="agent-row">
-              <span class="agent-name" style="color:#c084fc;">👑 1. YÖNETİCİ</span>
+              <span class="agent-name" style="color:var(--purple);">👑 1. YÖNETİCİ</span>
               <span class="status-pill green" id="teamManager">ONAYLANDI</span>
             </div>
             <div class="agent-row">
-              <span class="agent-name" style="color:#38bdf8;">🧠 2. ANALİZCİ</span>
+              <span class="agent-name" style="color:var(--blue);">🧠 2. ANALİZCİ</span>
               <span class="status-pill blue" id="teamAnalyst">Hafta Sonu Rejimi</span>
             </div>
             <div class="agent-row">
-              <span class="agent-name" style="color:#facc15;">⚔️ 3. TRADER</span>
+              <span class="agent-name" style="color:var(--amber);">⚔️ 3. TRADER</span>
               <span class="status-pill purple" id="teamTrader">Lazer & Moonshot</span>
             </div>
             <div class="agent-row">
-              <span class="agent-name" style="color:#4ade80;">🧪 4. TESTÇİ</span>
+              <span class="agent-name" style="color:var(--green);">🧪 4. TESTÇİ</span>
               <span class="status-pill green" id="teamTester">Win Rate: %100</span>
             </div>
             <div class="agent-row">
-              <span class="agent-name" style="color:#e2e8f0;">💻 5. YAZILIMCI</span>
+              <span class="agent-name" style="color:var(--text-secondary);">💻 5. YAZILIMCI</span>
               <span class="status-pill green" id="teamEngineer">Render Senkron</span>
             </div>
             <div class="agent-row">
-              <span class="agent-name" style="color:#06b6d4;">🐋 6. BALİNA AVCISI</span>
+              <span class="agent-name" style="color:var(--cyan);">🐋 6. BALİNA AVCISI</span>
               <span class="status-pill cyan" id="teamWhale">Para Akışı Aktif</span>
             </div>
             <div class="agent-row">
-              <span class="agent-name" style="color:#ec4899;">🎯 7. FREQ-AI & LİKİT</span>
+              <span class="agent-name" style="color:var(--pink);">🎯 7. FREQ-AI & LİKİT</span>
               <span class="status-pill pink" id="teamFreqai">Model Aktif</span>
             </div>
             <div class="agent-row">
-              <span class="agent-name" style="color:#eab308;">🏛️ 8. BAŞ YARGIÇ</span>
+              <span class="agent-name" style="color:var(--amber);">🏛️ 8. BAŞ YARGIÇ</span>
               <span class="status-pill yellow" id="teamJudge">Mahkeme Aktif</span>
             </div>
           </div>
@@ -2112,7 +2308,7 @@ function serveDashboardHtml() {
           </div>
           <div class="perf-mini-card">
             <span class="perf-mini-label">Mega-Win</span>
-            <span class="perf-mini-val" style="color:#facc15;" id="stMega">${stats.megaWins} Adet</span>
+            <span class="perf-mini-val" style="color:var(--amber);" id="stMega">${stats.megaWins} Adet</span>
           </div>
         </div>
 
@@ -2137,36 +2333,36 @@ function serveDashboardHtml() {
         </div>
 
         <div class="sidebar-section-title">🛡️ SIFIR RİSK VE KADEMELİ HEDEFLER</div>
-        <div style="background:linear-gradient(90deg, rgba(16,185,129,0.1) 0%, rgba(16,185,129,0.02) 100%); border-left:3px solid var(--green); border-radius:4px; padding:6px 8px; margin-bottom:5px; display:flex; justify-content:space-between; align-items:center; box-shadow: 0 2px 8px rgba(0,0,0,0.2);">
+        <div style="background:linear-gradient(90deg, var(--green-bg) 0%, var(--panel) 100%); border-left:3px solid var(--green); border:1px solid var(--green-border); border-radius:5px; padding:6px 8px; margin-bottom:5px; display:flex; justify-content:space-between; align-items:center; box-shadow:var(--shadow-sm);">
           <div>
             <div style="font-size:10px;font-weight:800;color:var(--green);letter-spacing:0.3px;">🛡️ OTOMATİK BAŞABAŞ</div>
-            <div style="font-size:8.5px;color:#64748b;margin-top:1px;">Kâr yakalanınca $0 Riske çekilir</div>
+            <div style="font-size:8.5px;color:var(--muted);margin-top:1px;">Kâr yakalanınca $0 Riske çekilir</div>
           </div>
-          <div style="display:flex;align-items:baseline;gap:2px;background:rgba(0,0,0,0.2);padding:2px 6px;border-radius:4px;border:1px solid rgba(16,185,129,0.2);">
+          <div style="display:flex;align-items:baseline;gap:2px;background:var(--panel2);padding:2px 6px;border-radius:4px;border:1px solid var(--green-border);">
             <input type="number" id="inpBe" value="${CONFIG.bePct.toFixed(2)}" step="0.1" style="width:36px;background:none;border:none;color:var(--green);font-family:'JetBrains Mono';font-size:12px;font-weight:800;text-align:right;outline:none;">
             <span style="font-size:10px;color:var(--green);opacity:0.7;">%</span>
           </div>
         </div>
 
-        <div style="background:linear-gradient(90deg, rgba(56,189,248,0.1) 0%, rgba(56,189,248,0.02) 100%); border-left:3px solid #38bdf8; border-radius:4px; padding:6px 8px; margin-bottom:5px; display:flex; justify-content:space-between; align-items:center; box-shadow: 0 2px 8px rgba(0,0,0,0.2);">
+        <div style="background:linear-gradient(90deg, var(--blue-bg) 0%, var(--panel) 100%); border-left:3px solid var(--blue); border:1px solid var(--blue-border); border-radius:5px; padding:6px 8px; margin-bottom:5px; display:flex; justify-content:space-between; align-items:center; box-shadow:var(--shadow-sm);">
           <div>
-            <div style="font-size:10px;font-weight:800;color:#38bdf8;letter-spacing:0.3px;">🎯 İLK KÂR ALMA (TP1)</div>
-            <div style="font-size:8.5px;color:#64748b;margin-top:1px;">%50 Kâr Cebe, Kalan Başabaşa</div>
+            <div style="font-size:10px;font-weight:800;color:var(--blue);letter-spacing:0.3px;">🎯 İLK KÂR ALMA (TP1)</div>
+            <div style="font-size:8.5px;color:var(--muted);margin-top:1px;">%50 Kâr Cebe, Kalan Başabaşa</div>
           </div>
-          <div style="display:flex;align-items:baseline;gap:2px;background:rgba(0,0,0,0.2);padding:2px 6px;border-radius:4px;border:1px solid rgba(56,189,248,0.2);">
-            <input type="number" id="inpTp1" value="${(CONFIG.tp1Pct || 1.00).toFixed(2)}" step="0.1" style="width:36px;background:none;border:none;color:#38bdf8;font-family:'JetBrains Mono';font-size:12px;font-weight:800;text-align:right;outline:none;">
-            <span style="font-size:10px;color:#38bdf8;opacity:0.7;">%</span>
+          <div style="display:flex;align-items:baseline;gap:2px;background:var(--panel2);padding:2px 6px;border-radius:4px;border:1px solid var(--blue-border);">
+            <input type="number" id="inpTp1" value="${(CONFIG.tp1Pct || 1.00).toFixed(2)}" step="0.1" style="width:36px;background:none;border:none;color:var(--blue);font-family:'JetBrains Mono';font-size:12px;font-weight:800;text-align:right;outline:none;">
+            <span style="font-size:10px;color:var(--blue);opacity:0.7;">%</span>
           </div>
         </div>
 
-        <div style="background:linear-gradient(90deg, rgba(250,204,21,0.1) 0%, rgba(250,204,21,0.02) 100%); border-left:3px solid #facc15; border-radius:4px; padding:6px 8px; margin-bottom:6px; display:flex; justify-content:space-between; align-items:center; box-shadow: 0 2px 8px rgba(0,0,0,0.2);">
+        <div style="background:linear-gradient(90deg, var(--amber-bg) 0%, var(--panel) 100%); border-left:3px solid var(--amber); border:1px solid var(--amber-border); border-radius:5px; padding:6px 8px; margin-bottom:6px; display:flex; justify-content:space-between; align-items:center; box-shadow:var(--shadow-sm);">
           <div>
-            <div style="font-size:10px;font-weight:800;color:#facc15;letter-spacing:0.3px;">🏆 VUR-KAÇ MOONSHOT</div>
-            <div style="font-size:8.5px;color:#64748b;margin-top:1px;">Kâr hedefinde tamamen çıkılır</div>
+            <div style="font-size:10px;font-weight:800;color:var(--amber);letter-spacing:0.3px;">🏆 VUR-KAÇ MOONSHOT</div>
+            <div style="font-size:8.5px;color:var(--muted);margin-top:1px;">Kâr hedefinde tamamen çıkılır</div>
           </div>
-          <div style="display:flex;align-items:baseline;gap:2px;background:rgba(0,0,0,0.2);padding:2px 6px;border-radius:4px;border:1px solid rgba(250,204,21,0.2);">
-            <input type="number" id="inpMoon" value="${CONFIG.moonPct.toFixed(2)}" step="0.1" style="width:36px;background:none;border:none;color:#facc15;font-family:'JetBrains Mono';font-size:12px;font-weight:800;text-align:right;outline:none;">
-            <span style="font-size:10px;color:#facc15;opacity:0.7;">%</span>
+          <div style="display:flex;align-items:baseline;gap:2px;background:var(--panel2);padding:2px 6px;border-radius:4px;border:1px solid var(--amber-border);">
+            <input type="number" id="inpMoon" value="${CONFIG.moonPct.toFixed(2)}" step="0.1" style="width:36px;background:none;border:none;color:var(--amber);font-family:'JetBrains Mono';font-size:12px;font-weight:800;text-align:right;outline:none;">
+            <span style="font-size:10px;color:var(--amber);opacity:0.7;">%</span>
           </div>
         </div>
 
@@ -2257,7 +2453,7 @@ function serveDashboardHtml() {
           <span>🗣️ AJAN TELSİZİ & CANLI DİYALOG AKIŞI</span>
           <span class="badge-moon" style="font-size:9.5px;">📻 8 AJAN CANLI FREKANS</span>
         </h2>
-        <div id="dialogueBox" style="background:rgba(5,7,12,0.95); border:1px solid rgba(255,255,255,0.08); border-radius:7px; padding:7px 9px; max-height:160px; overflow-y:auto; font-family:'JetBrains Mono',monospace; font-size:10px; display:flex; flex-direction:column; gap:5px; box-shadow: inset 0 2px 8px rgba(0,0,0,0.6);">
+        <div id="dialogueBox" style="background:var(--panel2); border:1px solid var(--border); border-radius:7px; padding:7px 9px; max-height:160px; overflow-y:auto; font-family:'JetBrains Mono',monospace; font-size:10px; display:flex; flex-direction:column; gap:5px; box-shadow:inset 0 1px 3px rgba(0,0,0,0.03);">
           ${renderDialogues(teamStatusCache ? teamStatusCache.dialogues : [])}
         </div>
       </div>
@@ -2268,6 +2464,111 @@ function serveDashboardHtml() {
     const LS_HIST = "moon_cloud_history";
     const LS_BAL = "moon_cloud_balance";
     window.isResetting = false;
+
+    // 🎨 TEMA YÖNETİMİ (VARSAYILAN: GÖZ YORMAYAN AÇIK TEMA)
+    function initTheme() {
+      const saved = localStorage.getItem('moon_theme') || 'light';
+      if (saved === 'dark') {
+        document.body.classList.add('dark-theme');
+        updateThemeBtn(true);
+      } else {
+        document.body.classList.remove('dark-theme');
+        updateThemeBtn(false);
+      }
+    }
+    function toggleTheme() {
+      const isDark = document.body.classList.toggle('dark-theme');
+      localStorage.setItem('moon_theme', isDark ? 'dark' : 'light');
+      updateThemeBtn(isDark);
+    }
+    function updateThemeBtn(isDark) {
+      const btn = document.getElementById('themeToggleBtn');
+      if (btn) btn.innerHTML = isDark ? '🌙 Koyu Mod' : '☀️ Açık Mod';
+    }
+    initTheme();
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+    }
+
+    function formatSignalCompact(rTag) {
+      if (!rTag || rTag === '-') return { short: '-', full: '-', badgeClass: 'badge-sig-neutral' };
+      const full = rTag;
+
+      let ratio = '';
+      const ratioMatch = rTag.match(/%([\d\.]+)\s*(Alıcı|Satıcı)/i);
+      if (ratioMatch) {
+        const rNum = Math.round(parseFloat(ratioMatch[1]));
+        ratio = '%' + rNum + ' ' + (ratioMatch[2] === 'Alıcı' ? 'Alıcı' : 'Satıcı');
+      }
+
+      let label = '';
+      let badgeClass = 'badge-sig-neutral';
+      if (rTag.includes('BALİNA BOĞA')) {
+        label = '🐋 BALİNA BOĞA';
+        badgeClass = 'badge-sig-bull';
+      } else if (rTag.includes('BALİNA AYI')) {
+        label = '🐋 BALİNA AYI';
+        badgeClass = 'badge-sig-bear';
+      } else if (rTag.includes('GÜÇLÜ BOĞA')) {
+        label = '🟢 GÜÇLÜ BOĞA';
+        badgeClass = 'badge-sig-bull';
+      } else if (rTag.includes('GÜÇLÜ AYI')) {
+        label = '🔴 GÜÇLÜ AYI';
+        badgeClass = 'badge-sig-bear';
+      } else if (rTag.includes('BOĞA')) {
+        label = '🟢 BOĞA';
+        badgeClass = 'badge-sig-bull';
+      } else if (rTag.includes('AYI')) {
+        label = '🔴 AYI';
+        badgeClass = 'badge-sig-bear';
+      } else {
+        label = rTag.replace(/[\[\]]/g, '').split('|')[0].trim().slice(0, 16);
+      }
+
+      const shortText = ratio ? (label + ' (' + ratio + ')') : label;
+      return { short: shortText, full: full, badgeClass: badgeClass };
+    }
+
+    function formatExitReasonCompact(reason) {
+      if (!reason || reason === '-') return { short: '-', full: '-', badgeClass: 'badge-exit-neutral' };
+      const full = reason;
+      let short = reason;
+      let badgeClass = 'badge-exit-neutral';
+
+      if (reason.includes('Durgunluk Koruması') || reason.includes('İvme Yok') || reason.includes('Durgunluk')) {
+        short = '⏱️ Durgunluk';
+        badgeClass = 'badge-exit-stagnant';
+      } else if (reason.includes('Başabaş') || reason.includes('$0.00 Risk')) {
+        short = '🛡️ Başabaş';
+        badgeClass = 'badge-exit-be';
+      } else if (reason.includes('MOONSHOT ALINDI') || reason.includes('VUR-KAÇ HEDEFİ')) {
+        short = '🎯 Moonshot TP';
+        badgeClass = 'badge-exit-tp';
+      } else if (reason.includes('Lazer Vur-Kaç') || reason.includes('Lazer Kâr Kilidi') || reason.includes('Kâr Kilidi')) {
+        short = '🏆 Kâr Kilidi';
+        badgeClass = 'badge-exit-profit';
+      } else if (reason.includes('Stop Loss') || reason.includes('STOP LOSS')) {
+        short = '🛑 Stop Loss';
+        badgeClass = 'badge-exit-sl';
+      } else if (reason.includes('Kilitli Kâr')) {
+        short = '🔒 Kilitli Kâr';
+        badgeClass = 'badge-exit-profit';
+      } else if (reason.includes('Manuel')) {
+        short = '⚡ Manuel';
+        badgeClass = 'badge-exit-manual';
+      } else {
+        short = reason.length > 20 ? reason.slice(0, 18) + '...' : reason;
+      }
+
+      return { short, full, badgeClass };
+    }
 
     function setViewMode(mode) {
       try {
@@ -2331,29 +2632,33 @@ function serveDashboardHtml() {
           const ei = data.teamStatus.executiveIntervention;
           if (t.manager && document.getElementById("teamManager")) {
             const isDef = ei && ei.mode === 'DEFENSIVE_SNIPER';
-            document.getElementById("teamManager").innerText = isDef ? '🚨 SAVUNMA MODU' : (t.manager.status.includes('ONAY') ? 'ONAYLANDI' : 'VETO');
+            document.getElementById("teamManager").innerText = isDef ? '🚨 SAVUNMA' : (t.manager.status.includes('ONAY') ? 'ONAYLANDI' : 'VETO');
             document.getElementById("teamManager").className = 'status-pill ' + (isDef ? 'purple' : 'green');
           }
           if (t.analyst && document.getElementById("teamAnalyst")) {
-            document.getElementById("teamAnalyst").innerText = t.analyst.description ? t.analyst.description.slice(0, 18) : 'Rejim Aktif';
+            document.getElementById("teamAnalyst").innerText = t.analyst.description ? t.analyst.description.slice(0, 16) : 'Rejim Aktif';
           }
           if (t.trader && document.getElementById("teamTrader")) {
-            document.getElementById("teamTrader").innerText = (ei && ei.mode === 'DEFENSIVE_SNIPER') ? '🎯 1 Slot Sniper ($10)' : (t.trader.targetVolThreshold || 'Lazer & Moonshot');
+            document.getElementById("teamTrader").innerText = (ei && ei.mode === 'DEFENSIVE_SNIPER') ? '🎯 1 Slot ($10)' : (t.trader.targetVolThreshold || 'Lazer & Moon');
           }
           if (t.tester && document.getElementById("teamTester")) {
-            document.getElementById("teamTester").innerText = (ei && ei.mode === 'DEFENSIVE_SNIPER') ? 'Simülasyon: Güvenli' : ('WR: ' + t.tester.lastTestWinRate);
+            document.getElementById("teamTester").innerText = (ei && ei.mode === 'DEFENSIVE_SNIPER') ? 'Sim: Güvenli' : ('WR: ' + (t.tester.lastTestWinRate ? t.tester.lastTestWinRate.split(' ')[0] : '%100'));
           }
           if (t.engineer && document.getElementById("teamEngineer")) {
-            document.getElementById("teamEngineer").innerText = (ei && ei.mode === 'DEFENSIVE_SNIPER') ? 'Regex & Kod Aktif' : 'Render Canlı';
+            document.getElementById("teamEngineer").innerText = (ei && ei.mode === 'DEFENSIVE_SNIPER') ? 'Regex Aktif' : 'Render Canlı';
           }
           if (t.whale_scout && document.getElementById("teamWhale")) {
-            document.getElementById("teamWhale").innerText = t.whale_scout.status || 'Para Akışı Aktif';
+            document.getElementById("teamWhale").innerText = t.whale_scout.status ? (t.whale_scout.status.split(' ')[1] || t.whale_scout.status) : 'Para Akışı';
           }
           if (t.freqai && document.getElementById("teamFreqai")) {
-            document.getElementById("teamFreqai").innerText = t.freqai.status || 'Model Aktif';
+            const fst = t.freqai.status || 'Model Aktif';
+            document.getElementById("teamFreqai").innerText = fst.includes('WR') ? fst.split('/')[0].replace('Model Aktif (', '').replace(')', '').trim().slice(0, 14) : fst.slice(0, 14);
+            document.getElementById("teamFreqai").title = t.freqai.role || '';
           }
           if (t.judge && document.getElementById("teamJudge")) {
-            document.getElementById("teamJudge").innerText = t.judge.status || 'Mahkeme Aktif';
+            const jst = t.judge.status || 'Mahkeme Aktif';
+            document.getElementById("teamJudge").innerText = jst.replace('Mahkeme Aktif', 'Mahkeme').replace('/100 Puan', 'P').slice(0, 14);
+            document.getElementById("teamJudge").title = t.judge.role || '';
           }
         }
 
@@ -2386,11 +2691,11 @@ function serveDashboardHtml() {
             const tagStr = p.radarTag ? p.radarTag : (isLong ? 'Boğa Kırılımı' : 'Ayı Kırılımı');
 
             return \`
-              <tr style="border-left: 2px solid \${isLong ? 'var(--green)' : 'var(--red)'}; background: rgba(255,255,255,0.01);">
+              <tr style="border-left: 2px solid \${isLong ? 'var(--green)' : 'var(--red)'};">
                 <td style="color:var(--muted);font-weight:700;">\${idx+1}</td>
                 <td>
-                  <div style="display:flex; flex-direction:column; gap:3px;">
-                    <span style="font-family:'JetBrains Mono'; font-weight:900; font-size:13px; color:#fff; letter-spacing:0.5px;">\${p.symbol}</span>
+                  <div style="display:flex; flex-direction:column; gap:2px;">
+                    <span style="font-family:'JetBrains Mono'; font-weight:900; font-size:13px; color:var(--text); letter-spacing:0.5px;">\${p.symbol}</span>
                     <span style="font-size:9.5px; color:var(--muted); text-overflow:ellipsis; white-space:nowrap; overflow:hidden; max-width:140px;" title="\${tagStr}">⚡ \${tagStr}</span>
                   </div>
                 </td>
@@ -2399,20 +2704,20 @@ function serveDashboardHtml() {
                 </td>
                 <td>
                   <div style="display:flex; flex-direction:column; gap:2px;">
-                    <div><span style="color:var(--muted);font-size:10px;">Giriş: </span><span style="color:#fff;font-weight:700;">$\${parseFloat(p.entryPrice).toFixed(4)}</span></div>
+                    <div><span style="color:var(--muted);font-size:10px;">Giriş: </span><span style="color:var(--text);font-weight:700;">$\${parseFloat(p.entryPrice).toFixed(4)}</span></div>
                     <div><span style="color:var(--muted);font-size:10px;">Anlık: </span><span style="color:var(--blue);font-weight:700;">$\${parseFloat(p.currentPrice).toFixed(4)}</span></div>
                   </div>
                 </td>
                 <td>\${stopText}</td>
                 <td>
                   <div style="display:flex; flex-direction:column; gap:2px;">
-                    <span style="color:var(--green);font-weight:800;font-size:12px;">+%\${(p.mfe || 0).toFixed(2)}</span>
-                    <span style="color:var(--red);font-weight:600;font-size:9px;">-%\${(p.mae || 0).toFixed(2)}</span>
+                    <span style="color:var(--green);font-weight:800;font-size:11px;">+\${(p.mfe || 0).toFixed(2)}%</span>
+                    <span style="color:var(--red);font-weight:600;font-size:9px;">-\${(p.mae || 0).toFixed(2)}%</span>
                   </div>
                 </td>
                 <td>
-                  <div class="\${isWin ? 'badge-pnl-pos' : 'badge-pnl-neg'}" style="font-size:13px; padding:4px 8px; text-align:center;">
-                    \${roiStr} <br><span style="font-size:10px; opacity:0.8;">\${pnlStr}</span>
+                  <div class="\${isWin ? 'badge-pnl-pos' : 'badge-pnl-neg'}" style="font-size:12px; padding:3px 6px; text-align:center;">
+                    \${roiStr} <br><span style="font-size:9.5px; opacity:0.85;">\${pnlStr}</span>
                   </div>
                 </td>
                 <td>
@@ -2470,16 +2775,18 @@ function serveDashboardHtml() {
           histTbody.innerHTML = data.history.slice(0, 50).map((h, idx) => {
             const isWin = (h.pnl || 0) >= 0;
             const rTag = h.radarTag || (h.signal ? ('[' + h.signal + ']') : '-');
+            const sig = formatSignalCompact(rTag);
+            const exit = formatExitReasonCompact(h.exitReason);
             return \`
               <tr>
                 <td style="color:var(--muted);font-weight:700;">\${idx+1}</td>
-                <td style="color:var(--muted);font-size:10.5px;">\${h.time}</td>
-                <td style="font-weight:800;color:#fff;">\${h.symbol}</td>
+                <td style="color:var(--muted);font-size:10px;">\${h.time}</td>
+                <td style="font-weight:800;color:var(--text);font-family:'JetBrains Mono';">\${h.symbol}</td>
                 <td><span class="\${h.side === 'LONG' ? 'badge-side-long' : 'badge-side-short'}">\${h.side}</span></td>
-                <td><span style="font-size:10px;color:#c084fc;font-weight:700;">\${rTag}</span></td>
-                <td>\${h.durationMin} dk</td>
-                <td style="font-size:11px;color:var(--muted);">\${h.exitReason}</td>
-                <td style="color:var(--green);font-weight:800;">+%\${(h.mfe || 0).toFixed(2)}</td>
+                <td><span class="badge-signal \${sig.badgeClass}" title="\${escapeHtml(sig.full)}">\${sig.short}</span></td>
+                <td style="color:var(--muted);font-size:10px;">\${h.durationMin} dk</td>
+                <td><span class="badge-exit \${exit.badgeClass}" title="\${escapeHtml(exit.full)}">\${exit.short}</span></td>
+                <td style="color:var(--green);font-weight:800;">+\${(h.mfe || 0).toFixed(2)}%</td>
                 <td style="color:\${isWin ? 'var(--green)' : 'var(--red)'};font-weight:800;">\${isWin ? '+' : ''}$\${(h.pnl || 0).toFixed(2)}</td>
                 <td style="color:\${isWin ? 'var(--green)' : 'var(--red)'};font-weight:800;">\${isWin ? '+' : ''}%\${(h.roi || 0).toFixed(1)}</td>
               </tr>
@@ -2497,6 +2804,8 @@ function serveDashboardHtml() {
               const isWin = (h.pnl || 0) >= 0;
               const isLong = h.side === 'LONG';
               const rTag = h.radarTag || (h.signal ? ('[' + h.signal + ']') : '-');
+              const sig = formatSignalCompact(rTag);
+              const exit = formatExitReasonCompact(h.exitReason);
               return \`
                 <div class="hist-card-mobile \${isWin ? 'hist-win' : 'hist-loss'}">
                   <div class="hist-card-top">
@@ -2510,11 +2819,11 @@ function serveDashboardHtml() {
                     </span>
                   </div>
                   <div class="hist-card-mid">
-                    <span style="color:var(--muted);font-size:10px;">\${h.exitReason}</span>
+                    <span class="badge-exit \${exit.badgeClass}" title="\${escapeHtml(exit.full)}">\${exit.short}</span>
                   </div>
                   <div class="hist-card-bot">
-                    <span style="color:#c084fc;font-size:9.5px;font-weight:700;">\${rTag}</span>
-                    <span style="color:var(--muted);font-size:9.5px;">MFE: <b style="color:var(--green)">+%\${(h.mfe || 0).toFixed(2)}</b> • \${h.durationMin}dk</span>
+                    <span class="badge-signal \${sig.badgeClass}" title="\${escapeHtml(sig.full)}">\${sig.short}</span>
+                    <span style="color:var(--muted);font-size:9.5px;">MFE: <b style="color:var(--green)">+\${(h.mfe || 0).toFixed(2)}%</b> • \${h.durationMin}dk</span>
                   </div>
                 </div>
               \`;
@@ -2529,14 +2838,14 @@ function serveDashboardHtml() {
         return '<div style="color:var(--muted);text-align:center;padding:12px;">📻 Telsiz frekansı taranıyor, ilk toplantı bekleniyor...</div>';
       }
       return dlgs.slice(0, 30).map(function(d) {
-        return '<div style="display:flex;gap:6px;align-items:flex-start;padding:4px 6px;background:rgba(255,255,255,0.02);border-radius:5px;border-left:2px solid ' + d.color + ';">' +
+        return '<div style="display:flex;gap:6px;align-items:flex-start;padding:4px 6px;background:var(--panel);border-radius:5px;border:1px solid var(--border);border-left:3px solid ' + d.color + ';box-shadow:var(--shadow-sm);">' +
           '<span style="color:var(--muted);font-size:9px;white-space:nowrap;padding-top:1px;">' + d.time + '</span>' +
           '<div style="display:flex;flex-direction:column;gap:1px;flex:1;">' +
             '<div style="display:flex;align-items:center;gap:4px;">' +
               '<span style="color:' + d.color + ';font-weight:800;font-size:10px;">' + d.agent + '</span>' +
-              '<span style="color:var(--muted);font-size:8.5px;opacity:0.8;">' + d.title + '</span>' +
+              '<span style="color:var(--muted);font-size:8.5px;opacity:0.85;">' + d.title + '</span>' +
             '</div>' +
-            '<div style="color:#e2e8f0;font-size:10px;line-height:1.35;">' + d.text + '</div>' +
+            '<div style="color:var(--text);font-size:10px;line-height:1.35;">' + d.text + '</div>' +
           '</div>' +
         '</div>';
       }).join('');
@@ -2629,8 +2938,8 @@ function renderActiveRows(positions) {
         <td style="color:var(--muted);font-weight:700;">${idx+1}</td>
         <td>
           <div style="display:flex;align-items:center;gap:4px;">
-            <span style="font-weight:900;color:#fff;">${p.symbol}</span>
-            <span class="badge-strat">🚀 MOONSHOT TREND</span>
+            <span style="font-weight:900;color:var(--text);font-family:'JetBrains Mono';">${p.symbol}</span>
+            <span class="badge-strat">🚀 MOONSHOT</span>
           </div>
         </td>
         <td>
@@ -2639,11 +2948,10 @@ function renderActiveRows(positions) {
         <td>
           <span style="color:var(--muted);">$ ${parseFloat(p.entryPrice).toFixed(4)}</span>
           <span style="color:var(--blue);margin:0 2px;">➔</span>
-          <span style="color:#fff;font-weight:800;">$ ${parseFloat(p.currentPrice).toFixed(4)}</span>
-          <div style="font-size:9.5px;color:var(--muted)">RSI: 50</div>
+          <span style="color:var(--text);font-weight:800;">$ ${parseFloat(p.currentPrice).toFixed(4)}</span>
         </td>
         <td>${stopText}</td>
-        <td><span style="color:var(--green);font-weight:800;">+%${(p.mfe || 0).toFixed(2)}</span></td>
+        <td><span style="color:var(--green);font-weight:800;">+${(p.mfe || 0).toFixed(2)}%</span></td>
         <td>
           <span class="${isWin ? 'badge-pnl-pos' : 'badge-pnl-neg'}">${roiStr} (${pnlStr})</span>
         </td>
@@ -2662,16 +2970,18 @@ function renderHistoryRows(hist) {
   return hist.slice(0, 50).map((h, idx) => {
     const isWin = (h.pnl || 0) >= 0;
     const rTag = h.radarTag || (h.signal ? `[${h.signal}]` : '-');
+    const sig = formatSignalCompact(rTag);
+    const exit = formatExitReasonCompact(h.exitReason);
     return `
       <tr>
         <td style="color:var(--muted);font-weight:700;">${idx+1}</td>
-        <td style="color:var(--muted);font-size:10.5px;">${h.time}</td>
-        <td style="font-weight:800;color:#fff;">${h.symbol}</td>
+        <td style="color:var(--muted);font-size:10px;">${h.time}</td>
+        <td style="font-weight:800;color:var(--text);font-family:'JetBrains Mono';">${h.symbol}</td>
         <td><span class="${h.side === 'LONG' ? 'badge-side-long' : 'badge-side-short'}">${h.side}</span></td>
-        <td><span style="font-size:10px;color:#c084fc;font-weight:700;">${rTag}</span></td>
-        <td>${h.durationMin} dk</td>
-        <td style="font-size:11px;color:var(--muted);">${h.exitReason}</td>
-        <td style="color:var(--green);font-weight:800;">+%${(h.mfe || 0).toFixed(2)}</td>
+        <td><span class="badge-signal ${sig.badgeClass}" title="${escapeHtml(sig.full)}">${sig.short}</span></td>
+        <td style="color:var(--muted);font-size:10px;">${h.durationMin} dk</td>
+        <td><span class="badge-exit ${exit.badgeClass}" title="${escapeHtml(exit.full)}">${exit.short}</span></td>
+        <td style="color:var(--green);font-weight:800;">+${(h.mfe || 0).toFixed(2)}%</td>
         <td style="color:${isWin ? 'var(--green)' : 'var(--red)'};font-weight:800;">${isWin ? '+' : ''}$${(h.pnl || 0).toFixed(2)}</td>
         <td style="color:${isWin ? 'var(--green)' : 'var(--red)'};font-weight:800;">${isWin ? '+' : ''}%${(h.roi || 0).toFixed(1)}</td>
       </tr>
@@ -2723,6 +3033,8 @@ function renderHistoryCards(hist) {
     const isWin = (h.pnl || 0) >= 0;
     const isLong = h.side === 'LONG';
     const rTag = h.radarTag || (h.signal ? `[${h.signal}]` : '-');
+    const sig = formatSignalCompact(rTag);
+    const exit = formatExitReasonCompact(h.exitReason);
     return `
       <div class="hist-card-mobile ${isWin ? 'hist-win' : 'hist-loss'}">
         <div class="hist-card-top">
@@ -2736,11 +3048,11 @@ function renderHistoryCards(hist) {
           </span>
         </div>
         <div class="hist-card-mid">
-          <span style="color:var(--muted);font-size:10px;">${h.exitReason}</span>
+          <span class="badge-exit ${exit.badgeClass}" title="${escapeHtml(exit.full)}">${exit.short}</span>
         </div>
         <div class="hist-card-bot">
-          <span style="color:#c084fc;font-size:9.5px;font-weight:700;">${rTag}</span>
-          <span style="color:var(--muted);font-size:9.5px;">MFE: <b style="color:var(--green)">+%${(h.mfe || 0).toFixed(2)}</b> • ${h.durationMin}dk</span>
+          <span class="badge-signal ${sig.badgeClass}" title="${escapeHtml(sig.full)}">${sig.short}</span>
+          <span style="color:var(--muted);font-size:9.5px;">MFE: <b style="color:var(--green)">+${(h.mfe || 0).toFixed(2)}%</b> • ${h.durationMin}dk</span>
         </div>
       </div>
     `;
@@ -2753,14 +3065,14 @@ function renderDialogues(dlgs) {
   }
   return dlgs.slice(0, 30).map(d => {
     return `
-      <div style="display:flex;gap:6px;align-items:flex-start;padding:4px 6px;background:rgba(255,255,255,0.02);border-radius:5px;border-left:2px solid ${d.color};">
+      <div style="display:flex;gap:6px;align-items:flex-start;padding:4px 6px;background:var(--panel);border-radius:5px;border:1px solid var(--border);border-left:3px solid ${d.color};box-shadow:var(--shadow-sm);">
         <span style="color:var(--muted);font-size:9px;white-space:nowrap;padding-top:1px;">${d.time}</span>
         <div style="display:flex;flex-direction:column;gap:1px;flex:1;">
           <div style="display:flex;align-items:center;gap:4px;">
             <span style="color:${d.color};font-weight:800;font-size:10px;">${d.agent}</span>
-            <span style="color:var(--muted);font-size:8.5px;opacity:0.8;">${d.title}</span>
+            <span style="color:var(--muted);font-size:8.5px;opacity:0.85;">${d.title}</span>
           </div>
-          <div style="color:#e2e8f0;font-size:10px;line-height:1.35;">${d.text}</div>
+          <div style="color:var(--text);font-size:10px;line-height:1.35;">${d.text}</div>
         </div>
       </div>
     `;
