@@ -11,7 +11,8 @@ const AGENTS = {
   TESTER:   { name: '🧪 TESTÇİ',    color: '#4ade80', title: 'QA & Simülatör' },
   ENGINEER: { name: '💻 YAZILIMCI', color: '#a78bfa', title: 'DevOps & Sistem' },
   WHALE_HUNTER: { name: '🐋 BALİNA AVCISI', color: '#06b6d4', title: 'Para Akışı & Fon' },
-  FREQAI: { name: '🎯 FREQ-AI & LİKİDASYON', color: '#ec4899', title: 'ML Olasılık & Fonlama' }
+  FREQAI: { name: '🎯 FREQ-AI & LİKİDASYON', color: '#ec4899', title: 'ML Olasılık & Fonlama' },
+  JUDGE:  { name: '🏛️ BAŞ YARGIÇ', color: '#eab308', title: 'Adli Denetçi (Aslan11)' }
 };
 
 let dialogues = [];

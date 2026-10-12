@@ -8,6 +8,7 @@ const { findChampionStrategy } = require('./strategy_optimizer');
 const { trackWhaleMoneyFlow } = require('./whale_scout');
 const { scanFundingRates } = require('./funding_scout');
 const { getFreqAiStats } = require('./freqai_ml_engine');
+const { getJudgeDossier, runCourtSession } = require('./judge_audit');
 
 const TEAM_STATUS_FILE = path.join(__dirname, 'team_status.json');
 
@@ -132,6 +133,11 @@ async function runAutonomousTeamSync(ctx = {}) {
   } catch(e) {}
   const freqAiStats = getFreqAiStats();
 
+  try {
+    runCourtSession();
+  } catch(e) {}
+  const judgeDossier = getJudgeDossier();
+
   const rec = regime.recommendedConfig;
 
   // 2) 👑 YÖNETİCİ: Portföy Koruması & Risk Müdahale Değerlendirmesi
@@ -247,6 +253,11 @@ async function runAutonomousTeamSync(ctx = {}) {
       'STRATEGY'
     ]);
     meetingLines.push([
+      'JUDGE',
+      `🏛️ [ASLAN11 ADLİ HÜKÜM]: Mahkeme oturumu tamamlandı (${judgeDossier.stats.totalTrials} duruşma, %${judgeDossier.stats.averageJudicialScore} intizam skoru). Disiplinsiz veya delilsiz açılmaya çalışılan her emir anında veto edilecek!`,
+      'RISK'
+    ]);
+    meetingLines.push([
       'TRADER',
       `⚔️ [EMİR ONAYLANDI]: Savunma ve Şampiyon "${champName}" stratejisi yürütülüyor! Tek slot, $${intervention.marginPerTrade} teminat. Taker ≥ %54.0 ve tepe tuzağı engelli roketler taranıyor.`,
       'TRADE'
@@ -276,6 +287,11 @@ async function runAutonomousTeamSync(ctx = {}) {
       'FREQAI',
       `🎯 [FREQ-AI & FONLAMA]: ML Karar Motoru hazır (${freqAiStats.trainingSamples} işlem kalibre). Ortalama fonlama: %${fundingRates.avgFundingPct}. Minimum kazanma olasılığı eşiği: %68.`,
       'STRATEGY'
+    ]);
+    meetingLines.push([
+      'JUDGE',
+      `🏛️ [ASLAN11 ADLİ HÜKÜM]: Mahkeme devrede (${judgeDossier.stats.acquittals} beraat, ${judgeDossier.stats.convictions} mahkumiyet). Ön yargılama vizesi şartı devrede.`,
+      'RISK'
     ]);
     meetingLines.push([
       'TESTER',
@@ -347,6 +363,14 @@ async function runAutonomousTeamSync(ctx = {}) {
         status: `Model Aktif (%${freqAiStats.historicalWinRate} WR / ${freqAiStats.trainingSamples} İşlem)`,
         avgFunding: `%${fundingRates.avgFundingPct}`,
         topSqueeze: (fundingRates.topShortSqueezes && fundingRates.topShortSqueezes[0]) ? `${fundingRates.topShortSqueezes[0].symbol} (%${fundingRates.topShortSqueezes[0].fundingRatePct})` : '-'
+      },
+      judge: {
+        role: '🏛️ Aslan11 Baş Adli Yargıç',
+        status: `Mahkeme Aktif (${judgeDossier.stats.averageJudicialScore}/100 Puan)`,
+        trials: judgeDossier.stats.totalTrials,
+        convictions: judgeDossier.stats.convictions,
+        acquittals: judgeDossier.stats.acquittals,
+        bannedCoins: judgeDossier.activeBannedCount
       }
     },
     forensics,
@@ -354,6 +378,7 @@ async function runAutonomousTeamSync(ctx = {}) {
     moneyFlow,
     fundingRates,
     freqAiStats,
+    judgeDossier,
     optimizer: optimizer ? {
       evaluatedAt: optimizer.evaluatedAt,
       candidatesCount: optimizer.candidatesCount,

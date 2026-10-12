@@ -39,6 +39,12 @@ try {
   predictTradeProbability = mlMod.predictTradeProbability;
 } catch (e) {}
 
+let evaluatePreTradeClearance = () => ({ approved: true, judicialScore: 85, verdict: 'BERAAT', reason: '' });
+try {
+  const judgeMod = require('./quant_lab/judge_audit');
+  evaluatePreTradeClearance = judgeMod.evaluatePreTradeClearance;
+} catch (e) {}
+
 // --- EKRAN 1 BİREBİR AYARLARI ---
 let CONFIG = {
   initialBalance: 100.0,     // Bakiye 100 Dolar
@@ -1137,6 +1143,24 @@ async function scanLoop() {
             continue;
           }
 
+          // 🏛️ 8. AJAN (ASLAN11 BAŞ YARGIÇ) ÖN YARGILAMA VE SABIKA DENETİMİ
+          let judgeClearance = { approved: true, verdict: 'BERAAT', judicialScore: 85, reason: '' };
+          try {
+            judgeClearance = evaluatePreTradeClearance(sym, side, {
+              takerBuyRatio: rInfo ? (rInfo.takerBuyRatio || 50) : 50,
+              chg15m: cur15m,
+              chg24h: chg24Val
+            });
+          } catch(e) {}
+
+          if (!judgeClearance.approved) {
+            addLog(`🛡️ [YARGIÇ MAHKEME VETOSU]: ${sym} ${side} engellendi — ${judgeClearance.reason}`, 'WARN');
+            try {
+              addDialogue('JUDGE', `🛑 MAHKEME VETOSU! ${sym} sanığı için hüküm: ${judgeClearance.verdict}. Gerekçe: ${judgeClearance.reason}. İşlem durduruldu!`, 'RISK');
+            } catch(e) {}
+            continue;
+          }
+
           const stopPrice = side === "LONG" 
             ? curP * (1 - CONFIG.slPct / 100) 
             : curP * (1 + CONFIG.slPct / 100);
@@ -1186,6 +1210,7 @@ async function scanLoop() {
             addDialogue('ANALYST', `🚨 ${sym} ${side} sinyali: 3s hacim ${volTxt}, alıcı oranı ${takerTxt}, 24s %${chg24Val.toFixed(1)}, rejim: ${DYNAMIC.regime}.`, 'TRADE');
             addDialogue('WHALE_HUNTER', `🐋 ${sym} ${side} ONAYLANDI: Para akışı lehimize${scoutTxt}. Büyük oyuncularla aynı yöndeyiz!`, 'TRADE');
             addDialogue('FREQAI', `🎯 ${sym} ${side} ONAYLANDI: FreqAI ML Kazanma Olasılığı %${mlEval.winProbabilityPct} (${mlEval.confidence}) | Fonlama: ${fundTxt || '%0.010'}.`, 'TRADE');
+            addDialogue('JUDGE', `🏛️ ${sym} ${side} BERAAT: Disiplin Puanı ${judgeClearance.judicialScore}/100. Giriş nizamı ve kurallar onaylandı.`, 'TRADE');
             addDialogue('TRADER', `⚔️ ${sym} ${side} @ $${curP.toFixed(4)} | Nominal $${(CONFIG.marginPerTrade * CONFIG.leverage).toFixed(0)} (${CONFIG.leverage}x) | SL $${stopPrice.toFixed(4)}.`, 'TRADE');
             addDialogue('MANAGER', `👑 Slot ${activePositions.length}/${CONFIG.maxSlots}. Bu işlemde maksimum risk: -$${(CONFIG.marginPerTrade * CONFIG.leverage * CONFIG.slPct / 100).toFixed(2)}.`, 'RISK');
           } catch(e) {}
@@ -1646,6 +1671,7 @@ function serveDashboardHtml() {
     .status-pill.blue { background: rgba(56,189,248,0.15); color: #38bdf8; border: 1px solid rgba(56,189,248,0.3); }
     .status-pill.cyan { background: rgba(6,182,212,0.15); color: #06b6d4; border: 1px solid rgba(6,182,212,0.3); }
     .status-pill.pink { background: rgba(236,72,153,0.15); color: #ec4899; border: 1px solid rgba(236,72,153,0.3); }
+    .status-pill.yellow { background: rgba(234,179,8,0.15); color: #eab308; border: 1px solid rgba(234,179,8,0.3); }
 
     /* STRATEGY BANNER */
     .strategy-banner-card {
@@ -2025,7 +2051,7 @@ function serveDashboardHtml() {
           </div>
         </div>
 
-        <div class="sidebar-section-title" style="margin-top:10px;">🤖 OTONOM QUANT EKİBİ (7 AJAN)</div>
+        <div class="sidebar-section-title" style="margin-top:10px;">🤖 OTONOM QUANT EKİBİ (8 AJAN)</div>
         <div style="background:rgba(15,23,42,0.65);border:1px solid rgba(168,85,247,0.3);border-radius:8px;padding:9px;margin-bottom:12px;font-size:11px;display:flex;flex-direction:column;gap:6px;">
           <div style="display:flex;justify-content:space-between;align-items:center;">
             <span style="font-weight:800;color:#c084fc;">👑 1. YÖNETİCİ</span>
@@ -2054,6 +2080,10 @@ function serveDashboardHtml() {
           <div style="display:flex;justify-content:space-between;align-items:center;">
             <span style="font-weight:700;color:#ec4899;">🎯 7. FREQ-AI & LİKİDASYON</span>
             <span class="status-pill pink" id="teamFreqai" style="font-size:9.5px;padding:2px 6px;">Model Aktif</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span style="font-weight:700;color:#eab308;">🏛️ 8. BAŞ YARGIÇ (Aslan11)</span>
+            <span class="status-pill yellow" id="teamJudge" style="font-size:9.5px;padding:2px 6px;">Mahkeme Aktif</span>
           </div>
         </div>
 
@@ -2196,7 +2226,7 @@ function serveDashboardHtml() {
         <!-- 🗣️ AJAN TELSİZİ & CANLI DİYALOG AKIŞI -->
         <h2 style="margin-top:16px; display:flex; justify-content:space-between; align-items:center;">
           <span>🗣️ AJAN TELSİZİ & CANLI DİYALOG AKIŞI</span>
-          <span class="badge-moon" style="font-size:9.5px;">📻 7 AJAN CANLI FREKANS</span>
+          <span class="badge-moon" style="font-size:9.5px;">📻 8 AJAN CANLI FREKANS</span>
         </h2>
         <div id="dialogueBox" style="background:rgba(5,7,12,0.95); border:1px solid rgba(255,255,255,0.08); border-radius:8px; padding:12px; max-height:260px; overflow-y:auto; font-family:'JetBrains Mono',monospace; font-size:11px; display:flex; flex-direction:column; gap:8px; box-shadow: inset 0 2px 8px rgba(0,0,0,0.6);">
           ${renderDialogues(teamStatusCache ? teamStatusCache.dialogues : [])}
@@ -2292,6 +2322,9 @@ function serveDashboardHtml() {
           }
           if (t.freqai && document.getElementById("teamFreqai")) {
             document.getElementById("teamFreqai").innerText = t.freqai.status || 'Model Aktif';
+          }
+          if (t.judge && document.getElementById("teamJudge")) {
+            document.getElementById("teamJudge").innerText = t.judge.status || 'Mahkeme Aktif';
           }
         }
 
@@ -2992,7 +3025,7 @@ server.listen(PORT, () => {
     } catch(e) {}
   }, 4 * 60 * 1000);
 
-  // 🤖 OTONOM 7-AJAN EKİBİ: Toplantı yap → Yönetici onaylarsa giriş filtrelerini CANLI uygula
+  // 🤖 OTONOM 8-AJAN EKİBİ: Toplantı yap → Yönetici onaylarsa giriş filtrelerini CANLI uygula
   try {
     const { runAutonomousTeamSync } = require('./quant_lab/team_runner');
     const clamp = (v, [lo, hi]) => Math.min(hi, Math.max(lo, v));
