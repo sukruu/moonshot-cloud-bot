@@ -2290,35 +2290,35 @@ function serveDashboardHtml() {
           <div class="agent-compact-list">
             <div class="agent-row">
               <span class="agent-name" style="color:var(--purple);">👑 1. YÖNETİCİ</span>
-              <span class="status-pill green" id="teamManager">ONAYLANDI</span>
+              <span class="status-pill purple" id="teamManager">🚨 SAVUNMA</span>
             </div>
             <div class="agent-row">
               <span class="agent-name" style="color:var(--blue);">🧠 2. ANALİZCİ</span>
-              <span class="status-pill blue" id="teamAnalyst">Hafta Sonu Rejimi</span>
+              <span class="status-pill blue" id="teamAnalyst">Yatay / Sakin</span>
             </div>
             <div class="agent-row">
               <span class="agent-name" style="color:var(--amber);">⚔️ 3. TRADER</span>
-              <span class="status-pill purple" id="teamTrader">Lazer & Moonshot</span>
+              <span class="status-pill purple" id="teamTrader">🎯 1 Slot ($10)</span>
             </div>
             <div class="agent-row">
               <span class="agent-name" style="color:var(--green);">🧪 4. TESTÇİ</span>
-              <span class="status-pill green" id="teamTester">Win Rate: %100</span>
+              <span class="status-pill green" id="teamTester">Sim: Güvenli</span>
             </div>
             <div class="agent-row">
               <span class="agent-name" style="color:var(--text-secondary);">💻 5. YAZILIMCI</span>
-              <span class="status-pill green" id="teamEngineer">Render Senkron</span>
+              <span class="status-pill green" id="teamEngineer">Regex Aktif</span>
             </div>
             <div class="agent-row">
               <span class="agent-name" style="color:var(--cyan);">🐋 6. BALİNA AVCISI</span>
-              <span class="status-pill cyan" id="teamWhale">Para Akışı Aktif</span>
+              <span class="status-pill cyan" id="teamWhale">⚖️ Dengeli</span>
             </div>
             <div class="agent-row">
               <span class="agent-name" style="color:var(--pink);">🎯 7. FREQ-AI & LİKİT</span>
-              <span class="status-pill pink" id="teamFreqai">Model Aktif</span>
+              <span class="status-pill pink" id="teamFreqai">%57.1 WR (56)</span>
             </div>
             <div class="agent-row">
               <span class="agent-name" style="color:var(--amber);">🏛️ 8. BAŞ YARGIÇ</span>
-              <span class="status-pill yellow" id="teamJudge">Mahkeme Aktif</span>
+              <span class="status-pill yellow" id="teamJudge">76 PUAN</span>
             </div>
           </div>
         </div>
