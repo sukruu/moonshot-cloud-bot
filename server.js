@@ -1566,8 +1566,9 @@ function serveDashboardHtml() {
       background: var(--bg);
       color: var(--text);
       font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Segoe UI", Roboto, sans-serif;
-      padding: max(8px, env(safe-area-inset-top)) max(10px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left));
-      font-size: 13px;
+      padding: max(6px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
+      font-size: 11px;
+      zoom: 0.88;
       min-height: 100vh;
       -webkit-font-smoothing: antialiased;
     }
@@ -1576,8 +1577,8 @@ function serveDashboardHtml() {
     /* TABS */
     .tabs {
       display: flex;
-      gap: 6px;
-      margin-bottom: 12px;
+      gap: 5px;
+      margin-bottom: 8px;
       overflow-x: auto;
       -webkit-overflow-scrolling: touch;
       scrollbar-width: none;
@@ -1587,14 +1588,14 @@ function serveDashboardHtml() {
       background: var(--panel);
       border: 1px solid var(--border);
       color: var(--muted);
-      font-size: 11px;
+      font-size: 10px;
       font-weight: 800;
-      padding: 8px 13px;
-      border-radius: 8px;
+      padding: 6px 10px;
+      border-radius: 6px;
       cursor: pointer;
       display: inline-flex;
       align-items: center;
-      gap: 5px;
+      gap: 4px;
       white-space: nowrap;
       flex-shrink: 0;
     }
@@ -1602,64 +1603,99 @@ function serveDashboardHtml() {
       background: var(--panel2);
       color: #fff;
       border-color: rgba(168, 85, 247, 0.5);
-      box-shadow: 0 0 15px rgba(168, 85, 247, 0.25);
+      box-shadow: 0 0 12px rgba(168, 85, 247, 0.25);
     }
 
     /* GRID */
     .dashboard {
       display: grid;
-      grid-template-columns: 310px 1fr;
-      gap: 12px;
+      grid-template-columns: 285px 1fr;
+      gap: 8px;
       align-items: start;
     }
     @media (max-width: 960px) {
-      .dashboard { grid-template-columns: 1fr; gap: 10px; }
+      .dashboard { grid-template-columns: 1fr; gap: 8px; }
     }
 
     .panel {
       background: var(--panel);
       border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 12px 14px;
-      box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+      border-radius: 10px;
+      padding: 8px 10px;
+      box-shadow: 0 6px 20px rgba(0,0,0,0.45);
     }
     .panel h2 {
-      font-size: 12.5px;
+      font-size: 11px;
       font-weight: 800;
       text-transform: uppercase;
-      letter-spacing: 0.5px;
-      margin-bottom: 10px;
+      letter-spacing: 0.4px;
+      margin-bottom: 6px;
       display: flex;
       justify-content: space-between;
       align-items: center;
     }
 
-    /* STATUS BOX */
-    .status-box {
-      background: linear-gradient(180deg, rgba(15,23,42,0.6) 0%, rgba(8,11,18,0.8) 100%);
-      border: 1px solid rgba(255,255,255,0.05);
-      border-radius: 8px;
-      padding: 12px;
-      margin-bottom: 12px;
-      box-shadow: inset 0 1px 0 rgba(255,255,255,0.02);
+    /* UNIFIED AGENT & STATUS CARD */
+    .unified-agent-box {
+      background: linear-gradient(180deg, rgba(15,23,42,0.7) 0%, rgba(8,11,18,0.85) 100%);
+      border: 1px solid rgba(168,85,247,0.3);
+      border-radius: 7px;
+      padding: 5px 7px;
+      margin-bottom: 6px;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
     }
-    .status-item {
+    .mini-status-bar {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      font-size: 11px;
-      margin-bottom: 8px;
-      font-weight: 600;
-      color: var(--muted);
-      border-bottom: 1px dashed rgba(255,255,255,0.04);
-      padding-bottom: 8px;
+      background: rgba(0,0,0,0.35);
+      padding: 3px 5px;
+      border-radius: 5px;
+      border: 1px solid rgba(255,255,255,0.06);
+      margin-bottom: 4px;
+      gap: 3px;
     }
-    .status-item:last-child { margin-bottom: 0; border-bottom: none; padding-bottom: 0; }
+    .mini-status-chip {
+      display: flex;
+      align-items: center;
+      gap: 3px;
+    }
+    .mini-lbl {
+      font-size: 8px;
+      color: var(--muted);
+      font-weight: 800;
+      letter-spacing: 0.3px;
+    }
+    .agent-compact-list {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+    .agent-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 9.5px;
+      padding: 1px 0;
+    }
+    .agent-name {
+      font-weight: 700;
+      white-space: nowrap;
+      font-size: 9.5px;
+    }
+    .agent-row .status-pill {
+      font-size: 8.5px;
+      padding: 1.5px 5px;
+      max-width: 155px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
     .status-pill {
       font-family: 'JetBrains Mono', monospace;
       font-weight: 800;
-      font-size: 10.5px;
-      padding: 3px 8px;
+      font-size: 9px;
+      padding: 2px 5px;
       border-radius: 4px;
       background: rgba(255,255,255,0.04);
       color: #fff;
@@ -1677,59 +1713,59 @@ function serveDashboardHtml() {
     .strategy-banner-card {
       background: linear-gradient(135deg, rgba(88,28,135,0.25), rgba(15,23,42,0.6));
       border: 1px solid rgba(168,85,247,0.35);
-      border-radius: 8px;
-      padding: 9px 11px;
-      margin-bottom: 10px;
+      border-radius: 7px;
+      padding: 7px 9px;
+      margin-bottom: 7px;
     }
-    .strat-card-head { display: flex; justify-content: space-between; font-size: 10.5px; margin-bottom: 4px; }
-    .strat-badge-pill { background: var(--purple); color: #fff; font-weight: 900; font-size: 9px; padding: 2px 6px; border-radius: 4px; }
-    .strat-card-title { font-weight: 800; font-size: 12.5px; color: #fff; }
-    .strat-card-sub { font-size: 10px; color: var(--muted); margin-top: 2px; }
+    .strat-card-head { display: flex; justify-content: space-between; font-size: 9.5px; margin-bottom: 3px; }
+    .strat-badge-pill { background: var(--purple); color: #fff; font-weight: 900; font-size: 8.5px; padding: 1.5px 5px; border-radius: 3px; }
+    .strat-card-title { font-weight: 800; font-size: 11px; color: #fff; }
+    .strat-card-sub { font-size: 9px; color: var(--muted); margin-top: 1px; }
 
     /* PARAMETERS */
-    .sidebar-section-title { font-size: 10px; font-weight: 800; color: #64748b; text-transform: uppercase; margin-bottom: 10px; margin-top: 14px; letter-spacing: 1px; display:flex; align-items:center; gap:6px; }
+    .sidebar-section-title { font-size: 9px; font-weight: 800; color: #64748b; text-transform: uppercase; margin-bottom: 4px; margin-top: 6px; letter-spacing: 0.8px; display:flex; align-items:center; gap:5px; }
     .sidebar-section-title::after { content: ''; flex-grow: 1; height: 1px; background: rgba(255,255,255,0.04); }
-    .param-grid-2x2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
-    .param-card { background: rgba(15, 23, 42, 0.4); border: 1px solid rgba(255,255,255,0.04); border-radius: 6px; padding: 8px 10px; transition: 0.2s ease; }
+    .param-grid-2x2 { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-bottom: 5px; }
+    .param-card { background: rgba(15, 23, 42, 0.4); border: 1px solid rgba(255,255,255,0.04); border-radius: 5px; padding: 5px 7px; transition: 0.2s ease; }
     .param-card:hover { border-color: rgba(255,255,255,0.1); background: rgba(15, 23, 42, 0.6); }
-    .param-header { display: flex; justify-content: space-between; font-size: 10px; color: #94a3b8; font-weight: 700; margin-bottom: 4px; }
+    .param-header { display: flex; justify-content: space-between; font-size: 8.5px; color: #94a3b8; font-weight: 700; margin-bottom: 2px; }
     .param-input-wrap { display: flex; align-items: baseline; justify-content: space-between; }
-    .param-input-wrap input { width: 58px; background: none; border: none; color: #fff; font-family: 'JetBrains Mono', monospace; font-size: 14px; font-weight: 800; outline: none; }
-    .param-unit { font-size: 10.5px; color: var(--muted); }
+    .param-input-wrap input { width: 50px; background: none; border: none; color: #fff; font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 800; outline: none; }
+    .param-unit { font-size: 9px; color: var(--muted); }
 
     /* HERO PERF */
     .perf-hero-card {
       background: linear-gradient(135deg, rgba(16,185,129,0.1), rgba(15,23,42,0.8));
       border: 1px solid rgba(16,185,129,0.3);
-      border-radius: 8px;
-      padding: 9px 11px;
+      border-radius: 7px;
+      padding: 5px 8px;
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 8px;
+      margin-bottom: 5px;
     }
-    .perf-hero-title { font-size: 10px; font-weight: 800; color: var(--muted); display: block; }
-    .perf-hero-sub { font-size: 11px; font-weight: 700; color: var(--green); }
-    .perf-hero-val { font-family: 'JetBrains Mono', monospace; font-size: 18px; font-weight: 900; color: #fff; }
+    .perf-hero-title { font-size: 8.5px; font-weight: 800; color: var(--muted); display: block; }
+    .perf-hero-sub { font-size: 9.5px; font-weight: 700; color: var(--green); }
+    .perf-hero-val { font-family: 'JetBrains Mono', monospace; font-size: 14px; font-weight: 900; color: #fff; }
 
-    .perf-grid-4 { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 10px; }
-    .perf-mini-card { background: rgba(8, 11, 18, 0.7); border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; padding: 6px 8px; }
-    .perf-mini-label { font-size: 9.5px; color: var(--muted); display: block; }
-    .perf-mini-val { font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 800; }
+    .perf-grid-4 { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-bottom: 5px; }
+    .perf-mini-card { background: rgba(8, 11, 18, 0.7); border: 1px solid rgba(255,255,255,0.08); border-radius: 5px; padding: 4px 6px; }
+    .perf-mini-label { font-size: 8px; color: var(--muted); display: block; }
+    .perf-mini-val { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; font-weight: 800; }
 
     /* BUTTONS GRID */
     .action-buttons-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 6px;
-      margin-top: 6px;
+      gap: 4px;
+      margin-top: 5px;
     }
     .btn-action {
       width: 100%;
-      padding: 8px 8px;
-      border-radius: 7px;
+      padding: 5px 6px;
+      border-radius: 6px;
       font-weight: 800;
-      font-size: 10.5px;
+      font-size: 9.5px;
       cursor: pointer;
       border: 1px solid var(--border);
       transition: 0.15s;
@@ -1738,8 +1774,8 @@ function serveDashboardHtml() {
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: 4px;
-      min-height: 36px;
+      gap: 3px;
+      min-height: 28px;
     }
     .btn-secondary { background: var(--panel2); color: var(--text); }
     .btn-secondary:hover { background: var(--panel-hover); }
@@ -1756,27 +1792,27 @@ function serveDashboardHtml() {
       overflow-x: auto;
       -webkit-overflow-scrolling: touch;
       border: 1px solid var(--border);
-      border-radius: 8px;
+      border-radius: 6px;
       background: rgba(8, 11, 18, 0.4);
-      margin-bottom: 12px;
+      margin-bottom: 8px;
     }
-    .table-container::-webkit-scrollbar { height: 4px; }
+    .table-container::-webkit-scrollbar { height: 3px; }
     .table-container::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 2px; }
-    table { width: 100%; border-collapse: collapse; font-size: 11px; white-space: nowrap; }
+    table { width: 100%; border-collapse: collapse; font-size: 10px; white-space: nowrap; }
     th {
       position: sticky;
       top: 0;
       background: #111724;
       text-align: left;
-      padding: 7px 9px;
+      padding: 5px 7px;
       color: var(--muted);
       font-weight: 800;
-      font-size: 9.5px;
+      font-size: 8.5px;
       text-transform: uppercase;
       border-bottom: 1px solid var(--border);
       z-index: 2;
     }
-    td { padding: 7px 9px; border-bottom: 1px solid rgba(255, 255, 255, 0.03); font-family: 'JetBrains Mono', monospace; }
+    td { padding: 4.5px 7px; border-bottom: 1px solid rgba(255, 255, 255, 0.03); font-family: 'JetBrains Mono', monospace; }
     tr:hover td { background: rgba(255, 255, 255, 0.03); }
 
     /* BADGES */
@@ -1942,13 +1978,12 @@ function serveDashboardHtml() {
       .tab-btn { font-size: 10px; padding: 7px 10px; min-height: 36px; border-radius: 7px; }
 
       /* Status & Perf cards on mobile */
-      .status-box { padding: 8px 10px; margin-bottom: 8px; }
-      .status-item { font-size: 10.5px; margin-bottom: 4px; }
-      .perf-hero-card { padding: 9px 12px; margin-bottom: 6px; }
-      .perf-hero-val { font-size: 20px; }
-      .perf-grid-4 { gap: 5px; margin-bottom: 8px; }
-      .perf-mini-card { padding: 5px 7px; }
-      .perf-mini-val { font-size: 11.5px; }
+      .unified-agent-box { padding: 5px 7px; margin-bottom: 6px; }
+      .perf-hero-card { padding: 6px 9px; margin-bottom: 5px; }
+      .perf-hero-val { font-size: 16px; }
+      .perf-grid-4 { gap: 4px; margin-bottom: 6px; }
+      .perf-mini-card { padding: 4px 6px; }
+      .perf-mini-val { font-size: 10.5px; }
 
       /* Inputs - prevent iOS Safari auto-zoom */
       input[type="number"], input[type="text"] { font-size: 16px !important; }
@@ -1996,34 +2031,60 @@ function serveDashboardHtml() {
           <span>🎛️ MOTOR KONTROLÜ</span>
         </h2>
 
-        <div class="status-box">
-          <div class="status-item">
-            <span>⚡ Sistem Durumu</span>
-            <span class="status-pill green" id="liveStatus">ÇALIŞIYOR</span>
+        <!-- TEK BİRLEŞİK KART: SİSTEM & 8 AJAN KOMUTASI -->
+        <div class="sidebar-section-title" style="margin-top:0;">🤖 OTONOM SİSTEM & 8 AJAN KOMUTASI</div>
+        <div class="unified-agent-box">
+          <div class="mini-status-bar">
+            <div class="mini-status-chip">
+              <span class="mini-lbl">DURUM</span>
+              <span class="status-pill green" id="liveStatus" style="font-size:8.5px;padding:1.5px 5px;">ÇALIŞIYOR</span>
+            </div>
+            <div class="mini-status-chip">
+              <span class="mini-lbl">SLOT</span>
+              <span class="status-pill purple" id="posCount" style="font-size:8.5px;padding:1.5px 5px;">${stats.activeCount} / ${CONFIG.maxSlots}</span>
+            </div>
+            <div class="mini-status-chip">
+              <span class="mini-lbl">BTC</span>
+              <span class="status-pill" id="btcVal" style="font-size:8.5px;padding:1.5px 5px;color:${stats.btcIsGreen ? 'var(--green)' : 'var(--red)'};">${stats.btcTrend}</span>
+            </div>
           </div>
-          <div class="status-item">
-            <span>🛡️ Lazer Motoru</span>
-            <span class="status-pill green">AKTİF (${CONFIG.riskIntervalMs / 1000}s)</span>
-          </div>
-          <div class="status-item">
-            <span>🐋 Balina Radarı</span>
-            <span class="status-pill green">⚡ Saf Hacim Radarı</span>
-          </div>
-          <div class="status-item">
-            <span>📡 Likit Radar</span>
-            <span class="status-pill green">Aktif (Gerçek Zamanlı)</span>
-          </div>
-          <div class="status-item">
-            <span>📊 BTC Trend</span>
-            <span class="status-pill" id="btcVal" style="color:${stats.btcIsGreen ? 'var(--green)' : 'var(--red)'};">${stats.btcTrend}</span>
-          </div>
-          <div class="status-item">
-            <span>🎯 Slot Kullanımı</span>
-            <span class="status-pill purple" id="posCount">${stats.activeCount} / ${CONFIG.maxSlots} (Sniper Slot)</span>
+          <div class="agent-compact-list">
+            <div class="agent-row">
+              <span class="agent-name" style="color:#c084fc;">👑 1. YÖNETİCİ</span>
+              <span class="status-pill green" id="teamManager">ONAYLANDI</span>
+            </div>
+            <div class="agent-row">
+              <span class="agent-name" style="color:#38bdf8;">🧠 2. ANALİZCİ</span>
+              <span class="status-pill blue" id="teamAnalyst">Hafta Sonu Rejimi</span>
+            </div>
+            <div class="agent-row">
+              <span class="agent-name" style="color:#facc15;">⚔️ 3. TRADER</span>
+              <span class="status-pill purple" id="teamTrader">Lazer & Moonshot</span>
+            </div>
+            <div class="agent-row">
+              <span class="agent-name" style="color:#4ade80;">🧪 4. TESTÇİ</span>
+              <span class="status-pill green" id="teamTester">Win Rate: %100</span>
+            </div>
+            <div class="agent-row">
+              <span class="agent-name" style="color:#e2e8f0;">💻 5. YAZILIMCI</span>
+              <span class="status-pill green" id="teamEngineer">Render Senkron</span>
+            </div>
+            <div class="agent-row">
+              <span class="agent-name" style="color:#06b6d4;">🐋 6. BALİNA AVCISI</span>
+              <span class="status-pill cyan" id="teamWhale">Para Akışı Aktif</span>
+            </div>
+            <div class="agent-row">
+              <span class="agent-name" style="color:#ec4899;">🎯 7. FREQ-AI & LİKİT</span>
+              <span class="status-pill pink" id="teamFreqai">Model Aktif</span>
+            </div>
+            <div class="agent-row">
+              <span class="agent-name" style="color:#eab308;">🏛️ 8. BAŞ YARGIÇ</span>
+              <span class="status-pill yellow" id="teamJudge">Mahkeme Aktif</span>
+            </div>
           </div>
         </div>
 
-        <div class="sidebar-section-title" style="margin-top:6px;">💰 SEANS PERFORMANSI</div>
+        <div class="sidebar-section-title" style="margin-top:5px;">💰 SEANS PERFORMANSI</div>
         <div class="perf-hero-card">
           <div>
             <span class="perf-hero-title">KASA BAKİYESİ</span>
@@ -2051,42 +2112,6 @@ function serveDashboardHtml() {
           </div>
         </div>
 
-        <div class="sidebar-section-title" style="margin-top:10px;">🤖 OTONOM QUANT EKİBİ (8 AJAN)</div>
-        <div style="background:rgba(15,23,42,0.65);border:1px solid rgba(168,85,247,0.3);border-radius:8px;padding:9px;margin-bottom:12px;font-size:11px;display:flex;flex-direction:column;gap:6px;">
-          <div style="display:flex;justify-content:space-between;align-items:center;">
-            <span style="font-weight:800;color:#c084fc;">👑 1. YÖNETİCİ</span>
-            <span class="status-pill green" id="teamManager" style="font-size:9.5px;padding:2px 6px;">ONAYLANDI</span>
-          </div>
-          <div style="display:flex;justify-content:space-between;align-items:center;">
-            <span style="font-weight:700;color:#38bdf8;">🧠 2. ANALİZCİ</span>
-            <span class="status-pill blue" id="teamAnalyst" style="font-size:9.5px;padding:2px 6px;">Hafta Sonu Rejimi</span>
-          </div>
-          <div style="display:flex;justify-content:space-between;align-items:center;">
-            <span style="font-weight:700;color:#facc15;">⚔️ 3. TRADER</span>
-            <span class="status-pill purple" id="teamTrader" style="font-size:9.5px;padding:2px 6px;">Lazer & Moonshot</span>
-          </div>
-          <div style="display:flex;justify-content:space-between;align-items:center;">
-            <span style="font-weight:700;color:#4ade80;">🧪 4. TESTÇİ</span>
-            <span class="status-pill green" id="teamTester" style="font-size:9.5px;padding:2px 6px;">Win Rate: %100</span>
-          </div>
-          <div style="display:flex;justify-content:space-between;align-items:center;">
-            <span style="font-weight:700;color:#e2e8f0;">💻 5. YAZILIMCI</span>
-            <span class="status-pill green" id="teamEngineer" style="font-size:9.5px;padding:2px 6px;">Render Senkron</span>
-          </div>
-          <div style="display:flex;justify-content:space-between;align-items:center;">
-            <span style="font-weight:700;color:#06b6d4;">🐋 6. BALİNA AVCISI</span>
-            <span class="status-pill cyan" id="teamWhale" style="font-size:9.5px;padding:2px 6px;">Para Akışı Aktif</span>
-          </div>
-          <div style="display:flex;justify-content:space-between;align-items:center;">
-            <span style="font-weight:700;color:#ec4899;">🎯 7. FREQ-AI & LİKİDASYON</span>
-            <span class="status-pill pink" id="teamFreqai" style="font-size:9.5px;padding:2px 6px;">Model Aktif</span>
-          </div>
-          <div style="display:flex;justify-content:space-between;align-items:center;">
-            <span style="font-weight:700;color:#eab308;">🏛️ 8. BAŞ YARGIÇ (Aslan11)</span>
-            <span class="status-pill yellow" id="teamJudge" style="font-size:9.5px;padding:2px 6px;">Mahkeme Aktif</span>
-          </div>
-        </div>
-
         <div class="sidebar-section-title">⚙️ TEMEL RİSK & POZİSYON</div>
         <div class="param-grid-2x2">
           <div class="param-card">
@@ -2108,36 +2133,36 @@ function serveDashboardHtml() {
         </div>
 
         <div class="sidebar-section-title">🛡️ SIFIR RİSK VE KADEMELİ HEDEFLER</div>
-        <div style="background:linear-gradient(90deg, rgba(16,185,129,0.1) 0%, rgba(16,185,129,0.02) 100%); border-left:3px solid var(--green); border-radius:4px; padding:10px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center; box-shadow: 0 2px 8px rgba(0,0,0,0.2);">
+        <div style="background:linear-gradient(90deg, rgba(16,185,129,0.1) 0%, rgba(16,185,129,0.02) 100%); border-left:3px solid var(--green); border-radius:4px; padding:6px 8px; margin-bottom:5px; display:flex; justify-content:space-between; align-items:center; box-shadow: 0 2px 8px rgba(0,0,0,0.2);">
           <div>
-            <div style="font-size:11px;font-weight:800;color:var(--green);letter-spacing:0.3px;">🛡️ OTOMATİK BAŞABAŞ</div>
-            <div style="font-size:9px;color:#64748b;margin-top:2px;">Kâr yakalanınca $0 Riske çekilir</div>
+            <div style="font-size:10px;font-weight:800;color:var(--green);letter-spacing:0.3px;">🛡️ OTOMATİK BAŞABAŞ</div>
+            <div style="font-size:8.5px;color:#64748b;margin-top:1px;">Kâr yakalanınca $0 Riske çekilir</div>
           </div>
-          <div style="display:flex;align-items:baseline;gap:2px;background:rgba(0,0,0,0.2);padding:4px 8px;border-radius:4px;border:1px solid rgba(16,185,129,0.2);">
-            <input type="number" id="inpBe" value="${CONFIG.bePct.toFixed(2)}" step="0.1" style="width:40px;background:none;border:none;color:var(--green);font-family:'JetBrains Mono';font-size:14px;font-weight:800;text-align:right;outline:none;">
-            <span style="font-size:11px;color:var(--green);opacity:0.7;">%</span>
+          <div style="display:flex;align-items:baseline;gap:2px;background:rgba(0,0,0,0.2);padding:2px 6px;border-radius:4px;border:1px solid rgba(16,185,129,0.2);">
+            <input type="number" id="inpBe" value="${CONFIG.bePct.toFixed(2)}" step="0.1" style="width:36px;background:none;border:none;color:var(--green);font-family:'JetBrains Mono';font-size:12px;font-weight:800;text-align:right;outline:none;">
+            <span style="font-size:10px;color:var(--green);opacity:0.7;">%</span>
           </div>
         </div>
 
-        <div style="background:linear-gradient(90deg, rgba(56,189,248,0.1) 0%, rgba(56,189,248,0.02) 100%); border-left:3px solid #38bdf8; border-radius:4px; padding:10px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center; box-shadow: 0 2px 8px rgba(0,0,0,0.2);">
+        <div style="background:linear-gradient(90deg, rgba(56,189,248,0.1) 0%, rgba(56,189,248,0.02) 100%); border-left:3px solid #38bdf8; border-radius:4px; padding:6px 8px; margin-bottom:5px; display:flex; justify-content:space-between; align-items:center; box-shadow: 0 2px 8px rgba(0,0,0,0.2);">
           <div>
-            <div style="font-size:11px;font-weight:800;color:#38bdf8;letter-spacing:0.3px;">🎯 İLK KÂR ALMA (TP1)</div>
-            <div style="font-size:9px;color:#64748b;margin-top:2px;">%50 Kâr Cebe, Kalan Başabaşa</div>
+            <div style="font-size:10px;font-weight:800;color:#38bdf8;letter-spacing:0.3px;">🎯 İLK KÂR ALMA (TP1)</div>
+            <div style="font-size:8.5px;color:#64748b;margin-top:1px;">%50 Kâr Cebe, Kalan Başabaşa</div>
           </div>
-          <div style="display:flex;align-items:baseline;gap:2px;background:rgba(0,0,0,0.2);padding:4px 8px;border-radius:4px;border:1px solid rgba(56,189,248,0.2);">
-            <input type="number" id="inpTp1" value="${(CONFIG.tp1Pct || 1.00).toFixed(2)}" step="0.1" style="width:40px;background:none;border:none;color:#38bdf8;font-family:'JetBrains Mono';font-size:14px;font-weight:800;text-align:right;outline:none;">
-            <span style="font-size:11px;color:#38bdf8;opacity:0.7;">%</span>
+          <div style="display:flex;align-items:baseline;gap:2px;background:rgba(0,0,0,0.2);padding:2px 6px;border-radius:4px;border:1px solid rgba(56,189,248,0.2);">
+            <input type="number" id="inpTp1" value="${(CONFIG.tp1Pct || 1.00).toFixed(2)}" step="0.1" style="width:36px;background:none;border:none;color:#38bdf8;font-family:'JetBrains Mono';font-size:12px;font-weight:800;text-align:right;outline:none;">
+            <span style="font-size:10px;color:#38bdf8;opacity:0.7;">%</span>
           </div>
         </div>
 
-        <div style="background:linear-gradient(90deg, rgba(250,204,21,0.1) 0%, rgba(250,204,21,0.02) 100%); border-left:3px solid #facc15; border-radius:4px; padding:10px; margin-bottom:14px; display:flex; justify-content:space-between; align-items:center; box-shadow: 0 2px 8px rgba(0,0,0,0.2);">
+        <div style="background:linear-gradient(90deg, rgba(250,204,21,0.1) 0%, rgba(250,204,21,0.02) 100%); border-left:3px solid #facc15; border-radius:4px; padding:6px 8px; margin-bottom:6px; display:flex; justify-content:space-between; align-items:center; box-shadow: 0 2px 8px rgba(0,0,0,0.2);">
           <div>
-            <div style="font-size:11px;font-weight:800;color:#facc15;letter-spacing:0.3px;">🏆 VUR-KAÇ MOONSHOT</div>
-            <div style="font-size:9px;color:#64748b;margin-top:2px;">Kâr hedefinde tamamen çıkılır</div>
+            <div style="font-size:10px;font-weight:800;color:#facc15;letter-spacing:0.3px;">🏆 VUR-KAÇ MOONSHOT</div>
+            <div style="font-size:8.5px;color:#64748b;margin-top:1px;">Kâr hedefinde tamamen çıkılır</div>
           </div>
-          <div style="display:flex;align-items:baseline;gap:2px;background:rgba(0,0,0,0.2);padding:4px 8px;border-radius:4px;border:1px solid rgba(250,204,21,0.2);">
-            <input type="number" id="inpMoon" value="${CONFIG.moonPct.toFixed(2)}" step="0.1" style="width:40px;background:none;border:none;color:#facc15;font-family:'JetBrains Mono';font-size:14px;font-weight:800;text-align:right;outline:none;">
-            <span style="font-size:11px;color:#facc15;opacity:0.7;">%</span>
+          <div style="display:flex;align-items:baseline;gap:2px;background:rgba(0,0,0,0.2);padding:2px 6px;border-radius:4px;border:1px solid rgba(250,204,21,0.2);">
+            <input type="number" id="inpMoon" value="${CONFIG.moonPct.toFixed(2)}" step="0.1" style="width:36px;background:none;border:none;color:#facc15;font-family:'JetBrains Mono';font-size:12px;font-weight:800;text-align:right;outline:none;">
+            <span style="font-size:10px;color:#facc15;opacity:0.7;">%</span>
           </div>
         </div>
 
@@ -2228,7 +2253,7 @@ function serveDashboardHtml() {
           <span>🗣️ AJAN TELSİZİ & CANLI DİYALOG AKIŞI</span>
           <span class="badge-moon" style="font-size:9.5px;">📻 8 AJAN CANLI FREKANS</span>
         </h2>
-        <div id="dialogueBox" style="background:rgba(5,7,12,0.95); border:1px solid rgba(255,255,255,0.08); border-radius:8px; padding:12px; max-height:260px; overflow-y:auto; font-family:'JetBrains Mono',monospace; font-size:11px; display:flex; flex-direction:column; gap:8px; box-shadow: inset 0 2px 8px rgba(0,0,0,0.6);">
+        <div id="dialogueBox" style="background:rgba(5,7,12,0.95); border:1px solid rgba(255,255,255,0.08); border-radius:7px; padding:7px 9px; max-height:160px; overflow-y:auto; font-family:'JetBrains Mono',monospace; font-size:10px; display:flex; flex-direction:column; gap:5px; box-shadow: inset 0 2px 8px rgba(0,0,0,0.6);">
           ${renderDialogues(teamStatusCache ? teamStatusCache.dialogues : [])}
         </div>
       </div>
@@ -2290,7 +2315,7 @@ function serveDashboardHtml() {
         document.getElementById("stWinRate").innerText = '%' + data.stats.winRate;
         document.getElementById("stWinsLosses").innerText = data.stats.wins + 'K / ' + data.stats.losses + 'Z';
         document.getElementById("stMega").innerText = data.stats.megaWins + ' Adet';
-        document.getElementById("posCount").innerText = data.stats.activeCount + ' / ' + (data.settings ? data.settings.slots : '') + ' (Sniper Slot)';
+        document.getElementById("posCount").innerText = data.stats.activeCount + ' / ' + (data.settings && data.settings.slots ? data.settings.slots : '1');
         document.getElementById("histCount").innerText = data.history.length;
 
         const btcEl = document.getElementById("btcVal");
@@ -2500,14 +2525,14 @@ function serveDashboardHtml() {
         return '<div style="color:var(--muted);text-align:center;padding:12px;">📻 Telsiz frekansı taranıyor, ilk toplantı bekleniyor...</div>';
       }
       return dlgs.slice(0, 30).map(function(d) {
-        return '<div style="display:flex;gap:8px;align-items:flex-start;padding:6px 8px;background:rgba(255,255,255,0.02);border-radius:6px;border-left:2.5px solid ' + d.color + ';">' +
-          '<span style="color:var(--muted);font-size:10px;white-space:nowrap;padding-top:1px;">' + d.time + '</span>' +
-          '<div style="display:flex;flex-direction:column;gap:2px;flex:1;">' +
-            '<div style="display:flex;align-items:center;gap:6px;">' +
-              '<span style="color:' + d.color + ';font-weight:800;font-size:11px;">' + d.agent + '</span>' +
-              '<span style="color:var(--muted);font-size:9.5px;opacity:0.8;">' + d.title + '</span>' +
+        return '<div style="display:flex;gap:6px;align-items:flex-start;padding:4px 6px;background:rgba(255,255,255,0.02);border-radius:5px;border-left:2px solid ' + d.color + ';">' +
+          '<span style="color:var(--muted);font-size:9px;white-space:nowrap;padding-top:1px;">' + d.time + '</span>' +
+          '<div style="display:flex;flex-direction:column;gap:1px;flex:1;">' +
+            '<div style="display:flex;align-items:center;gap:4px;">' +
+              '<span style="color:' + d.color + ';font-weight:800;font-size:10px;">' + d.agent + '</span>' +
+              '<span style="color:var(--muted);font-size:8.5px;opacity:0.8;">' + d.title + '</span>' +
             '</div>' +
-            '<div style="color:#e2e8f0;font-size:11px;line-height:1.4;">' + d.text + '</div>' +
+            '<div style="color:#e2e8f0;font-size:10px;line-height:1.35;">' + d.text + '</div>' +
           '</div>' +
         '</div>';
       }).join('');
@@ -2723,14 +2748,14 @@ function renderDialogues(dlgs) {
   }
   return dlgs.slice(0, 30).map(d => {
     return `
-      <div style="display:flex;gap:8px;align-items:flex-start;padding:6px 8px;background:rgba(255,255,255,0.02);border-radius:6px;border-left:2.5px solid ${d.color};">
-        <span style="color:var(--muted);font-size:10px;white-space:nowrap;padding-top:1px;">${d.time}</span>
-        <div style="display:flex;flex-direction:column;gap:2px;flex:1;">
-          <div style="display:flex;align-items:center;gap:6px;">
-            <span style="color:${d.color};font-weight:800;font-size:11px;">${d.agent}</span>
-            <span style="color:var(--muted);font-size:9.5px;opacity:0.8;">${d.title}</span>
+      <div style="display:flex;gap:6px;align-items:flex-start;padding:4px 6px;background:rgba(255,255,255,0.02);border-radius:5px;border-left:2px solid ${d.color};">
+        <span style="color:var(--muted);font-size:9px;white-space:nowrap;padding-top:1px;">${d.time}</span>
+        <div style="display:flex;flex-direction:column;gap:1px;flex:1;">
+          <div style="display:flex;align-items:center;gap:4px;">
+            <span style="color:${d.color};font-weight:800;font-size:10px;">${d.agent}</span>
+            <span style="color:var(--muted);font-size:8.5px;opacity:0.8;">${d.title}</span>
           </div>
-          <div style="color:#e2e8f0;font-size:11px;line-height:1.4;">${d.text}</div>
+          <div style="color:#e2e8f0;font-size:10px;line-height:1.35;">${d.text}</div>
         </div>
       </div>
     `;
