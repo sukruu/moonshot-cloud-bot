@@ -31,6 +31,8 @@ try {
   }
 } catch (e) {}
 
+let globalWhaleFlowMap = (teamStatusCache && teamStatusCache.moneyFlow && teamStatusCache.moneyFlow.flowMap) || {};
+
 // --- EKRAN 1 BİREBİR AYARLARI ---
 let CONFIG = {
   initialBalance: 100.0,     // Bakiye 100 Dolar
@@ -1063,6 +1065,27 @@ async function scanLoop() {
 
         if (isLongPump || isShortDump) {
           const side = isLongPump ? "LONG" : "SHORT";
+
+          // 🐋 6. AJAN (BALİNA & PARA AKIŞI AVCISI) KONTROLÜ & VETOSU
+          const scoutMap = (teamStatusCache && teamStatusCache.moneyFlow && teamStatusCache.moneyFlow.flowMap) || globalWhaleFlowMap || null;
+          const scoutInfo = scoutMap ? scoutMap[sym] : null;
+          if (scoutInfo) {
+            if (side === 'LONG' && scoutInfo.isApprovedLong === false) {
+              addLog(`🛡️ [BALİNA AVCISI VETOSU]: ${sym} LONG engellendi — Net para çıkışı (-$${Math.abs(scoutInfo.netFlowM)}M, Alıcı: %${scoutInfo.takerPct}%) tespit edildi!`, 'WARN');
+              try {
+                addDialogue('WHALE_HUNTER', `🛑 VETO! ${sym} üzerinde kurumsal para çıkışı var (-$${Math.abs(scoutInfo.netFlowM)}M). Suni yükseliş tuzağı, LONG onaylamıyorum!`, 'RISK');
+              } catch(e) {}
+              continue;
+            }
+            if (side === 'SHORT' && scoutInfo.isApprovedShort === false) {
+              addLog(`🛡️ [BALİNA AVCISI VETOSU]: ${sym} SHORT engellendi — Net para girişi (+$${scoutInfo.netFlowM}M, Alıcı: %${scoutInfo.takerPct}%) tespit edildi!`, 'WARN');
+              try {
+                addDialogue('WHALE_HUNTER', `🛑 VETO! ${sym} üzerinde kurumsal para girişi var (+$${scoutInfo.netFlowM}M). Ayı tuzağı (short squeeze riski), SHORT onaylamıyorum!`, 'RISK');
+              } catch(e) {}
+              continue;
+            }
+          }
+
           const stopPrice = side === "LONG" 
             ? curP * (1 - CONFIG.slPct / 100) 
             : curP * (1 + CONFIG.slPct / 100);
@@ -1107,7 +1130,9 @@ async function scanLoop() {
           try {
             const volTxt = (rInfo && rInfo.vol3hM != null) ? `$${rInfo.vol3hM.toFixed(1)}M` : 'bilinmiyor';
             const takerTxt = (rInfo && rInfo.takerBuyRatio != null) ? `%${rInfo.takerBuyRatio.toFixed(1)}` : 'bilinmiyor';
+            const scoutTxt = scoutInfo ? ` | 🐋 Kurumsal Akış: ${scoutInfo.netFlowM > 0 ? '+' : ''}$${scoutInfo.netFlowM}M` : '';
             addDialogue('ANALYST', `🚨 ${sym} ${side} sinyali: 3s hacim ${volTxt}, alıcı oranı ${takerTxt}, 24s %${chg24Val.toFixed(1)}, rejim: ${DYNAMIC.regime}.`, 'TRADE');
+            addDialogue('WHALE_HUNTER', `🐋 ${sym} ${side} ONAYLANDI: Para akışı lehimize${scoutTxt}. Büyük oyuncularla aynı yöndeyiz!`, 'TRADE');
             addDialogue('TRADER', `⚔️ ${sym} ${side} @ $${curP.toFixed(4)} | Nominal $${(CONFIG.marginPerTrade * CONFIG.leverage).toFixed(0)} (${CONFIG.leverage}x) | SL $${stopPrice.toFixed(4)}.`, 'TRADE');
             addDialogue('MANAGER', `👑 Slot ${activePositions.length}/${CONFIG.maxSlots}. Bu işlemde maksimum risk: -$${(CONFIG.marginPerTrade * CONFIG.leverage * CONFIG.slPct / 100).toFixed(2)}.`, 'RISK');
           } catch(e) {}
@@ -1565,6 +1590,8 @@ function serveDashboardHtml() {
     }
     .status-pill.green { background: rgba(16,185,129,0.15); color: var(--green); border: 1px solid rgba(16,185,129,0.3); }
     .status-pill.purple { background: rgba(168,85,247,0.15); color: var(--purple); border: 1px solid rgba(168,85,247,0.3); }
+    .status-pill.blue { background: rgba(56,189,248,0.15); color: #38bdf8; border: 1px solid rgba(56,189,248,0.3); }
+    .status-pill.cyan { background: rgba(6,182,212,0.15); color: #06b6d4; border: 1px solid rgba(6,182,212,0.3); }
 
     /* STRATEGY BANNER */
     .strategy-banner-card {
@@ -1944,7 +1971,7 @@ function serveDashboardHtml() {
           </div>
         </div>
 
-        <div class="sidebar-section-title" style="margin-top:10px;">🤖 OTONOM QUANT EKİBİ (5 AJAN)</div>
+        <div class="sidebar-section-title" style="margin-top:10px;">🤖 OTONOM QUANT EKİBİ (6 AJAN)</div>
         <div style="background:rgba(15,23,42,0.65);border:1px solid rgba(168,85,247,0.3);border-radius:8px;padding:9px;margin-bottom:12px;font-size:11px;display:flex;flex-direction:column;gap:6px;">
           <div style="display:flex;justify-content:space-between;align-items:center;">
             <span style="font-weight:800;color:#c084fc;">👑 1. YÖNETİCİ</span>
@@ -1965,6 +1992,10 @@ function serveDashboardHtml() {
           <div style="display:flex;justify-content:space-between;align-items:center;">
             <span style="font-weight:700;color:#e2e8f0;">💻 5. YAZILIMCI</span>
             <span class="status-pill green" id="teamEngineer" style="font-size:9.5px;padding:2px 6px;">Render Senkron</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span style="font-weight:700;color:#06b6d4;">🐋 6. BALİNA AVCISI</span>
+            <span class="status-pill cyan" id="teamWhale" style="font-size:9.5px;padding:2px 6px;">Para Akışı Aktif</span>
           </div>
         </div>
 
@@ -2107,7 +2138,7 @@ function serveDashboardHtml() {
         <!-- 🗣️ AJAN TELSİZİ & CANLI DİYALOG AKIŞI -->
         <h2 style="margin-top:16px; display:flex; justify-content:space-between; align-items:center;">
           <span>🗣️ AJAN TELSİZİ & CANLI DİYALOG AKIŞI</span>
-          <span class="badge-moon" style="font-size:9.5px;">📻 5 AJAN CANLI FREKANS</span>
+          <span class="badge-moon" style="font-size:9.5px;">📻 6 AJAN CANLI FREKANS</span>
         </h2>
         <div id="dialogueBox" style="background:rgba(5,7,12,0.95); border:1px solid rgba(255,255,255,0.08); border-radius:8px; padding:12px; max-height:260px; overflow-y:auto; font-family:'JetBrains Mono',monospace; font-size:11px; display:flex; flex-direction:column; gap:8px; box-shadow: inset 0 2px 8px rgba(0,0,0,0.6);">
           ${renderDialogues(teamStatusCache ? teamStatusCache.dialogues : [])}
@@ -2197,6 +2228,9 @@ function serveDashboardHtml() {
           }
           if (t.engineer && document.getElementById("teamEngineer")) {
             document.getElementById("teamEngineer").innerText = (ei && ei.mode === 'DEFENSIVE_SNIPER') ? 'Regex & Kod Aktif' : 'Render Canlı';
+          }
+          if (t.whale_scout && document.getElementById("teamWhale")) {
+            document.getElementById("teamWhale").innerText = t.whale_scout.status || 'Para Akışı Aktif';
           }
         }
 
@@ -2897,7 +2931,7 @@ server.listen(PORT, () => {
     } catch(e) {}
   }, 4 * 60 * 1000);
 
-  // 🤖 OTONOM 5-AJAN EKİBİ: Toplantı yap → Yönetici onaylarsa giriş filtrelerini CANLI uygula
+  // 🤖 OTONOM 6-AJAN EKİBİ: Toplantı yap → Yönetici onaylarsa giriş filtrelerini CANLI uygula
   try {
     const { runAutonomousTeamSync } = require('./quant_lab/team_runner');
     const clamp = (v, [lo, hi]) => Math.min(hi, Math.max(lo, v));
@@ -2915,6 +2949,9 @@ server.listen(PORT, () => {
           config: { slPct: CONFIG.slPct, bePct: CONFIG.bePct, tp1Pct: CONFIG.tp1Pct, moonPct: CONFIG.moonPct, marginPerTrade: CONFIG.marginPerTrade, leverage: CONFIG.leverage }
         });
         teamStatusCache = report;
+        if (report && report.moneyFlow && report.moneyFlow.flowMap) {
+          globalWhaleFlowMap = report.moneyFlow.flowMap;
+        }
 
         const ei = report && report.executiveIntervention;
         const d = report && report.decision;

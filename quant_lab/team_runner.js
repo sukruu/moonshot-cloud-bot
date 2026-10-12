@@ -5,6 +5,7 @@ const { detectMarketRegime } = require('./regime_detector');
 const { runBacktest } = require('./backtest_engine');
 const { addMeeting, getDialogues } = require('./team_dialogue');
 const { findChampionStrategy } = require('./strategy_optimizer');
+const { trackWhaleMoneyFlow } = require('./whale_scout');
 
 const TEAM_STATUS_FILE = path.join(__dirname, 'team_status.json');
 
@@ -108,16 +109,20 @@ function evaluateExecutiveIntervention(ctx = {}, forensics = {}, regime = {}) {
 }
 
 /**
- * 🏛️ Otonom 5-Ajan Toplantısı & Karar Yürütme
+ * 🏛️ Otonom 6-Ajan Toplantısı & Karar Yürütme
  * @param {object} ctx  Sunucudan gelen canlı bağlam (bakiye, slot, mevcut filtreler, mevcut config)
  */
 async function runAutonomousTeamSync(ctx = {}) {
   const current = ctx.current || { vol3hMin: 2.5, candidateSlice: 35 };
   const liveCfg = ctx.config || { slPct: 1.25, bePct: 0.45, tp1Pct: 0.75, moonPct: 1.5, marginPerTrade: 20, leverage: 20 };
 
-  // 1) 🧠 ANALİZCİ: Adli Tıp ve Piyasa Rejimi
+  // 1) 🧠 ANALİZCİ & 🐋 BALİNA AVCISI: Adli Tıp, Piyasa Rejimi ve Net Para Akışı
   const forensics = runTradeForensics();
   const regime = await detectMarketRegime();
+  let moneyFlow = { netMarketFlowM: 0, marketFlowBias: 'NEUTRAL', topBullInflows: [], topBearOutflows: [], flowMap: {} };
+  try {
+    moneyFlow = await trackWhaleMoneyFlow();
+  } catch(e) {}
   const rec = regime.recommendedConfig;
 
   // 2) 👑 YÖNETİCİ: Portföy Koruması & Risk Müdahale Değerlendirmesi
@@ -190,7 +195,7 @@ async function runAutonomousTeamSync(ctx = {}) {
     }
   };
 
-  // 5) 🗣️ 5-AJAN TELSİZ TOPLANTISI (KRONOLOJİK & GERÇEK VERİYE DAYALI)
+  // 5) 🗣️ 6-AJAN TELSİZ TOPLANTISI (KRONOLOJİK & GERÇEK VERİYE DAYALI)
   const fs_ = forensics.summary || {};
   const isDefensive = intervention.mode === 'DEFENSIVE_SNIPER';
 
@@ -219,6 +224,13 @@ async function runAutonomousTeamSync(ctx = {}) {
       `🧪 [STRATEJİ OPTİMİZASYONU]: 32 farklı strateji son 24 saatin mumlarında simüle edildi. 🏆 ŞAMPİYON: "${champName}" (PF: ${champPf}, WR: %${champWr}, Sim Kâr: +$${champPnl} | SL: %${proposedExit.slPct}, BE: %${proposedExit.bePct}, TP1: %${proposedExit.tp1Pct}). En karlı strateji canlıya uygulandı!`,
       'STRATEGY'
     ]);
+    const topBullStr = (moneyFlow.topBullInflows || []).map(b => `${b.symbol} (+$${b.netFlowM}M)`).join(', ');
+    const topBearStr = (moneyFlow.topBearOutflows || []).map(b => `${b.symbol} (-$${Math.abs(b.netFlowM)}M)`).join(', ');
+    meetingLines.push([
+      'WHALE_HUNTER',
+      `🐋 [CANLI PARA AKIŞI]: Piyasa net akışı: $${moneyFlow.netMarketFlowM}M (${moneyFlow.marketFlowBias}). 🟢 Kurumsal Giriş: ${topBullStr || 'Bekleniyor'} | 🔴 Kaçış: ${topBearStr || 'Yok'}. Para çıkışı olan koinlere long vetosu devrede!`,
+      'FLOW'
+    ]);
     meetingLines.push([
       'TRADER',
       `⚔️ [EMİR ONAYLANDI]: Savunma ve Şampiyon "${champName}" stratejisi yürütülüyor! Tek slot, $${intervention.marginPerTrade} teminat. Taker ≥ %54.0 ve tepe tuzağı engelli roketler taranıyor.`,
@@ -239,6 +251,11 @@ async function runAutonomousTeamSync(ctx = {}) {
       'ANALYST',
       `Rejim: ${regime.description}. BTC 24s %${fmt(regime.btcData.change24h)}, $15M+ hacimli koin sayısı ${regime.marketStats.topVolCount}. Öneri: hacim ≥ $${intervention.vol3hMin}M, ${intervention.candidateSlice} aday.`,
       'REGIME'
+    ]);
+    meetingLines.push([
+      'WHALE_HUNTER',
+      `🐋 [FON AKIŞI]: Net piyasa yönü: ${moneyFlow.marketFlowBias} ($${moneyFlow.netMarketFlowM}M). Kurumsal boğa alımları taranıyor.`,
+      'FLOW'
     ]);
     meetingLines.push([
       'TESTER',
@@ -296,10 +313,19 @@ async function runAutonomousTeamSync(ctx = {}) {
         role: '💻 DevOps & Sistem',
         uptimeMin: ctx.uptimeMin ?? null,
         dataOk: regime.btcData.lastPrice > 0 && bt.success
+      },
+      whale_scout: {
+        role: '🐋 Balina & Para Akışı Dedektifi',
+        status: moneyFlow.marketFlowBias === 'BULLISH' ? '🟢 KURUMSAL GİRİŞ' : (moneyFlow.marketFlowBias === 'BEARISH' ? '🔴 ÇIKIŞ BASKISI' : '⚖️ DENGELİ AKIŞ'),
+        bias: moneyFlow.marketFlowBias,
+        netMarketFlow: `$${moneyFlow.netMarketFlowM}M`,
+        topInflow: (moneyFlow.topBullInflows && moneyFlow.topBullInflows[0]) ? `${moneyFlow.topBullInflows[0].symbol} (+$${moneyFlow.topBullInflows[0].netFlowM}M)` : '-',
+        topOutflow: (moneyFlow.topBearOutflows && moneyFlow.topBearOutflows[0]) ? `${moneyFlow.topBearOutflows[0].symbol} (-$${Math.abs(moneyFlow.topBearOutflows[0].netFlowM)}M)` : '-'
       }
     },
     forensics,
     recommendedConfig: rec,
+    moneyFlow,
     optimizer: optimizer ? {
       evaluatedAt: optimizer.evaluatedAt,
       candidatesCount: optimizer.candidatesCount,
