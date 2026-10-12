@@ -2718,7 +2718,7 @@ function serveDashboardHtml() {
         // Aktif Pozisyonlar Tablosu
         const tbody = document.getElementById("activeTbody");
         if (data.positions.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:35px 15px;"><div style="font-size:32px; margin-bottom:12px; filter:grayscale(0.3);">🔭</div><div style="color:var(--text); font-weight:700; font-size:14px; letter-spacing:0.5px;">TETİKTE BEKLENİYOR</div><div style="color:var(--muted); font-size:11px; margin-top:6px; max-width:300px; margin-left:auto; margin-right:auto; line-height:1.4;">350+ Koinin anlık emir defterleri ve 3 dakikalık balina kırılımları radarla taranıyor...</div></td></tr>';
+          tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:35px 15px;"><div style="font-size:32px; margin-bottom:12px; filter:grayscale(0.3);">🔭</div><div style="color:var(--text); font-weight:700; font-size:14px; letter-spacing:0.5px;">TETİKTE BEKLENİYOR</div><div style="color:var(--muted); font-size:11px; margin-top:6px; max-width:320px; margin-left:auto; margin-right:auto; line-height:1.4;">8 Otonom Ajan & CVD Para Akışı Devrede. Emir derinliği, balina hareketleri ve FreqAI modelleriyle kârlı fırsatlar taranıyor...</div></td></tr>';
         } else {
           tbody.innerHTML = data.positions.map((p, idx) => {
             const isLong = p.side === 'LONG';
@@ -2773,7 +2773,7 @@ function serveDashboardHtml() {
         const activeCardsEl = document.getElementById("activeCardsMobile");
         if (activeCardsEl) {
           if (data.positions.length === 0) {
-            activeCardsEl.innerHTML = '<div class="empty-cards-msg">🔍 350+ Vadeli Koinlerde 3m Balina & Moonshot Kırılımları Taranıyor...</div>';
+            activeCardsEl.innerHTML = '<div class="empty-cards-msg">🔍 8 Ajanlı Savunma Radarı Devrede: CVD Para Akışı ve Balina Kırılımları Taranıyor...</div>';
           } else {
             activeCardsEl.innerHTML = data.positions.map((p, idx) => {
               const isLong = p.side === 'LONG';
@@ -2962,7 +2962,7 @@ function serveDashboardHtml() {
 
 function renderActiveRows(positions) {
   if (!positions || positions.length === 0) {
-    return '<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:24px;font-size:12px;">🔍 350+ Vadeli Koinlerde 3m Balina & Moonshot Kırılımları Taranıyor...</td></tr>';
+    return '<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:24px;font-size:12px;">🔍 8 Ajanlı Savunma Radarı Devrede: CVD Para Akışı ve Balina Kırılımları Taranıyor...</td></tr>';
   }
   return positions.map((p, idx) => {
     const isLong = p.side === 'LONG';
@@ -3032,7 +3032,7 @@ function renderHistoryRows(hist) {
 
 function renderActiveCards(positions) {
   if (!positions || positions.length === 0) {
-    return '<div class="empty-cards-msg">🔍 350+ Vadeli Koinlerde 3m Balina & Moonshot Kırılımları Taranıyor...</div>';
+    return '<div class="empty-cards-msg">🔍 8 Ajanlı Savunma Radarı Devrede: CVD Para Akışı ve Balina Kırılımları Taranıyor...</div>';
   }
   return positions.map((p, idx) => {
     const isLong = p.side === 'LONG';
