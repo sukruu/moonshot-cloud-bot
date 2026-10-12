@@ -53,76 +53,81 @@ async function trackWhaleMoneyFlow() {
     valid.sort((a, b) => parseFloat(b.quoteVolume) - parseFloat(a.quoteVolume));
     const topActive = valid.slice(0, 45);
 
-    // Her koinin son 15 dakikalık (veya 1 saatlik) klines verisini incele
-    for (const t of topActive) {
-      const sym = t.symbol;
-      const price = parseFloat(t.lastPrice) || 0;
-      const chg24 = parseFloat(t.priceChangePercent) || 0;
-      const quoteVol24M = (parseFloat(t.quoteVolume) || 0) / 1e6;
+    // Her koinin son 15 dakikalık (veya 1 saatlik) klines verisini 10'arlı paralel gruplarla incele
+    const chunkSize = 10;
+    for (let i = 0; i < topActive.length; i += chunkSize) {
+      const chunk = topActive.slice(i, i + chunkSize);
+      await Promise.all(chunk.map(async t => {
+        const sym = t.symbol;
+        const price = parseFloat(t.lastPrice) || 0;
+        const chg24 = parseFloat(t.priceChangePercent) || 0;
+        const quoteVol24M = (parseFloat(t.quoteVolume) || 0) / 1e6;
 
-      // Son 4 mum (1 saatlik akış)
-      const klines = await fetchKlines(sym, '15m', 4);
-      let netFlowUsdt = 0;
-      let total1hVolUsdt = 0;
-      let takerBuy1hUsdt = 0;
+        // Son 4 mum (1 saatlik akış)
+        let klines = [];
+        try {
+          klines = await fetchKlines(sym, '15m', 4);
+        } catch (e) {}
+        let netFlowUsdt = 0;
+        let total1hVolUsdt = 0;
+        let takerBuy1hUsdt = 0;
 
-      if (Array.isArray(klines) && klines.length > 0) {
-        // kline formatı: open, high, low, close, volume (base)
-        // Eğer quoteVol / takerQuoteVol yoksa fiyat x hacim ile yaklaşık hesapla
-        for (const k of klines) {
-          const vUsdt = (k.volume || 0) * k.close;
-          total1hVolUsdt += vUsdt;
-          // Mum yeşilse alıcı baskın, kırmızıysa satıcı baskın tahmini
-          const isGreen = k.close >= k.open;
-          const greenRatio = isGreen ? 0.58 : 0.42;
-          takerBuy1hUsdt += (vUsdt * greenRatio);
+        if (Array.isArray(klines) && klines.length > 0) {
+          // kline formatı: open, high, low, close, volume (base)
+          for (const k of klines) {
+            const vUsdt = (k.volume || 0) * k.close;
+            total1hVolUsdt += vUsdt;
+            const isGreen = k.close >= k.open;
+            const greenRatio = isGreen ? 0.58 : 0.42;
+            takerBuy1hUsdt += (vUsdt * greenRatio);
+          }
+          netFlowUsdt = (takerBuy1hUsdt * 2) - total1hVolUsdt;
+        } else {
+          // Fallback: 24h verisinden delta tahmini
+          const approxTakerPct = chg24 >= 0 ? 0.53 : 0.47;
+          const totalUsdt = quoteVol24M * 1e6;
+          netFlowUsdt = (totalUsdt * (approxTakerPct - 0.50)) * 0.15; // 1 saatlik dilim
         }
-        netFlowUsdt = (takerBuy1hUsdt * 2) - total1hVolUsdt;
-      } else {
-        // Fallback: 24h verisinden delta tahmini
-        const approxTakerPct = chg24 >= 0 ? 0.53 : 0.47;
-        const totalUsdt = quoteVol24M * 1e6;
-        netFlowUsdt = (totalUsdt * (approxTakerPct - 0.50)) * 0.15; // 1 saatlik dilim
-      }
 
-      const netFlowM = Number((netFlowUsdt / 1e6).toFixed(2));
-      const takerPct = total1hVolUsdt > 0 ? Number(((takerBuy1hUsdt / total1hVolUsdt) * 100).toFixed(1)) : 50;
+        const netFlowM = Number((netFlowUsdt / 1e6).toFixed(2));
+        const takerPct = total1hVolUsdt > 0 ? Number(((takerBuy1hUsdt / total1hVolUsdt) * 100).toFixed(1)) : 50;
 
-      totalNetMarketFlowM += netFlowM;
+        totalNetMarketFlowM += netFlowM;
 
-      let flowSignal = "⚖️ DENGELİ AKIŞ";
-      let isApprovedLong = true;
-      let isApprovedShort = true;
+        let flowSignal = "⚖️ DENGELİ AKIŞ";
+        let isApprovedLong = true;
+        let isApprovedShort = true;
 
-      if (netFlowM >= 0.8 && takerPct >= 54.0) {
-        flowSignal = `🐋🟢 GÜÇLÜ BOĞA GİRİŞİ (+$${netFlowM}M)`;
-        isApprovedLong = true;
-        isApprovedShort = false; // Güçlü para girişi varken short kesinlikle yasak!
-      } else if (netFlowM <= -0.8 && takerPct <= 46.0) {
-        flowSignal = `🐋🔴 GÜÇLÜ AYI ÇIKIŞI (-$${Math.abs(netFlowM)}M)`;
-        isApprovedLong = false; // Ağır para çıkışı varken long kesinlikle yasak (Fakeout/Tuzak)!
-        isApprovedShort = true;
-      } else if (netFlowM < -0.4) {
-        flowSignal = `⚠️ KISMİ PARA ÇIKIŞI (-$${Math.abs(netFlowM)}M)`;
-        isApprovedLong = false;
-      } else if (netFlowM > 0.4) {
-        flowSignal = `⚡ KISMİ PARA GİRİŞİ (+$${netFlowM}M)`;
-        isApprovedShort = false;
-      }
+        if (netFlowM >= 0.8 && takerPct >= 54.0) {
+          flowSignal = `🐋🟢 GÜÇLÜ BOĞA GİRİŞİ (+$${netFlowM}M)`;
+          isApprovedLong = true;
+          isApprovedShort = false; // Güçlü para girişi varken short kesinlikle yasak!
+        } else if (netFlowM <= -0.8 && takerPct <= 46.0) {
+          flowSignal = `🐋🔴 GÜÇLÜ AYI ÇIKIŞI (-$${Math.abs(netFlowM)}M)`;
+          isApprovedLong = false; // Ağır para çıkışı varken long kesinlikle yasak (Fakeout/Tuzak)!
+          isApprovedShort = true;
+        } else if (netFlowM < -0.4) {
+          flowSignal = `⚠️ KISMİ PARA ÇIKIŞI (-$${Math.abs(netFlowM)}M)`;
+          isApprovedLong = false;
+        } else if (netFlowM > 0.4) {
+          flowSignal = `⚡ KISMİ PARA GİRİŞİ (+$${netFlowM}M)`;
+          isApprovedShort = false;
+        }
 
-      const item = {
-        symbol: sym,
-        price,
-        chg24,
-        netFlowM,
-        takerPct,
-        flowSignal,
-        isApprovedLong,
-        isApprovedShort
-      };
+        const item = {
+          symbol: sym,
+          price,
+          chg24,
+          netFlowM,
+          takerPct,
+          flowSignal,
+          isApprovedLong,
+          isApprovedShort
+        };
 
-      flowMap[sym] = item;
-      coinFlows.push(item);
+        flowMap[sym] = item;
+        coinFlows.push(item);
+      }));
     }
   }
 

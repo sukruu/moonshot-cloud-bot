@@ -234,9 +234,10 @@ async function runAutonomousTeamSync(ctx = {}) {
       `🧠 [ADLİ TEŞHİS]: ${fs_.totalTrades || 56} işlem incelendi (%${winRate} WR, PF: ${pf}). Adli analizde zayıf alıcı (<%54 taker) ve aşırı satımda (-%4.5 altı) shortlanan koinlerin zararın %90'ını ürettiği kanıtlandı. PUMP, CHIP, AVAX, STRK kara listeye alındı; eşik alıcı oranı %54.0'e çıkarıldı.`,
       'STRATEGY'
     ]);
+    const pnlSignStr = Number(champPnl) >= 0 ? `+$${champPnl}` : `-$${Math.abs(champPnl)}`;
     meetingLines.push([
       'TESTER',
-      `🧪 [STRATEJİ OPTİMİZASYONU]: 32 farklı strateji son 24 saatin mumlarında simüle edildi. 🏆 ŞAMPİYON: "${champName}" (PF: ${champPf}, WR: %${champWr}, Sim Kâr: +$${champPnl} | SL: %${proposedExit.slPct}, BE: %${proposedExit.bePct}, TP1: %${proposedExit.tp1Pct}). En karlı strateji canlıya uygulandı!`,
+      `🧪 [STRATEJİ OPTİMİZASYONU]: 32 farklı strateji son 24 saatin mumlarında simüle edildi. 🏆 ŞAMPİYON: "${champName}" (PF: ${champPf}, WR: %${champWr}, Sim Kâr: ${pnlSignStr} | SL: %${proposedExit.slPct}, BE: %${proposedExit.bePct}, TP1: %${proposedExit.tp1Pct}). En karlı strateji canlıya uygulandı!`,
       'STRATEGY'
     ]);
     const topBullStr = (moneyFlow.topBullInflows || []).map(b => `${b.symbol} (+$${b.netFlowM}M)`).join(', ');

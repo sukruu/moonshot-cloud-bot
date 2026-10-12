@@ -174,6 +174,22 @@ function generateCandidateStrategies() {
   return [...named, ...grid.slice(0, 24)];
 }
 
+function generateRealisticKlines(count = 480, basePrice = 10.0, volatility = 0.008) {
+  const klines = [];
+  let cur = basePrice;
+  for (let i = 0; i < count; i++) {
+    const change = (Math.random() - 0.49) * volatility * cur;
+    const open = cur;
+    const close = Math.max(0.01, open + change);
+    const high = Math.max(open, close) + (Math.random() * volatility * 0.6 * cur);
+    const low = Math.min(open, close) - (Math.random() * volatility * 0.6 * cur);
+    const volume = 10000 + Math.random() * 50000 * (Math.abs(change) > volatility * cur ? 2.5 : 1.0);
+    klines.push({ open, high, low, close, volume });
+    cur = close;
+  }
+  return klines;
+}
+
 /**
  * 🏆 Ana Optimizasyon Motoru: Son 24 Saatin Verisiyle En Çok Kâr Eden Şampiyonu Bulur
  */
@@ -197,22 +213,6 @@ async function findChampionStrategy(liveContext = {}) {
       }
     } catch (e) {}
   }
-
-function generateRealisticKlines(count = 480, basePrice = 10.0, volatility = 0.008) {
-  const klines = [];
-  let cur = basePrice;
-  for (let i = 0; i < count; i++) {
-    const change = (Math.random() - 0.49) * volatility * cur;
-    const open = cur;
-    const close = Math.max(0.01, open + change);
-    const high = Math.max(open, close) + (Math.random() * volatility * 0.6 * cur);
-    const low = Math.min(open, close) - (Math.random() * volatility * 0.6 * cur);
-    const volume = 10000 + Math.random() * 50000 * (Math.abs(change) > volatility * cur ? 2.5 : 1.0);
-    klines.push({ open, high, low, close, volume });
-    cur = close;
-  }
-  return klines;
-}
 
   if (klinesData.length === 0) {
     for (let s = 0; s < 8; s++) {

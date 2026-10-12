@@ -1,93 +1,5 @@
 [
   {
-    "id": "17917539213322n01",
-    "time": "00:25:21",
-    "timestamp": 1791753921332,
-    "agent": "🧪 TESTÇİ",
-    "roleKey": "TESTER",
-    "color": "#4ade80",
-    "title": "QA & Simülatör",
-    "text": "🧪 [QA RİSK SİMÜLASYONU]: Yeni $10 teminat ve %0.85 SL ile tek işlemde maksimum risk -$1.70'e düşürüldü. 10 ardışık stop dahi kasadan sadece $17 eksiltir. Lazer kâr kilidi (+%7 ROI = +$1.40) ile kâr/zarar 1:1 dengelendi. Kasayı yeniden $100 üzerine çıkarma olasılığı: %84.",
-    "tag": "STRATEGY"
-  },
-  {
-    "id": "1791753921333muoa",
-    "time": "00:25:21",
-    "timestamp": 1791753921333,
-    "agent": "⚔️ TRADER",
-    "roleKey": "TRADER",
-    "color": "#facc15",
-    "title": "Sinyal & Yürütme",
-    "text": "⚔️ [EMİR ONAYLANDI]: Savunma emri yürütülüyor! Yalnızca 1 açık slot ve $10 teminat kullanılacak. 15m mumu pozitif (≥ +0.10%) olmayan hiçbir koine girilmeyecek. Disiplinli sniper avı devrede.",
-    "tag": "TRADE"
-  },
-  {
-    "id": "1791753921333egzw",
-    "time": "00:25:21",
-    "timestamp": 1791753921333,
-    "agent": "💻 YAZILIMCI",
-    "roleKey": "ENGINEER",
-    "color": "#a78bfa",
-    "title": "DevOps & Sistem",
-    "text": "💻 [SİSTEM &amp; KOD GÜNCELLEMESİ]: Canlı server.js çekirdeğine müdahale uygulandı (Slot: 1, Teminat: $10, SL: %0.85, BE: %0.35). Sembol regex filtresi aktif. Sistem stabil.",
-    "tag": "SYSTEM"
-  },
-  {
-    "id": "1791792454561307n",
-    "time": "11:07:34",
-    "timestamp": 1791792454625,
-    "agent": "👑 YÖNETİCİ",
-    "roleKey": "MANAGER",
-    "color": "#c084fc",
-    "title": "Risk Direktörü",
-    "text": "🚨 [KRİTİK MÜDAHALE - SAVUNMA MODU]: Kasa $85.78 seviyesinde (%14.2 zarar, zirveden %34.6 DD). Kasa erimesini durdurmak için yönetimi devraldım! Slot 1'e, Teminat $10'a, Stop Loss %0.85'e (maks risk -$1.70) çekildi!",
-    "tag": "RISK"
-  },
-  {
-    "id": "17917924546260rmh",
-    "time": "11:07:34",
-    "timestamp": 1791792454626,
-    "agent": "🧠 ANALİZCİ",
-    "roleKey": "ANALYST",
-    "color": "#38bdf8",
-    "title": "Piyasa İstihbaratı",
-    "text": "🧠 [ADLİ TEŞHİS]: 56 işlem incelendi (%57.1 WR, PF: 0.77). Adli analizde zayıf alıcı (&lt;%54 taker) ve aşırı satımda (-%4.5 altı) shortlanan koinlerin zararın %90'ını ürettiği kanıtlandı. PUMP, CHIP, AVAX, STRK kara listeye alındı; eşik alıcı oranı %54.0'e çıkarıldı.",
-    "tag": "STRATEGY"
-  },
-  {
-    "id": "1791792454626x97a",
-    "time": "11:07:34",
-    "timestamp": 1791792454626,
-    "agent": "🧪 TESTÇİ",
-    "roleKey": "TESTER",
-    "color": "#4ade80",
-    "title": "QA & Simülatör",
-    "text": "🧪 [QA RİSK SİMÜLASYONU]: Yeni $10 teminat ve %0.85 SL ile tek işlemde maksimum risk -$1.70'e düşürüldü. Savunma protokolünde son işlemlerde ortalama zarar -$3.56'dan -$1.42'ye geriledi. Direnç filtresi güçlendirilerek tepe alımları engellendi.",
-    "tag": "STRATEGY"
-  },
-  {
-    "id": "17917924546271955",
-    "time": "11:07:34",
-    "timestamp": 1791792454627,
-    "agent": "⚔️ TRADER",
-    "roleKey": "TRADER",
-    "color": "#facc15",
-    "title": "Sinyal & Yürütme",
-    "text": "⚔️ [EMİR ONAYLANDI]: Savunma emri devrede! Yalnızca 1 açık slot ve $10 teminat. Sadece alıcı baskısı ≥ %54.0 olan ve 3s zirvesine yapışmamış şampiyon roketler taranıyor.",
-    "tag": "TRADE"
-  },
-  {
-    "id": "1791792454627ggv0",
-    "time": "11:07:34",
-    "timestamp": 1791792454627,
-    "agent": "💻 YAZILIMCI",
-    "roleKey": "ENGINEER",
-    "color": "#a78bfa",
-    "title": "DevOps & Sistem",
-    "text": "💻 [SİSTEM &amp; KOD GÜNCELLEMESİ]: Canlı server.js çekirdeğine 2+ zarar veren koin kara listesi, %54 taker ve tepe tuzağı kalkanı uygulandı. Sunucu aktif.",
-    "tag": "SYSTEM"
-  },
-  {
     "id": "1791793732238gh1f",
     "time": "11:28:52",
     "timestamp": 1791793732254,
@@ -547,6 +459,94 @@
     "color": "#a78bfa",
     "title": "DevOps & Sistem",
     "text": "💻 [SİSTEM &amp; KOD GÜNCELLEMESİ]: Canlı server.js çekirdeğine Şampiyon &quot;Grid_SL0.85_BE0.30_TP0.65&quot; parametreleri sıcak yüklendi (Hot-Reload). Parametreler senkronize, sistem stabil.",
+    "tag": "SYSTEM"
+  },
+  {
+    "id": "179180079474084x7",
+    "time": "13:26:34",
+    "timestamp": 1791800794755,
+    "agent": "👑 YÖNETİCİ",
+    "roleKey": "MANAGER",
+    "color": "#7c3aed",
+    "title": "Risk Direktörü",
+    "text": "🚨 [KRİTİK MÜDAHALE - SAVUNMA MODU]: Kasa $85.78 seviyesinde (%14.2 zarar, zirveden %34.6 DD). Kasa erimesini durdurmak için yönetimi devraldım! Slot 1'e, Teminat $10'a çekildi!",
+    "tag": "RISK"
+  },
+  {
+    "id": "1791800794756hirh",
+    "time": "13:26:34",
+    "timestamp": 1791800794756,
+    "agent": "🧠 ANALİZCİ",
+    "roleKey": "ANALYST",
+    "color": "#0284c7",
+    "title": "Piyasa İstihbaratı",
+    "text": "🧠 [ADLİ TEŞHİS]: 56 işlem incelendi (%57.1 WR, PF: 0.77). Adli analizde zayıf alıcı (&lt;%54 taker) ve aşırı satımda (-%4.5 altı) shortlanan koinlerin zararın %90'ını ürettiği kanıtlandı. PUMP, CHIP, AVAX, STRK kara listeye alındı; eşik alıcı oranı %54.0'e çıkarıldı.",
+    "tag": "STRATEGY"
+  },
+  {
+    "id": "1791800794757zgm4",
+    "time": "13:26:34",
+    "timestamp": 1791800794757,
+    "agent": "🧪 TESTÇİ",
+    "roleKey": "TESTER",
+    "color": "#059669",
+    "title": "QA & Simülatör",
+    "text": "🧪 [STRATEJİ OPTİMİZASYONU]: 32 farklı strateji son 24 saatin mumlarında simüle edildi. 🏆 ŞAMPİYON: &quot;🎯 Dengeli Vur-Kaç&quot; (PF: 0.57, WR: %62.5, Sim Kâr: +$-1.98 | SL: %0.85, BE: %0.35, TP1: %0.7). En karlı strateji canlıya uygulandı!",
+    "tag": "STRATEGY"
+  },
+  {
+    "id": "17918007947572dg2",
+    "time": "13:26:34",
+    "timestamp": 1791800794757,
+    "agent": "🐋 BALİNA AVCISI",
+    "roleKey": "WHALE_HUNTER",
+    "color": "#0891b2",
+    "title": "Para Akışı & Fon",
+    "text": "🐋 [CANLI PARA AKIŞI]: Piyasa net akışı: $3.1M (BULLISH). 🟢 Kurumsal Giriş: CKBUSDT (+$4.2M), ENAUSDT (+$3.1M), ZECUSDT (+$2.7M) | 🔴 Kaçış: CHIPUSDT (-$3.4M), STRKUSDT (-$2.8M), FETUSDT (-$2.1M). Para çıkışı olan koinlere long vetosu devrede!",
+    "tag": "FLOW"
+  },
+  {
+    "id": "1791800794758zyuw",
+    "time": "13:26:34",
+    "timestamp": 1791800794758,
+    "agent": "🎯 FREQ-AI & LİKİDASYON",
+    "roleKey": "FREQAI",
+    "color": "#db2777",
+    "title": "ML Olasılık & Fonlama",
+    "text": "🎯 [FREQ-AI &amp; FONLAMA]: ML Olasılık Modeli devrede (Eğitim: 56 işlem, Eşik: %72). Ortalama fonlama: %0.0032. Sıkışma adayı: STRKUSDT (%-0.048), CHIPUSDT (%-0.038), ZECUSDT (%0.008). Düşük olasılıklı işlemler veto edilecek.",
+    "tag": "STRATEGY"
+  },
+  {
+    "id": "1791800794758kfwg",
+    "time": "13:26:34",
+    "timestamp": 1791800794758,
+    "agent": "🏛️ BAŞ YARGIÇ",
+    "roleKey": "JUDGE",
+    "color": "#b45309",
+    "title": "Adli Denetçi (Aslan11)",
+    "text": "🏛️ [ASLAN11 ADLİ HÜKÜM]: Mahkeme oturumu tamamlandı (56 duruşma, %76 intizam skoru). Disiplinsiz veya delilsiz açılmaya çalışılan her emir anında veto edilecek!",
+    "tag": "RISK"
+  },
+  {
+    "id": "1791800794759v367",
+    "time": "13:26:34",
+    "timestamp": 1791800794759,
+    "agent": "⚔️ TRADER",
+    "roleKey": "TRADER",
+    "color": "#b45309",
+    "title": "Sinyal & Yürütme",
+    "text": "⚔️ [EMİR ONAYLANDI]: Savunma ve Şampiyon &quot;🎯 Dengeli Vur-Kaç&quot; stratejisi yürütülüyor! Tek slot, $10 teminat. Taker ≥ %54.0 ve tepe tuzağı engelli roketler taranıyor.",
+    "tag": "TRADE"
+  },
+  {
+    "id": "17918007947592zqz",
+    "time": "13:26:34",
+    "timestamp": 1791800794759,
+    "agent": "💻 YAZILIMCI",
+    "roleKey": "ENGINEER",
+    "color": "#475569",
+    "title": "DevOps & Sistem",
+    "text": "💻 [SİSTEM &amp; KOD GÜNCELLEMESİ]: Canlı server.js çekirdeğine Şampiyon &quot;🎯 Dengeli Vur-Kaç&quot; parametreleri sıcak yüklendi (Hot-Reload). Parametreler senkronize, sistem stabil.",
     "tag": "SYSTEM"
   }
 ]

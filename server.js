@@ -2648,7 +2648,8 @@ function serveDashboardHtml() {
             document.getElementById("teamEngineer").innerText = (ei && ei.mode === 'DEFENSIVE_SNIPER') ? 'Regex Aktif' : 'Render Canlı';
           }
           if (t.whale_scout && document.getElementById("teamWhale")) {
-            document.getElementById("teamWhale").innerText = t.whale_scout.status ? (t.whale_scout.status.split(' ')[1] || t.whale_scout.status) : 'Para Akışı';
+            const wst = t.whale_scout.status || '';
+            document.getElementById("teamWhale").innerText = wst.includes('GİRİŞ') ? '🟢 Giriş' : (wst.includes('ÇIKIŞ') ? '🔴 Çıkış' : (wst.includes('DENGELİ') ? '⚖️ Dengeli' : 'Para Akışı'));
           }
           if (t.freqai && document.getElementById("teamFreqai")) {
             const fst = t.freqai.status || 'Model Aktif';
@@ -3194,7 +3195,8 @@ const server = http.createServer(async (req, res) => {
         if (history.length > 500) history = history.slice(0, 500);
 
         const totalPnl = history.reduce((acc, h) => acc + (h.pnl || 0), 0);
-        balance = CONFIG.initialBalance + totalPnl;
+        const activeTp1Pnl = Array.isArray(activePositions) ? activePositions.reduce((acc, p) => acc + (p.tp1Pnl || 0), 0) : 0;
+        balance = CONFIG.initialBalance + totalPnl + activeTp1Pnl;
 
         rebuildCoinLossHistory();
         rewriteCsvFile();
@@ -3250,7 +3252,8 @@ const server = http.createServer(async (req, res) => {
           balance = parseFloat(body.balance);
         } else {
           const totalPnl = history.reduce((acc, h) => acc + (h.pnl || 0), 0);
-          balance = (body.initialBalance || CONFIG.initialBalance) + totalPnl;
+          const activeTp1Pnl = Array.isArray(activePositions) ? activePositions.reduce((acc, p) => acc + (p.tp1Pnl || 0), 0) : 0;
+          balance = (body.initialBalance || CONFIG.initialBalance) + totalPnl + activeTp1Pnl;
         }
         rebuildCoinLossHistory();
         rewriteCsvFile();

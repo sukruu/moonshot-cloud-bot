@@ -1,11 +1,11 @@
 {
-  "updatedAt": "2026-10-12T09:56:53.259Z",
+  "updatedAt": "2026-10-12T10:26:30.275Z",
   "stats": {
     "totalTrials": 56,
     "convictions": 2,
     "acquittals": 54,
     "averageJudicialScore": 76,
-    "lastAuditAt": "2026-10-12T09:56:53.259Z"
+    "lastAuditAt": "2026-10-12T10:26:30.275Z"
   },
   "probationList": {},
   "trials": []
