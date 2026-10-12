@@ -6,6 +6,8 @@ const { runBacktest } = require('./backtest_engine');
 const { addMeeting, getDialogues } = require('./team_dialogue');
 const { findChampionStrategy } = require('./strategy_optimizer');
 const { trackWhaleMoneyFlow } = require('./whale_scout');
+const { scanFundingRates } = require('./funding_scout');
+const { getFreqAiStats } = require('./freqai_ml_engine');
 
 const TEAM_STATUS_FILE = path.join(__dirname, 'team_status.json');
 
@@ -123,6 +125,13 @@ async function runAutonomousTeamSync(ctx = {}) {
   try {
     moneyFlow = await trackWhaleMoneyFlow();
   } catch(e) {}
+
+  let fundingRates = { avgFundingPct: 0.01, topShortSqueezes: [], topOverheatedLongs: [], fundingMap: {} };
+  try {
+    fundingRates = await scanFundingRates();
+  } catch(e) {}
+  const freqAiStats = getFreqAiStats();
+
   const rec = regime.recommendedConfig;
 
   // 2) 👑 YÖNETİCİ: Portföy Koruması & Risk Müdahale Değerlendirmesi
@@ -231,6 +240,12 @@ async function runAutonomousTeamSync(ctx = {}) {
       `🐋 [CANLI PARA AKIŞI]: Piyasa net akışı: $${moneyFlow.netMarketFlowM}M (${moneyFlow.marketFlowBias}). 🟢 Kurumsal Giriş: ${topBullStr || 'Bekleniyor'} | 🔴 Kaçış: ${topBearStr || 'Yok'}. Para çıkışı olan koinlere long vetosu devrede!`,
       'FLOW'
     ]);
+    const sqzStr = (fundingRates.topShortSqueezes || []).map(s => `${s.symbol} (%${s.fundingRatePct})`).join(', ');
+    meetingLines.push([
+      'FREQAI',
+      `🎯 [FREQ-AI & FONLAMA]: ML Olasılık Modeli devrede (Eğitim: ${freqAiStats.trainingSamples} işlem, Eşik: %72). Ortalama fonlama: %${fundingRates.avgFundingPct}. Sıkışma adayı: ${sqzStr || 'Yok'}. Düşük olasılıklı işlemler veto edilecek.`,
+      'STRATEGY'
+    ]);
     meetingLines.push([
       'TRADER',
       `⚔️ [EMİR ONAYLANDI]: Savunma ve Şampiyon "${champName}" stratejisi yürütülüyor! Tek slot, $${intervention.marginPerTrade} teminat. Taker ≥ %54.0 ve tepe tuzağı engelli roketler taranıyor.`,
@@ -256,6 +271,11 @@ async function runAutonomousTeamSync(ctx = {}) {
       'WHALE_HUNTER',
       `🐋 [FON AKIŞI]: Net piyasa yönü: ${moneyFlow.marketFlowBias} ($${moneyFlow.netMarketFlowM}M). Kurumsal boğa alımları taranıyor.`,
       'FLOW'
+    ]);
+    meetingLines.push([
+      'FREQAI',
+      `🎯 [FREQ-AI & FONLAMA]: ML Karar Motoru hazır (${freqAiStats.trainingSamples} işlem kalibre). Ortalama fonlama: %${fundingRates.avgFundingPct}. Minimum kazanma olasılığı eşiği: %68.`,
+      'STRATEGY'
     ]);
     meetingLines.push([
       'TESTER',
@@ -321,11 +341,19 @@ async function runAutonomousTeamSync(ctx = {}) {
         netMarketFlow: `$${moneyFlow.netMarketFlowM}M`,
         topInflow: (moneyFlow.topBullInflows && moneyFlow.topBullInflows[0]) ? `${moneyFlow.topBullInflows[0].symbol} (+$${moneyFlow.topBullInflows[0].netFlowM}M)` : '-',
         topOutflow: (moneyFlow.topBearOutflows && moneyFlow.topBearOutflows[0]) ? `${moneyFlow.topBearOutflows[0].symbol} (-$${Math.abs(moneyFlow.topBearOutflows[0].netFlowM)}M)` : '-'
+      },
+      freqai: {
+        role: '🎯 FreqAI & Likidasyon Dedektifi',
+        status: `Model Aktif (%${freqAiStats.historicalWinRate} WR / ${freqAiStats.trainingSamples} İşlem)`,
+        avgFunding: `%${fundingRates.avgFundingPct}`,
+        topSqueeze: (fundingRates.topShortSqueezes && fundingRates.topShortSqueezes[0]) ? `${fundingRates.topShortSqueezes[0].symbol} (%${fundingRates.topShortSqueezes[0].fundingRatePct})` : '-'
       }
     },
     forensics,
     recommendedConfig: rec,
     moneyFlow,
+    fundingRates,
+    freqAiStats,
     optimizer: optimizer ? {
       evaluatedAt: optimizer.evaluatedAt,
       candidatesCount: optimizer.candidatesCount,

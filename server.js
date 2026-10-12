@@ -32,6 +32,12 @@ try {
 } catch (e) {}
 
 let globalWhaleFlowMap = (teamStatusCache && teamStatusCache.moneyFlow && teamStatusCache.moneyFlow.flowMap) || {};
+let globalFundingMap = (teamStatusCache && teamStatusCache.fundingRates && teamStatusCache.fundingRates.fundingMap) || {};
+let predictTradeProbability = () => ({ isApproved: true, winProbabilityPct: 75, confidence: 'ORTA' });
+try {
+  const mlMod = require('./quant_lab/freqai_ml_engine');
+  predictTradeProbability = mlMod.predictTradeProbability;
+} catch (e) {}
 
 // --- EKRAN 1 BİREBİR AYARLARI ---
 let CONFIG = {
@@ -1086,6 +1092,51 @@ async function scanLoop() {
             }
           }
 
+          // 🎯 7. AJAN (FREQ-AI & LİKİDASYON AVCISI) KONTROLLERİ
+          // A) FONLAMA ORANI & LİKİDASYON SIKIŞMASI (SQUEEZE) VETOSU
+          const fundingMap = (teamStatusCache && teamStatusCache.fundingRates && teamStatusCache.fundingRates.fundingMap) || globalFundingMap || null;
+          const fundingInfo = fundingMap ? fundingMap[sym] : null;
+          if (fundingInfo) {
+            if (side === 'LONG' && fundingInfo.isApprovedLong === false) {
+              addLog(`🛡️ [FONLAMA VETOSU]: ${sym} LONG engellendi — Fonlama aşırı şişkin (+%${fundingInfo.fundingRatePct}), tepe likidasyon tuzağı!`, 'WARN');
+              try { addDialogue('FREQAI', `🛑 VETO! ${sym} fonlaması çok yüksek (+%${fundingInfo.fundingRatePct}). Küçük yatırımcı long sıkışmasında, LONG onaylamıyorum!`, 'RISK'); } catch(e) {}
+              continue;
+            }
+            if (side === 'SHORT' && fundingInfo.isApprovedShort === false) {
+              addLog(`🛡️ [FONLAMA VETOSU]: ${sym} SHORT engellendi — Fonlama ağır negatif (%${fundingInfo.fundingRatePct}), short squeeze riski!`, 'WARN');
+              try { addDialogue('FREQAI', `🛑 VETO! ${sym} fonlaması aşırı negatif (%${fundingInfo.fundingRatePct}). Short squeeze patlaması kapıda, SHORT onaylamıyorum!`, 'RISK'); } catch(e) {}
+              continue;
+            }
+          }
+
+          // B) FREQ-AI MAKİNE ÖĞRENİMİ (ML) KAZANMA OLASILIĞI FİLTRESİ
+          const mlFeatures = {
+            symbol: sym,
+            side: side,
+            takerBuyRatio: rInfo ? (rInfo.takerBuyRatio || 50) : 50,
+            chg15m: cur15m,
+            chg3h: rInfo ? (rInfo.chg3h || 0) : 0,
+            chg24h: chg24Val,
+            vol3hM: rInfo ? (rInfo.vol3hM || 5.0) : 5.0,
+            btc5m: btc5mNumeric,
+            btc15m: btc15mNumeric,
+            fundingRatePct: fundingInfo ? fundingInfo.fundingRatePct : 0.01,
+            netFlowM: scoutInfo ? scoutInfo.netFlowM : 0,
+            mode: DYNAMIC.mode
+          };
+          let mlEval = { isApproved: true, winProbabilityPct: 75, confidence: 'YÜKSEK', topDeterrent: '' };
+          try {
+            mlEval = predictTradeProbability(mlFeatures);
+          } catch(e) {}
+
+          if (!mlEval.isApproved) {
+            addLog(`🛡️ [FREQ-AI ML VETOSU]: ${sym} ${side} engellendi — Model kazanma olasılığı %${mlEval.winProbabilityPct} < %${mlEval.minRequiredProbability} (${mlEval.topDeterrent})`, 'WARN');
+            try {
+              addDialogue('FREQAI', `🛑 VETO! ${sym} ${side} için FreqAI model kazanma olasılığı düşük (%${mlEval.winProbabilityPct} < %${mlEval.minRequiredProbability}). Riskli işlem onaylanmadı!`, 'RISK');
+            } catch(e) {}
+            continue;
+          }
+
           const stopPrice = side === "LONG" 
             ? curP * (1 - CONFIG.slPct / 100) 
             : curP * (1 + CONFIG.slPct / 100);
@@ -1131,8 +1182,10 @@ async function scanLoop() {
             const volTxt = (rInfo && rInfo.vol3hM != null) ? `$${rInfo.vol3hM.toFixed(1)}M` : 'bilinmiyor';
             const takerTxt = (rInfo && rInfo.takerBuyRatio != null) ? `%${rInfo.takerBuyRatio.toFixed(1)}` : 'bilinmiyor';
             const scoutTxt = scoutInfo ? ` | 🐋 Kurumsal Akış: ${scoutInfo.netFlowM > 0 ? '+' : ''}$${scoutInfo.netFlowM}M` : '';
+            const fundTxt = fundingInfo ? ` (%${fundingInfo.fundingRatePct})` : '';
             addDialogue('ANALYST', `🚨 ${sym} ${side} sinyali: 3s hacim ${volTxt}, alıcı oranı ${takerTxt}, 24s %${chg24Val.toFixed(1)}, rejim: ${DYNAMIC.regime}.`, 'TRADE');
             addDialogue('WHALE_HUNTER', `🐋 ${sym} ${side} ONAYLANDI: Para akışı lehimize${scoutTxt}. Büyük oyuncularla aynı yöndeyiz!`, 'TRADE');
+            addDialogue('FREQAI', `🎯 ${sym} ${side} ONAYLANDI: FreqAI ML Kazanma Olasılığı %${mlEval.winProbabilityPct} (${mlEval.confidence}) | Fonlama: ${fundTxt || '%0.010'}.`, 'TRADE');
             addDialogue('TRADER', `⚔️ ${sym} ${side} @ $${curP.toFixed(4)} | Nominal $${(CONFIG.marginPerTrade * CONFIG.leverage).toFixed(0)} (${CONFIG.leverage}x) | SL $${stopPrice.toFixed(4)}.`, 'TRADE');
             addDialogue('MANAGER', `👑 Slot ${activePositions.length}/${CONFIG.maxSlots}. Bu işlemde maksimum risk: -$${(CONFIG.marginPerTrade * CONFIG.leverage * CONFIG.slPct / 100).toFixed(2)}.`, 'RISK');
           } catch(e) {}
@@ -1592,6 +1645,7 @@ function serveDashboardHtml() {
     .status-pill.purple { background: rgba(168,85,247,0.15); color: var(--purple); border: 1px solid rgba(168,85,247,0.3); }
     .status-pill.blue { background: rgba(56,189,248,0.15); color: #38bdf8; border: 1px solid rgba(56,189,248,0.3); }
     .status-pill.cyan { background: rgba(6,182,212,0.15); color: #06b6d4; border: 1px solid rgba(6,182,212,0.3); }
+    .status-pill.pink { background: rgba(236,72,153,0.15); color: #ec4899; border: 1px solid rgba(236,72,153,0.3); }
 
     /* STRATEGY BANNER */
     .strategy-banner-card {
@@ -1971,7 +2025,7 @@ function serveDashboardHtml() {
           </div>
         </div>
 
-        <div class="sidebar-section-title" style="margin-top:10px;">🤖 OTONOM QUANT EKİBİ (6 AJAN)</div>
+        <div class="sidebar-section-title" style="margin-top:10px;">🤖 OTONOM QUANT EKİBİ (7 AJAN)</div>
         <div style="background:rgba(15,23,42,0.65);border:1px solid rgba(168,85,247,0.3);border-radius:8px;padding:9px;margin-bottom:12px;font-size:11px;display:flex;flex-direction:column;gap:6px;">
           <div style="display:flex;justify-content:space-between;align-items:center;">
             <span style="font-weight:800;color:#c084fc;">👑 1. YÖNETİCİ</span>
@@ -1996,6 +2050,10 @@ function serveDashboardHtml() {
           <div style="display:flex;justify-content:space-between;align-items:center;">
             <span style="font-weight:700;color:#06b6d4;">🐋 6. BALİNA AVCISI</span>
             <span class="status-pill cyan" id="teamWhale" style="font-size:9.5px;padding:2px 6px;">Para Akışı Aktif</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span style="font-weight:700;color:#ec4899;">🎯 7. FREQ-AI & LİKİDASYON</span>
+            <span class="status-pill pink" id="teamFreqai" style="font-size:9.5px;padding:2px 6px;">Model Aktif</span>
           </div>
         </div>
 
@@ -2138,7 +2196,7 @@ function serveDashboardHtml() {
         <!-- 🗣️ AJAN TELSİZİ & CANLI DİYALOG AKIŞI -->
         <h2 style="margin-top:16px; display:flex; justify-content:space-between; align-items:center;">
           <span>🗣️ AJAN TELSİZİ & CANLI DİYALOG AKIŞI</span>
-          <span class="badge-moon" style="font-size:9.5px;">📻 6 AJAN CANLI FREKANS</span>
+          <span class="badge-moon" style="font-size:9.5px;">📻 7 AJAN CANLI FREKANS</span>
         </h2>
         <div id="dialogueBox" style="background:rgba(5,7,12,0.95); border:1px solid rgba(255,255,255,0.08); border-radius:8px; padding:12px; max-height:260px; overflow-y:auto; font-family:'JetBrains Mono',monospace; font-size:11px; display:flex; flex-direction:column; gap:8px; box-shadow: inset 0 2px 8px rgba(0,0,0,0.6);">
           ${renderDialogues(teamStatusCache ? teamStatusCache.dialogues : [])}
@@ -2231,6 +2289,9 @@ function serveDashboardHtml() {
           }
           if (t.whale_scout && document.getElementById("teamWhale")) {
             document.getElementById("teamWhale").innerText = t.whale_scout.status || 'Para Akışı Aktif';
+          }
+          if (t.freqai && document.getElementById("teamFreqai")) {
+            document.getElementById("teamFreqai").innerText = t.freqai.status || 'Model Aktif';
           }
         }
 
@@ -2931,7 +2992,7 @@ server.listen(PORT, () => {
     } catch(e) {}
   }, 4 * 60 * 1000);
 
-  // 🤖 OTONOM 6-AJAN EKİBİ: Toplantı yap → Yönetici onaylarsa giriş filtrelerini CANLI uygula
+  // 🤖 OTONOM 7-AJAN EKİBİ: Toplantı yap → Yönetici onaylarsa giriş filtrelerini CANLI uygula
   try {
     const { runAutonomousTeamSync } = require('./quant_lab/team_runner');
     const clamp = (v, [lo, hi]) => Math.min(hi, Math.max(lo, v));
@@ -2951,6 +3012,9 @@ server.listen(PORT, () => {
         teamStatusCache = report;
         if (report && report.moneyFlow && report.moneyFlow.flowMap) {
           globalWhaleFlowMap = report.moneyFlow.flowMap;
+        }
+        if (report && report.fundingRates && report.fundingRates.fundingMap) {
+          globalFundingMap = report.fundingRates.fundingMap;
         }
 
         const ei = report && report.executiveIntervention;

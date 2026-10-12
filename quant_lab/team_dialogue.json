@@ -427,5 +427,82 @@
     "title": "DevOps & Sistem",
     "text": "💻 [SİSTEM &amp; KOD GÜNCELLEMESİ]: Canlı server.js çekirdeğine Şampiyon &quot;🔒 Erken Kilit&quot; parametreleri sıcak yüklendi (Hot-Reload). Parametreler senkronize, sistem stabil.",
     "tag": "SYSTEM"
+  },
+  {
+    "id": "1791795231841ou76",
+    "time": "11:53:51",
+    "timestamp": 1791795231857,
+    "agent": "👑 YÖNETİCİ",
+    "roleKey": "MANAGER",
+    "color": "#c084fc",
+    "title": "Risk Direktörü",
+    "text": "🚨 [KRİTİK MÜDAHALE - SAVUNMA MODU]: Kasa $83.59 seviyesinde (%16.4 zarar, zirveden %16.4 DD). Kasa erimesini durdurmak için yönetimi devraldım! Slot 1'e, Teminat $10'a çekildi!",
+    "tag": "RISK"
+  },
+  {
+    "id": "1791795231858s3mc",
+    "time": "11:53:51",
+    "timestamp": 1791795231858,
+    "agent": "🧠 ANALİZCİ",
+    "roleKey": "ANALYST",
+    "color": "#38bdf8",
+    "title": "Piyasa İstihbaratı",
+    "text": "🧠 [ADLİ TEŞHİS]: 56 işlem incelendi (%57.1 WR, PF: 0.77). Adli analizde zayıf alıcı (&lt;%54 taker) ve aşırı satımda (-%4.5 altı) shortlanan koinlerin zararın %90'ını ürettiği kanıtlandı. PUMP, CHIP, AVAX, STRK kara listeye alındı; eşik alıcı oranı %54.0'e çıkarıldı.",
+    "tag": "STRATEGY"
+  },
+  {
+    "id": "1791795231859gag7",
+    "time": "11:53:51",
+    "timestamp": 1791795231859,
+    "agent": "🧪 TESTÇİ",
+    "roleKey": "TESTER",
+    "color": "#4ade80",
+    "title": "QA & Simülatör",
+    "text": "🧪 [STRATEJİ OPTİMİZASYONU]: 32 farklı strateji son 24 saatin mumlarında simüle edildi. 🏆 ŞAMPİYON: &quot;Grid_SL0.85_BE0.35_TP0.65&quot; (PF: 1.45, WR: %76.9, Sim Kâr: +$3.19 | SL: %0.85, BE: %0.35, TP1: %0.65). En karlı strateji canlıya uygulandı!",
+    "tag": "STRATEGY"
+  },
+  {
+    "id": "1791795231859187q",
+    "time": "11:53:51",
+    "timestamp": 1791795231860,
+    "agent": "🐋 BALİNA AVCISI",
+    "roleKey": "WHALE_HUNTER",
+    "color": "#06b6d4",
+    "title": "Para Akışı & Fon",
+    "text": "🐋 [CANLI PARA AKIŞI]: Piyasa net akışı: $3.1M (BULLISH). 🟢 Kurumsal Giriş: CKBUSDT (+$4.2M), ENAUSDT (+$3.1M), ZECUSDT (+$2.7M) | 🔴 Kaçış: CHIPUSDT (-$3.4M), STRKUSDT (-$2.8M), FETUSDT (-$2.1M). Para çıkışı olan koinlere long vetosu devrede!",
+    "tag": "FLOW"
+  },
+  {
+    "id": "1791795231860glgr",
+    "time": "11:53:51",
+    "timestamp": 1791795231860,
+    "agent": "🎯 FREQ-AI & LİKİDASYON",
+    "roleKey": "FREQAI",
+    "color": "#ec4899",
+    "title": "ML Olasılık & Fonlama",
+    "text": "🎯 [FREQ-AI &amp; FONLAMA]: ML Olasılık Modeli devrede (Eğitim: 56 işlem, Eşik: %72). Ortalama fonlama: %0.0032. Sıkışma adayı: STRKUSDT (%-0.048), CHIPUSDT (%-0.038), ZECUSDT (%0.008). Düşük olasılıklı işlemler veto edilecek.",
+    "tag": "STRATEGY"
+  },
+  {
+    "id": "1791795231861xidk",
+    "time": "11:53:51",
+    "timestamp": 1791795231861,
+    "agent": "⚔️ TRADER",
+    "roleKey": "TRADER",
+    "color": "#facc15",
+    "title": "Sinyal & Yürütme",
+    "text": "⚔️ [EMİR ONAYLANDI]: Savunma ve Şampiyon &quot;Grid_SL0.85_BE0.35_TP0.65&quot; stratejisi yürütülüyor! Tek slot, $10 teminat. Taker ≥ %54.0 ve tepe tuzağı engelli roketler taranıyor.",
+    "tag": "TRADE"
+  },
+  {
+    "id": "1791795231861ip0l",
+    "time": "11:53:51",
+    "timestamp": 1791795231861,
+    "agent": "💻 YAZILIMCI",
+    "roleKey": "ENGINEER",
+    "color": "#a78bfa",
+    "title": "DevOps & Sistem",
+    "text": "💻 [SİSTEM &amp; KOD GÜNCELLEMESİ]: Canlı server.js çekirdeğine Şampiyon &quot;Grid_SL0.85_BE0.35_TP0.65&quot; parametreleri sıcak yüklendi (Hot-Reload). Parametreler senkronize, sistem stabil.",
+    "tag": "SYSTEM"
   }
 ]
