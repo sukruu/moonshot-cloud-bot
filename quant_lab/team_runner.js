@@ -24,7 +24,7 @@ const fmt = (n, d = 2) => (Number.isFinite(n) ? n.toFixed(d) : '-');
 function evaluateExecutiveIntervention(ctx = {}, forensics = {}, regime = {}) {
   const balance = Number(ctx.balance) || 100.0;
   const initial = Number(ctx.initialBalance) || 100.0;
-  const peak = Math.max(initial, Number(ctx.peakBalance) || 131.21, balance);
+  const peak = Math.max(initial, Number(ctx.peakBalance) || initial, balance);
   const drawdownFromPeak = (peak - balance) / peak;
   const netDrawdown = (initial - balance) / initial;
 

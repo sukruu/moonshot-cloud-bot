@@ -273,7 +273,7 @@ function getPeakBalance() {
       if (cur > peak) peak = cur;
     }
   }
-  return Math.max(peak, 131.21, balance);
+  return Math.max(peak, balance);
 }
 
 function getTradeRadarFields(trade) {
@@ -2901,17 +2901,16 @@ function serveDashboardHtml() {
     async function resetBalance() {
       if (!confirm("DİKKAT: Bakiye $100.00 olarak sıfırlanacak ve tüm geçmiş kalıcı olarak silinecektir. Emin misiniz?")) return;
       window.isResetting = true;
-      localStorage.removeItem(LS_HIST);
-      localStorage.removeItem(LS_BAL);
-      sessionStorage.clear();
       try {
+        localStorage.clear();
+        sessionStorage.clear();
         const res = await fetch('/api/reset-balance?amount=100');
         const data = await res.json();
         if (data && data.resetEpoch) {
           localStorage.setItem('moon_reset_epoch', data.resetEpoch.toString());
         }
       } catch (e) {}
-      window.location.href = window.location.origin + window.location.pathname + '?reset=' + Date.now();
+      window.location.replace(window.location.origin + window.location.pathname + '?reset=' + Date.now());
     }
 
 
@@ -3338,6 +3337,9 @@ const server = http.createServer(async (req, res) => {
     history = [];
     coinLossCount = {};
     coinCooldowns = {};
+    DYNAMIC.mode = 'BALANCED';
+    DYNAMIC.vol3hMin = 2.5;
+    DYNAMIC.candidateSlice = 30;
     try {
       fs.writeFileSync(HISTORY_FILE, '[]', 'utf8');
       rewriteCsvFile();
