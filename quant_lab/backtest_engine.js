@@ -31,7 +31,9 @@ async function fetchKlines(symbol, interval = '3m', limit = 480) {
   if (!Array.isArray(raw)) return [];
   return raw.map(k => ({
     open: parseFloat(k[1]), high: parseFloat(k[2]), low: parseFloat(k[3]),
-    close: parseFloat(k[4]), volume: parseFloat(k[5])
+    close: parseFloat(k[4]), volume: parseFloat(k[5]),
+    quoteVolume: parseFloat(k[7]) || ((parseFloat(k[5]) || 0) * (parseFloat(k[4]) || 0)),
+    takerBuyQuoteVolume: parseFloat(k[10]) || 0
   }));
 }
 

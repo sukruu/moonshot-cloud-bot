@@ -63,34 +63,63 @@ async function trackWhaleMoneyFlow() {
         const chg24 = parseFloat(t.priceChangePercent) || 0;
         const quoteVol24M = (parseFloat(t.quoteVolume) || 0) / 1e6;
 
-        // Son 4 mum (1 saatlik akış)
+        // Son 8 mum (2 saatlik derin akış ve CVD analizi)
         let klines = [];
         try {
-          klines = await fetchKlines(sym, '15m', 4);
+          klines = await fetchKlines(sym, '15m', 8);
         } catch (e) {}
         let netFlowUsdt = 0;
-        let total1hVolUsdt = 0;
-        let takerBuy1hUsdt = 0;
+        let totalVolUsdt = 0;
+        let takerBuyUsdt = 0;
+        let cvdDivergence = 'NONE';
 
         if (Array.isArray(klines) && klines.length > 0) {
-          // kline formatı: open, high, low, close, volume (base)
           for (const k of klines) {
-            const vUsdt = (k.volume || 0) * k.close;
-            total1hVolUsdt += vUsdt;
-            const isGreen = k.close >= k.open;
-            const greenRatio = isGreen ? 0.58 : 0.42;
-            takerBuy1hUsdt += (vUsdt * greenRatio);
+            const quoteVol = k.quoteVolume || ((k.volume || 0) * (k.close || 0));
+            totalVolUsdt += quoteVol;
+            const tBuy = (k.takerBuyQuoteVolume && k.takerBuyQuoteVolume > 0)
+              ? k.takerBuyQuoteVolume
+              : (quoteVol * (k.close >= k.open ? 0.58 : 0.42));
+            takerBuyUsdt += tBuy;
           }
-          netFlowUsdt = (takerBuy1hUsdt * 2) - total1hVolUsdt;
+          netFlowUsdt = (takerBuyUsdt * 2) - totalVolUsdt;
+
+          // ⚡ CVD (Kümülatif Hacim Deltası) UYUMSUZLUK TESPİTİ
+          if (klines.length >= 4) {
+            const splitIdx = Math.floor(klines.length / 2);
+            const earlier = klines.slice(0, splitIdx);
+            const recent = klines.slice(splitIdx);
+
+            const pStart = earlier[0].open;
+            const pEnd = recent[recent.length - 1].close;
+            const priceChgPct = pStart > 0 ? ((pEnd - pStart) / pStart) * 100 : 0;
+
+            const recentVol = recent.reduce((acc, k) => acc + (k.quoteVolume || ((k.volume || 0) * (k.close || 0)) || 0), 0);
+            const recentTakerBuy = recent.reduce((acc, k) => acc + ((k.takerBuyQuoteVolume && k.takerBuyQuoteVolume > 0) ? k.takerBuyQuoteVolume : ((k.quoteVolume || 0) * (k.close >= k.open ? 0.58 : 0.42))), 0);
+            const recentDeltaUsdt = (recentTakerBuy * 2) - recentVol;
+            const recentTakerPct = recentVol > 0 ? (recentTakerBuy / recentVol) * 100 : 50;
+
+            // Ayı Uyumsuzluğu: Fiyat yukarı gidiyor (+%0.70+) ama kümülatif alıcı desteği yok veya satıcı ağırlıklı
+            if (priceChgPct >= 0.70 && (recentDeltaUsdt < -100000 || recentTakerPct <= 47.5)) {
+              cvdDivergence = 'BEARISH_DIVERGENCE';
+            }
+            // Boğa Uyumsuzluğu: Fiyat aşağı düşüyor (-%0.70-) ama kümülatif alıcılar absorbe ediyor (pozitif delta)
+            else if (priceChgPct <= -0.70 && (recentDeltaUsdt > 100000 || recentTakerPct >= 52.5)) {
+              cvdDivergence = 'BULLISH_DIVERGENCE';
+            }
+          }
         } else {
           // Fallback: 24h verisinden delta tahmini
           const approxTakerPct = chg24 >= 0 ? 0.53 : 0.47;
           const totalUsdt = quoteVol24M * 1e6;
-          netFlowUsdt = (totalUsdt * (approxTakerPct - 0.50)) * 0.15; // 1 saatlik dilim
+          netFlowUsdt = (totalUsdt * (approxTakerPct - 0.50)) * 0.15;
+          totalVolUsdt = totalUsdt * 0.15;
+          takerBuyUsdt = totalVolUsdt * approxTakerPct;
         }
 
         const netFlowM = Number((netFlowUsdt / 1e6).toFixed(2));
-        const takerPct = total1hVolUsdt > 0 ? Number(((takerBuy1hUsdt / total1hVolUsdt) * 100).toFixed(1)) : 50;
+        const takerPct = totalVolUsdt > 0 ? Number(((takerBuyUsdt / totalVolUsdt) * 100).toFixed(1)) : 50;
+        const cvdM = netFlowM;
 
         totalNetMarketFlowM += netFlowM;
 
@@ -98,7 +127,13 @@ async function trackWhaleMoneyFlow() {
         let isApprovedLong = true;
         let isApprovedShort = true;
 
-        if (netFlowM >= 0.8 && takerPct >= 54.0) {
+        if (cvdDivergence === 'BEARISH_DIVERGENCE') {
+          flowSignal = `⚠️ AYI CVD UYUMSUZLUĞU (Suni Pump - Fakeout)`;
+          isApprovedLong = false; // Suni pompalama, long kesin veto!
+        } else if (cvdDivergence === 'BULLISH_DIVERGENCE') {
+          flowSignal = `⚡ BOĞA CVD UYUMSUZLUĞU (Dip Toplama - Squeeze)`;
+          isApprovedShort = false; // Dip absorpsiyonu, short kesin veto!
+        } else if (netFlowM >= 0.8 && takerPct >= 54.0) {
           flowSignal = `🐋🟢 GÜÇLÜ BOĞA GİRİŞİ (+$${netFlowM}M)`;
           isApprovedLong = true;
           isApprovedShort = false; // Güçlü para girişi varken short kesinlikle yasak!
@@ -120,6 +155,8 @@ async function trackWhaleMoneyFlow() {
           chg24,
           netFlowM,
           takerPct,
+          cvdM,
+          cvdDivergence,
           flowSignal,
           isApprovedLong,
           isApprovedShort
@@ -155,6 +192,8 @@ async function trackWhaleMoneyFlow() {
         chg24: c.chg,
         netFlowM: c.net,
         takerPct: c.taker,
+        cvdM: c.net,
+        cvdDivergence: 'NONE',
         flowSignal,
         isApprovedLong,
         isApprovedShort

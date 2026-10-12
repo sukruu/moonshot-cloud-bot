@@ -1086,6 +1086,22 @@ async function scanLoop() {
           const scoutMap = (teamStatusCache && teamStatusCache.moneyFlow && teamStatusCache.moneyFlow.flowMap) || globalWhaleFlowMap || null;
           const scoutInfo = scoutMap ? scoutMap[sym] : null;
           if (scoutInfo) {
+            // CVD Uyumsuzluk Kontrolü (Fakeout & Squeeze Engeli)
+            if (side === 'LONG' && scoutInfo.cvdDivergence === 'BEARISH_DIVERGENCE') {
+              addLog(`🛡️ [CVD UYUMSUZLUK VETOSU]: ${sym} LONG engellendi — Ayı Uyumsuzluğu tespit edildi (Fiyat yükselirken kümülatif alıcı hacmi negatif, Suni Pump)!`, 'WARN');
+              try {
+                addDialogue('WHALE_HUNTER', `🛑 VETO! ${sym} üzerinde Ayı CVD Uyumsuzluğu var. Fiyat yukarı çekiliyor ancak tahtayı alıcılar değil satıcılar süpürüyor (Fakeout riski), LONG onaylamıyorum!`, 'RISK');
+              } catch(e) {}
+              continue;
+            }
+            if (side === 'SHORT' && scoutInfo.cvdDivergence === 'BULLISH_DIVERGENCE') {
+              addLog(`🛡️ [CVD UYUMSUZLUK VETOSU]: ${sym} SHORT engellendi — Boğa Uyumsuzluğu tespit edildi (Fiyat düşerken kümülatif kurumsal alıcılar absorbe ediyor)!`, 'WARN');
+              try {
+                addDialogue('WHALE_HUNTER', `🛑 VETO! ${sym} üzerinde Boğa CVD Uyumsuzluğu var. Fiyat aşağı basılıyor ancak agresif alıcılar dip topluyor (Squeeze riski), SHORT onaylamıyorum!`, 'RISK');
+              } catch(e) {}
+              continue;
+            }
+
             if (side === 'LONG' && scoutInfo.isApprovedLong === false) {
               addLog(`🛡️ [BALİNA AVCISI VETOSU]: ${sym} LONG engellendi — Net para çıkışı (-$${Math.abs(scoutInfo.netFlowM)}M, Alıcı: %${scoutInfo.takerPct}%) tespit edildi!`, 'WARN');
               try {
@@ -1101,6 +1117,29 @@ async function scanLoop() {
               continue;
             }
           }
+
+          // 🛡️ HUMMINGBOT ORDER BOOK IMBALANCE (OBI - DERİNLİK DENGESİZLİĞİ & DUVAR KORUMASI)
+          try {
+            const depthData = await fetchBinance(`/fapi/v1/depth?symbol=${sym}&limit=10`);
+            if (depthData && Array.isArray(depthData.bids) && Array.isArray(depthData.asks)) {
+              const bidVol = depthData.bids.reduce((acc, b) => acc + (parseFloat(b[1]) || 0), 0);
+              const askVol = depthData.asks.reduce((acc, a) => acc + (parseFloat(a[1]) || 0), 0);
+              const totalDepth = bidVol + askVol;
+              if (totalDepth > 0) {
+                const obi = (bidVol - askVol) / totalDepth;
+                if (side === 'LONG' && obi < -0.38) {
+                  addLog(`🛡️ [EMİR DEFTERİ DUVAR VETOSU]: ${sym} LONG engellendi — Satış kademelerinde devasa direnç duvarı var (OBI: ${obi.toFixed(2)}, Asks: ${askVol.toFixed(0)} vs Bids: ${bidVol.toFixed(0)})!`, 'WARN');
+                  try { addDialogue('WHALE_HUNTER', `🛑 DUVAR ENGELİ! ${sym} üzerinde satış emirleri alışların 2 katından fazla (OBI: ${obi.toFixed(2)}). Direnç duvarı kırılmadan LONG onaylamıyorum!`, 'RISK'); } catch(e) {}
+                  continue;
+                }
+                if (side === 'SHORT' && obi > 0.38) {
+                  addLog(`🛡️ [EMİR DEFTERİ DUVAR VETOSU]: ${sym} SHORT engellendi — Alış kademelerinde güçlü destek duvarı var (OBI: +${obi.toFixed(2)}, Bids: ${bidVol.toFixed(0)} vs Asks: ${askVol.toFixed(0)})!`, 'WARN');
+                  try { addDialogue('WHALE_HUNTER', `🛑 DUVAR ENGELİ! ${sym} üzerinde alış emirleri satışların 2 katından fazla (OBI: +${obi.toFixed(2)}). Destek duvarına çarpıp zıplama riski, SHORT onaylamıyorum!`, 'RISK'); } catch(e) {}
+                  continue;
+                }
+              }
+            }
+          } catch(e) {}
 
           // 🎯 7. AJAN (FREQ-AI & LİKİDASYON AVCISI) KONTROLLERİ
           // A) FONLAMA ORANI & LİKİDASYON SIKIŞMASI (SQUEEZE) VETOSU
@@ -1847,9 +1886,9 @@ function serveDashboardHtml() {
       font-size: 9.5px;
     }
     .agent-row .status-pill {
-      font-size: 8.5px;
-      padding: 1.5px 5px;
-      max-width: 155px;
+      font-size: 8px;
+      padding: 1px 5px;
+      max-width: 175px;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
@@ -2636,7 +2675,8 @@ function serveDashboardHtml() {
             document.getElementById("teamManager").className = 'status-pill ' + (isDef ? 'purple' : 'green');
           }
           if (t.analyst && document.getElementById("teamAnalyst")) {
-            document.getElementById("teamAnalyst").innerText = t.analyst.description ? t.analyst.description.slice(0, 16) : 'Rejim Aktif';
+            const ad = t.analyst.description || 'Rejim Aktif';
+            document.getElementById("teamAnalyst").innerText = ad.replace('YATAY / SAKİN PİYASA', 'YATAY / SAKİN').replace(' / ', ' · ').replace(' PİYASA', '').trim();
           }
           if (t.trader && document.getElementById("teamTrader")) {
             document.getElementById("teamTrader").innerText = (ei && ei.mode === 'DEFENSIVE_SNIPER') ? '🎯 1 Slot ($10)' : (t.trader.targetVolThreshold || 'Lazer & Moon');
@@ -2653,12 +2693,12 @@ function serveDashboardHtml() {
           }
           if (t.freqai && document.getElementById("teamFreqai")) {
             const fst = t.freqai.status || 'Model Aktif';
-            document.getElementById("teamFreqai").innerText = fst.includes('WR') ? fst.split('/')[0].replace('Model Aktif (', '').replace(')', '').trim().slice(0, 14) : fst.slice(0, 14);
+            document.getElementById("teamFreqai").innerText = fst.includes('WR') ? fst.replace(' İşlem', '').replace('İşlem', '').trim() : fst.slice(0, 14);
             document.getElementById("teamFreqai").title = t.freqai.role || '';
           }
           if (t.judge && document.getElementById("teamJudge")) {
             const jst = t.judge.status || 'Mahkeme Aktif';
-            document.getElementById("teamJudge").innerText = jst.replace('Mahkeme Aktif', 'Mahkeme').replace('/100 Puan', 'P').slice(0, 14);
+            document.getElementById("teamJudge").innerText = jst.replace('Mahkeme: ', '').replace('Mahkeme Aktif', '76 Puan').toUpperCase().trim();
             document.getElementById("teamJudge").title = t.judge.role || '';
           }
         }
