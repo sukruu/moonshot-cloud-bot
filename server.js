@@ -2932,7 +2932,8 @@ server.listen(PORT, () => {
           DYNAMIC.regime = (d && d.regime) || DYNAMIC.regime;
           DYNAMIC.updatedAt = Date.now();
           saveSettings();
-          addLog(`🚨 AJAN MÜDAHALESİ AKTİF: [${ei.mode}] Slot: ${CONFIG.maxSlots} | Teminat: $${CONFIG.marginPerTrade} | SL: %${CONFIG.slPct} | BE: %${CONFIG.bePct} | Eşik: $${DYNAMIC.vol3hMin}M`, 'RISK');
+          const champInfo = (d && d.championStrategy) ? ` | 🏆 Şampiyon: ${d.championStrategy.name} (PF: ${d.championStrategy.summary?.profitFactor})` : '';
+          addLog(`🚨 AJAN MÜDAHALESİ AKTİF: [${ei.mode}] Slot: ${CONFIG.maxSlots} | Teminat: $${CONFIG.marginPerTrade} | SL: %${CONFIG.slPct} | BE: %${CONFIG.bePct} | Eşik: $${DYNAMIC.vol3hMin}M${champInfo}`, 'RISK');
         } else if (d && d.approved && d.entryFilters) {
           const before = { ...DYNAMIC };
           DYNAMIC.vol3hMin = clamp(Number(d.entryFilters.vol3hMin) || before.vol3hMin, DYNAMIC_LIMITS.vol3hMin);

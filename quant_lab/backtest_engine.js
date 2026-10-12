@@ -210,4 +210,4 @@ if (require.main === module) {
   }).then(r => console.log(JSON.stringify(r, null, 2)));
 }
 
-module.exports = { runBacktest, PASS_RULES };
+module.exports = { runBacktest, PASS_RULES, pickSymbols, fetchKlines };

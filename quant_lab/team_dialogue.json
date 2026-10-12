@@ -306,5 +306,60 @@
     "title": "DevOps & Sistem",
     "text": "💻 [SİSTEM &amp; KOD GÜNCELLEMESİ]: Canlı server.js çekirdeğine 2+ zarar veren koin kara listesi, %54 taker ve tepe tuzağı kalkanı uygulandı. Sunucu aktif.",
     "tag": "SYSTEM"
+  },
+  {
+    "id": "1791793732238gh1f",
+    "time": "11:28:52",
+    "timestamp": 1791793732254,
+    "agent": "👑 YÖNETİCİ",
+    "roleKey": "MANAGER",
+    "color": "#c084fc",
+    "title": "Risk Direktörü",
+    "text": "🚨 [KRİTİK MÜDAHALE - SAVUNMA MODU]: Kasa $85.78 seviyesinde (%14.2 zarar, zirveden %34.6 DD). Kasa erimesini durdurmak için yönetimi devraldım! Slot 1'e, Teminat $10'a çekildi!",
+    "tag": "RISK"
+  },
+  {
+    "id": "1791793732255uw0a",
+    "time": "11:28:52",
+    "timestamp": 1791793732255,
+    "agent": "🧠 ANALİZCİ",
+    "roleKey": "ANALYST",
+    "color": "#38bdf8",
+    "title": "Piyasa İstihbaratı",
+    "text": "🧠 [ADLİ TEŞHİS]: 56 işlem incelendi (%57.1 WR, PF: 0.77). Adli analizde zayıf alıcı (&lt;%54 taker) ve aşırı satımda (-%4.5 altı) shortlanan koinlerin zararın %90'ını ürettiği kanıtlandı. PUMP, CHIP, AVAX, STRK kara listeye alındı; eşik alıcı oranı %54.0'e çıkarıldı.",
+    "tag": "STRATEGY"
+  },
+  {
+    "id": "1791793732255gsmy",
+    "time": "11:28:52",
+    "timestamp": 1791793732255,
+    "agent": "🧪 TESTÇİ",
+    "roleKey": "TESTER",
+    "color": "#4ade80",
+    "title": "QA & Simülatör",
+    "text": "🧪 [STRATEJİ OPTİMİZASYONU]: 32 farklı strateji son 24 saatin mumlarında simüle edildi. 🏆 ŞAMPİYON: &quot;🔒 Erken Kilit&quot; (PF: 1.23, WR: %76.5, Sim Kâr: +$3.16 | SL: %0.85, BE: %0.35, TP1: %0.7). En karlı strateji canlıya uygulandı!",
+    "tag": "STRATEGY"
+  },
+  {
+    "id": "1791793732256et8h",
+    "time": "11:28:52",
+    "timestamp": 1791793732256,
+    "agent": "⚔️ TRADER",
+    "roleKey": "TRADER",
+    "color": "#facc15",
+    "title": "Sinyal & Yürütme",
+    "text": "⚔️ [EMİR ONAYLANDI]: Savunma ve Şampiyon &quot;🔒 Erken Kilit&quot; stratejisi yürütülüyor! Tek slot, $10 teminat. Taker ≥ %54.0 ve tepe tuzağı engelli roketler taranıyor.",
+    "tag": "TRADE"
+  },
+  {
+    "id": "1791793732256k57y",
+    "time": "11:28:52",
+    "timestamp": 1791793732256,
+    "agent": "💻 YAZILIMCI",
+    "roleKey": "ENGINEER",
+    "color": "#a78bfa",
+    "title": "DevOps & Sistem",
+    "text": "💻 [SİSTEM &amp; KOD GÜNCELLEMESİ]: Canlı server.js çekirdeğine Şampiyon &quot;🔒 Erken Kilit&quot; parametreleri sıcak yüklendi (Hot-Reload). Parametreler senkronize, sistem stabil.",
+    "tag": "SYSTEM"
   }
 ]
