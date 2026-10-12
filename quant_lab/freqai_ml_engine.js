@@ -243,31 +243,39 @@ class FreqAiMasterEngine {
     // 1. CatBoost Puanı (Kategorik Tarihsel Hafıza)
     const catboostScore = this.catboost.transform(symbol, side);
 
+    // Yönsel Dönüşümler (Hem LONG hem SHORT için adil ve simetrik girdi üret)
+    const effectiveTaker = side === 'LONG' ? takerBuyRatio : (100 - takerBuyRatio);
+    const dir15m = side === 'LONG' ? chg15m : -chg15m;
+    const dir24h = side === 'LONG' ? chg24h : -chg24h;
+    const dirBtc = side === 'LONG' ? btc15m : -btc15m;
+    const dirFund = side === 'LONG' ? fundingRatePct : -fundingRatePct;
+    const dirFlow = side === 'LONG' ? netFlowM : -netFlowM;
+
     // 2. XGBoost Puanı (Gradyan Ağaç Tahmini)
     const xgbScore = this.xgboost.predict({
-      takerBuyRatio,
-      chg15m: side === 'LONG' ? chg15m : -chg15m,
-      chg24h: side === 'LONG' ? chg24h : -chg24h,
-      btc15m: side === 'LONG' ? btc15m : -btc15m,
-      fundingRatePct: side === 'LONG' ? fundingRatePct : -fundingRatePct,
-      netFlowM: side === 'LONG' ? netFlowM : -netFlowM
+      takerBuyRatio: effectiveTaker,
+      chg15m: dir15m,
+      chg24h: dir24h,
+      btc15m: dirBtc,
+      fundingRatePct: dirFund,
+      netFlowM: dirFlow
     });
 
     // 3. LightGBM Puanı (Histogram Yaprak Tahmini)
     const lgbScore = this.lightgbm.predict({
       side,
-      takerBuyRatio: side === 'LONG' ? takerBuyRatio : (100 - takerBuyRatio),
+      takerBuyRatio: effectiveTaker,
       vol3hM,
       chg3h
     });
 
     // 4. PyTorch MLP Puanı (Yapay Sinir Ağı Tensör İletimi)
-    const normTaker = (takerBuyRatio - 50) / 10;
-    const norm15m = chg15m / 2;
-    const norm24h = chg24h / 10;
-    const normBtc = btc15m / 0.5;
-    const normFund = fundingRatePct / 0.05;
-    const normFlow = netFlowM / 3;
+    const normTaker = (effectiveTaker - 50) / 10;
+    const norm15m = dir15m / 2;
+    const norm24h = dir24h / 10;
+    const normBtc = dirBtc / 0.5;
+    const normFund = dirFund / 0.05;
+    const normFlow = dirFlow / 3;
     const mlpScore = this.pytorch.predict([normTaker, norm15m, norm24h, normBtc, normFund, normFlow]);
 
     // Model Tahminleri (Yüzde Formatı)

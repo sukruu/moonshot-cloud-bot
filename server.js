@@ -208,7 +208,8 @@ function initStorage() {
       history = JSON.parse(fs.readFileSync(HISTORY_FILE, 'utf8'));
       if (Array.isArray(history) && history.length > 0) {
         const totalPnl = history.reduce((acc, h) => acc + (h.pnl || 0), 0);
-        balance = CONFIG.initialBalance + totalPnl;
+        const activeTp1Pnl = Array.isArray(activePositions) ? activePositions.reduce((acc, p) => acc + (p.tp1Pnl || 0), 0) : 0;
+        balance = CONFIG.initialBalance + totalPnl + activeTp1Pnl;
       }
     }
 
@@ -851,8 +852,11 @@ async function scanLoop() {
 
         const { sym, lastP, k3m, chg, isVip } = data;
         if (activePositions.some(x => x.symbol === sym) || activeSyms.has(sym) || (coinCooldowns[sym] && coinCooldowns[sym] > Date.now())) continue;
-        // 🛡️ Aynı koine 2 kez üst üste zarar ettiyse girme (kâr ederse sıfırlanır)
-        if (coinLossCount[sym] >= 2) continue;
+        // 🛡️ 12 saatlik ceza süresi dolduysa deneme süresine (probation) al
+        if (coinLossCount[sym] >= 2) {
+          if (coinCooldowns[sym] && coinCooldowns[sym] > Date.now()) continue;
+          coinLossCount[sym] = 1; // 12 saat doldu, deneme süresi
+        }
 
         const rInfo = radarMap[sym];
         // 🛡️ BAYAT VERİ & HAYALET KOİN ENGELİ: Radarda olmayan veya 8 dakikadan eski verileri içeren coinleri ele!
@@ -1371,7 +1375,7 @@ async function fastRiskLoop() {
       const effectivePullback = pos.tp1Taken ? Math.max(0.35, pullbackLimit) : pullbackLimit;
       const minMfeForLock = pos.tp1Taken ? 0.90 : 0.70;
 
-      if (!exitReason && mfe >= minMfeForLock && (mfe - move) >= effectivePullback) {
+      if (!exitReason && move > 0 && mfe >= minMfeForLock && (mfe - move) >= effectivePullback) {
         exitReason = pos.tp1Taken
           ? `🏆 TP1 CEPTE + Kalan Lazer Kâr Kilidi (+%${pos.roi.toFixed(1)} ROI / Zirve: +%${mfe.toFixed(2)} Spot)`
           : `🏆 Lazer Vur-Kaç Kâr Kilidi (+%${pos.roi.toFixed(1)} ROI / Zirve: +%${mfe.toFixed(2)} Spot)`;
@@ -2599,6 +2603,7 @@ function serveDashboardHtml() {
       });
     });
 
+    updateDashboard();
     setInterval(updateDashboard, 2000);
   </script>
 </body>

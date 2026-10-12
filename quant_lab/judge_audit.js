@@ -128,6 +128,15 @@ class JudicialAuditCourt {
       const now = Date.now();
       for (const [sym, count] of Object.entries(coinOffenses)) {
         if (count >= 2) {
+          const existing = this.probationList[sym];
+          // Eğer zaten aktif bir ceza varsa süresini sıfırlama, orijinal süreyi koru
+          if (existing && existing.bannedUntil > now) {
+            continue;
+          }
+          // Eğer ceza süresi geçmişte dolduysa ve yeni duruşmada ilave suç eklenmediyse tekrar cezalandırma
+          if (existing && existing.bannedUntil <= now && existing.offenseCount >= count) {
+            continue;
+          }
           this.probationList[sym] = {
             bannedUntil: now + (24 * 60 * 60 * 1000),
             offenseCount: count,
