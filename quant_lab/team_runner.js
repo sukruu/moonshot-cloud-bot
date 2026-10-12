@@ -38,10 +38,10 @@ function evaluateExecutiveIntervention(ctx = {}, forensics = {}, regime = {}) {
 
   let mode = 'BALANCED';
   let targetSlots = 3;
-  let targetMargin = 15.0;
-  let targetSl = 1.15;
-  let targetBe = 0.45;
-  let targetTp1 = 0.75;
+  let targetMargin = 10.0;
+  let targetSl = 0.85;
+  let targetBe = 0.40;
+  let targetTp1 = 0.85;
   let targetMoon = 1.50;
   let vol3hMin = rec.vol3hM || 2.5;
   let candidateSlice = rec.candidateSlice || 30;
@@ -50,25 +50,25 @@ function evaluateExecutiveIntervention(ctx = {}, forensics = {}, regime = {}) {
   if (isSevereLoss) {
     mode = 'DEFENSIVE_SNIPER';
     targetSlots = 1;          // 🛑 Tek slot! Dağılma yok, sadece 1 şampiyon pozisyon
-    targetMargin = 10.0;      // 🛡️ $10 teminat (Maksimum kayıp %50 düşürüldü)
-    targetSl = 0.85;          // 🛡️ Stop Loss %0.85 Spot (-17% ROI = -$1.70 risk)
+    targetMargin = 10.0;      // 🛡️ $10 teminat (Maksimum kayıp sınırlandı)
+    targetSl = 0.80;          // 🛡️ Stop Loss %0.80 Spot (-16% ROI = -$1.60 risk)
     targetBe = 0.35;          // 🛡️ Erken başabaş kilidi: +%0.35 Spot (+%7 ROI) görünce kitle
-    targetTp1 = 0.70;         // 🛡️ +%0.70 Spot (+%14 ROI) görünce %50 kâr al
-    targetMoon = 1.40;        // 🛡️ +%1.40 Spot (+%28 ROI)
+    targetTp1 = 0.80;         // 🛡️ +%0.80 Spot (+%16 ROI) görünce %50 kâr al (1:1 R:R)
+    targetMoon = 1.50;        // 🛡️ +%1.50 Spot (+%30 ROI)
     vol3hMin = Math.max(vol3hMin, 3.5); // Sığ ve manipülatif koinler yasak
     candidateSlice = 20;      // Sadece en likit 20 aday
-    reason = `Bakiye $${fmt(balance)} ($${initial} altında, -%${fmt(netDrawdown * 100, 1)} net / zirveden -%${fmt(drawdownFromPeak * 100, 1)} DD). SAVUNMA MODU AKTİF: Slot 1'e, Teminat $10'a, SL %0.85'e indirildi.`;
+    reason = `Bakiye $${fmt(balance)} ($${initial} altında, -%${fmt(netDrawdown * 100, 1)} net / zirveden -%${fmt(drawdownFromPeak * 100, 1)} DD). SAVUNMA MODU AKTİF: Slot 1'e, Teminat $10'a, SL %0.80'e indirildi.`;
   } else if (isModerateLoss) {
     mode = 'CAUTIOUS_RECOVERY';
     targetSlots = 2;
-    targetMargin = 12.5;
-    targetSl = 1.00;
+    targetMargin = 10.0;
+    targetSl = 0.85;
     targetBe = 0.40;
-    targetTp1 = 0.70;
-    targetMoon = 1.45;
+    targetTp1 = 0.85;
+    targetMoon = 1.50;
     vol3hMin = Math.max(vol3hMin, 3.0);
     candidateSlice = 25;
-    reason = `Bakiye $${fmt(balance)}. TEMKİNLİ TOPARLANMA: Slot 2, Teminat $12.5, SL %1.00.`;
+    reason = `Bakiye $${fmt(balance)}. TEMKİNLİ TOPARLANMA: Slot 2, Teminat $10, SL %0.85, TP1 %0.85.`;
   } else if (balance >= 120.0) {
     mode = 'GROWTH';
     targetSlots = 4;

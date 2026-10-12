@@ -48,14 +48,14 @@ try {
 // --- EKRAN 1 BİREBİR AYARLARI ---
 let CONFIG = {
   initialBalance: 100.0,     // Bakiye 100 Dolar
-  marginPerTrade: 20.0,      // Teminat 20$ (20x ile $400 pozisyon büyüklüğü)
+  marginPerTrade: 10.0,      // Teminat 10$ (Risk/Reward koruması: Kasa büyümeden 20$ basılmaz)
   leverage: 20,              // Kaldıraç 20x
-  maxSlots: 4,               // Max Slot 4 Adet
-  slPct: 1.25,               // Stop Loss %1.25 Spot (20x ile -%25 ROI)
-  bePct: 0.45,               // Erken Başabaş Kilidi %0.45 Spot (+%9 ROI görünce Riske kitle)
+  maxSlots: 3,               // Max Slot 3 Adet
+  slPct: 0.85,               // Stop Loss %0.85 Spot (20x ile -%17 ROI = -$1.70 maks risk)
+  bePct: 0.40,               // Erken Başabaş Kilidi %0.40 Spot (+%8 ROI görünce $0 Riske kitle)
   moonPct: 1.50,             // Moonshot TP2 Hedefi %1.50 Spot (+%30 ROI)
-  tp1Pct: 0.75,              // Kademeli Kâr Alma TP1 Hedefi %0.75 Spot (+%15 ROI ile %50 Kâr Cebe)
-  feeRate: 0.0005,           // Binance Futures taker %0.05 (TEK YÖN). Kodda ×2 ile giriş+çıkış = %0.10 hesaplanır
+  tp1Pct: 0.85,              // Kademeli Kâr Alma TP1 Hedefi %0.85 Spot (+%17 ROI = +$1.70 ile 1:1 R:R)
+  feeRate: 0.0005,           // Binance Futures taker %0.05 (TEK YÖN)
   scanIntervalMs: 4000,
   riskIntervalMs: 2500,
   radarIntervalMs: 60000
@@ -229,7 +229,7 @@ function rebuildCoinLossHistory() {
   for (const t of chron) {
     const sym = t.symbol;
     if (!sym) continue;
-    const isLoss = (t.pnl <= -0.40) || (t.exitReason && t.exitReason.includes("Stop Loss"));
+    const isLoss = (t.pnl <= -0.05) || (t.exitReason && (t.exitReason.includes("Stop Loss") || t.exitReason.includes("Durgunluk") || t.exitReason.includes("Zarar")));
     if (isLoss) {
       coinLossCount[sym] = (coinLossCount[sym] || 0) + 1;
       if (coinLossCount[sym] >= 2) {
@@ -1067,9 +1067,11 @@ async function scanLoop() {
           }
         }
 
-        // 🛡️ BTC TREND KORUMASI (Normal piyasa dalgalanmasında kilitlenme, sadece gerçek çöküş ve roketlerde durdur!)
-        const btcSafeForLong = (btc5mNumeric > -0.25) && (btc15mNumeric > -0.35) && (btc15mNumeric < 1.00) && (btc5mNumeric < 0.60);
-        const btcSafeForShort = (btc5mNumeric < 0.20) && (btc15mNumeric < 0.30) && (btc15mNumeric > -0.80) && (btc5mNumeric > -0.50);
+        // 🛡️ BTC TREND KORUMASI: BTC yönünün tersine işlem AÇILAMAZ!
+        // BTC 15m veya 5m yeşilken SHORT KESİNLİKLE YASAK! (Dipten zıplayan piyasada ters köşeyi önle)
+        // BTC 15m veya 5m kırmızı iken LONG KESİNLİKLE YASAK!
+        const btcSafeForLong = (btc5mNumeric >= -0.08) && (btc15mNumeric >= -0.12);
+        const btcSafeForShort = (btc5mNumeric <= 0.08) && (btc15mNumeric <= 0.08);
 
         // 🎯 TREND ŞARTI: LONG için 15m kesinlikle pozitif (>= +0.10%), SHORT için kesinlikle negatif (<= -0.10%) olmalı!
         const cur15m = (rInfo && rInfo.chg15m !== undefined) ? rInfo.chg15m : 0;
@@ -1406,13 +1408,13 @@ async function fastRiskLoop() {
       // 4. DİNAMİK ZİRVEDEN DÖNÜŞ KÂR KORUMASI (LAZER KÂR KİLİDİ)
       let pullbackLimit = 0.50;
       if (mfe >= 2.0) pullbackLimit = 0.40;
-      else if (mfe >= 1.2) pullbackLimit = 0.30;
-      else if (mfe >= 0.75) pullbackLimit = 0.22;
-      else if (mfe >= 0.55) pullbackLimit = 0.18;
+      else if (mfe >= 1.4) pullbackLimit = 0.35;
+      else if (mfe >= 1.0) pullbackLimit = 0.28;
+      else if (mfe >= 0.80) pullbackLimit = 0.24;
 
       // Eğer TP1 (%50 kâr) zaten cebe girdiyse kalan %50 pozisyona Moonshot (dev kâr) için daha geniş alan tanı!
       const effectivePullback = pos.tp1Taken ? Math.max(0.35, pullbackLimit) : pullbackLimit;
-      const minMfeForLock = pos.tp1Taken ? 0.90 : 0.70;
+      const minMfeForLock = pos.tp1Taken ? 0.95 : 0.80;
 
       if (!exitReason && move > 0 && mfe >= minMfeForLock && (mfe - move) >= effectivePullback) {
         exitReason = pos.tp1Taken
@@ -1474,7 +1476,7 @@ function closeTrade(pos, exitReason) {
   }
 
   // 🛡️ ÇOKLAMA / YENİDEN GİRİŞ VE ARDIŞIK ZARAR KORUMASI (COOLDOWN)
-  const isRealLoss = (totalTradePnl <= -0.40) || exitReason.includes("Stop Loss");
+  const isRealLoss = (totalTradePnl <= -0.05) || exitReason.includes("Stop Loss") || exitReason.includes("Durgunluk");
   if (isRealLoss) {
     coinLossCount[pos.symbol] = (coinLossCount[pos.symbol] || 0) + 1;
     if (coinLossCount[pos.symbol] >= 2) {
@@ -1482,8 +1484,9 @@ function closeTrade(pos, exitReason) {
       coinCooldowns[pos.symbol] = now + (12 * 60 * 60 * 1000);
       addLog(`🚫 ${pos.symbol} ardışık ${coinLossCount[pos.symbol]} zarar verdi — koin 12 saat boyunca yasaklandı!`, 'TRADE');
     } else {
-      // İlk zararda 2 saat ceza
-      coinCooldowns[pos.symbol] = now + (2 * 60 * 60 * 1000);
+      // İlk zararda en az 3 saat ceza (aynı koinden peş peşe tokat yemeyi engelle)
+      coinCooldowns[pos.symbol] = now + (3 * 60 * 60 * 1000);
+      addLog(`⚠️ ${pos.symbol} zarar yazdı ($${totalTradePnl.toFixed(2)}) — koin 3 saat donduruldu!`, 'TRADE');
     }
   } else if (totalTradePnl > 0.20) {
     // Kâr edince zarar sayacı sıfırlanır, 30 dk dinlenme
