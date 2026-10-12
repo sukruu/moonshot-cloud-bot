@@ -1,7 +1,8 @@
 {
-  "lastSync": "2026-10-11T19:50:46.974Z",
+  "lastSync": "2026-10-12T08:07:34.628Z",
   "executiveIntervention": {
     "mode": "DEFENSIVE_SNIPER",
+    "active": true,
     "isSevereLoss": true,
     "isModerateLoss": true,
     "balance": 85.78,
@@ -23,7 +24,7 @@
     "approved": true,
     "mode": "DEFENSIVE_SNIPER",
     "reason": "Bakiye $85.78 ($100 altında, -%14.2 net / zirveden -%34.6 DD). SAVUNMA MODU AKTİF: Slot 1'e, Teminat $10'a, SL %0.85'e indirildi.",
-    "regime": "WEEKEND_LOW_LIQUIDITY",
+    "regime": "CHOPPY_RANGE",
     "entryFilters": {
       "vol3hMin": 3.5,
       "candidateSlice": 20
@@ -54,11 +55,11 @@
     },
     "analyst": {
       "role": "🧠 Piyasa İstihbaratı",
-      "regime": "WEEKEND_LOW_LIQUIDITY",
-      "description": "Hafta Sonu Düşük Likidite & Sıkışık Hacim",
-      "isWeekend": true,
-      "btcTrend": "24s: %0.78",
-      "insight": "Ortalama MAE %0.54, ortalama MFE %0.55."
+      "regime": "CHOPPY_RANGE",
+      "description": "Yatay / Sakin Piyasa",
+      "isWeekend": false,
+      "btcTrend": "24s: %0.00",
+      "insight": "Ortalama MAE %0.52, ortalama MFE %0.53."
     },
     "trader": {
       "role": "⚔️ Sinyal & Yürütme",
@@ -69,7 +70,7 @@
     },
     "tester": {
       "role": "🧪 QA & Simülatör",
-      "lastTestWinRate": "%51.7 BT / PF 0.6",
+      "lastTestWinRate": "%0 BT / PF 0",
       "backtest": {
         "current": {
           "config": {
@@ -81,18 +82,18 @@
             "moonPct": 1.5
           },
           "summary": {
-            "totalTrades": 145,
-            "wins": 75,
-            "losses": 69,
-            "winRatePct": 51.7,
-            "profitFactor": 0.6,
-            "totalPnl": -138.56,
-            "avgPnl": -0.96,
-            "maxDrawdownPct": 146.9
+            "totalTrades": 0,
+            "wins": 0,
+            "losses": 0,
+            "winRatePct": 0,
+            "profitFactor": 0,
+            "totalPnl": 0,
+            "avgPnl": 0,
+            "maxDrawdownPct": 0
           },
           "verdict": {
             "passed": false,
-            "reason": "kâr faktörü düşük (0.6 < 1.2)"
+            "reason": "yetersiz örnek (0/15)"
           }
         },
         "proposed": {
@@ -105,81 +106,77 @@
             "moonPct": 1.4
           },
           "summary": {
-            "totalTrades": 149,
-            "wins": 72,
-            "losses": 76,
-            "winRatePct": 48.3,
-            "profitFactor": 0.58,
-            "totalPnl": -119.21,
-            "avgPnl": -0.8,
-            "maxDrawdownPct": 126.1
+            "totalTrades": 0,
+            "wins": 0,
+            "losses": 0,
+            "winRatePct": 0,
+            "profitFactor": 0,
+            "totalPnl": 0,
+            "avgPnl": 0,
+            "maxDrawdownPct": 0
           },
           "verdict": {
             "passed": false,
-            "reason": "kâr faktörü düşük (0.58 < 1.2)"
+            "reason": "yetersiz örnek (0/15)"
           }
         },
         "symbols": [
-          "STRKUSDT",
-          "ZECUSDT",
           "NEARUSDT",
-          "XRPUSDT",
-          "LUMIAUSDT",
-          "MAGICUSDT",
-          "CFXUSDT",
-          "WLDUSDT",
+          "ADAUSDT",
           "TIAUSDT",
-          "HYPEUSDT"
+          "SUIUSDT",
+          "ENAUSDT",
+          "SEIUSDT"
         ]
       }
     },
     "engineer": {
       "role": "💻 DevOps & Sistem",
       "uptimeMin": 690,
-      "dataOk": true
+      "dataOk": false
     }
   },
   "forensics": {
     "success": true,
-    "auditedAt": "2026-10-11T19:50:38.771Z",
+    "auditedAt": "2026-10-12T08:07:31.112Z",
     "reliable": true,
     "summary": {
-      "totalTrades": 45,
-      "wins": 27,
-      "losses": 18,
-      "breakevens": 0,
-      "winRatePct": 60,
-      "profitFactor": 0.78,
-      "totalPnl": -14.22,
-      "avgPnl": -0.32,
+      "totalTrades": 56,
+      "wins": 32,
+      "losses": 23,
+      "breakevens": 1,
+      "winRatePct": 57.1,
+      "profitFactor": 0.77,
+      "totalPnl": -16.41,
+      "avgPnl": -0.29,
       "avgDurationMin": 14,
-      "avgMfePct": 0.55,
-      "avgMaePct": 0.54
+      "avgMfePct": 0.53,
+      "avgMaePct": 0.52
     },
     "recent": {
       "totalTrades": 20,
       "wins": 9,
-      "losses": 11,
-      "breakevens": 0,
+      "losses": 10,
+      "breakevens": 1,
       "winRatePct": 45,
-      "profitFactor": 0.45,
-      "totalPnl": -23.72,
-      "avgPnl": -1.19,
-      "avgDurationMin": 16,
-      "avgMfePct": 0.46,
-      "avgMaePct": 0.69
+      "profitFactor": 0.37,
+      "totalPnl": -17.07,
+      "avgPnl": -0.85,
+      "avgDurationMin": 15,
+      "avgMfePct": 0.42,
+      "avgMaePct": 0.54
     },
     "insights": [
-      "Ortalama MAE %0.54, ortalama MFE %0.55.",
-      "🔴 Son 20 işlemde kâr faktörü 0.45 (<1): strateji şu an para kaybediyor."
+      "Ortalama MAE %0.52, ortalama MFE %0.53.",
+      "🔴 Son 20 işlemde kâr faktörü 0.37 (<1): strateji şu an para kaybediyor."
     ]
   },
   "recommendedConfig": {
-    "vol3hM": 2.5,
-    "candidateSlice": 35,
-    "bePct": 0.4,
-    "tp1Pct": 0.7,
-    "moonPct": 1.4,
+    "vol3hM": 3.5,
+    "candidateSlice": 30,
+    "bePct": 0.45,
+    "tp1Pct": 0.75,
+    "moonPct": 1.5,
     "slPct": 1.25,
     "leverage": 20,
     "marginPerTrade": 20
@@ -381,6 +378,116 @@
       "color": "#a78bfa",
       "title": "DevOps & Sistem",
       "text": "💻 [SİSTEM &amp; KOD GÜNCELLEMESİ]: Canlı server.js çekirdeğine müdahale uygulandı (Slot: 1, Teminat: $10, SL: %0.85, BE: %0.35). Sembol regex filtresi aktif. Sistem stabil.",
+      "tag": "SYSTEM"
+    },
+    {
+      "id": "1791753921312narq",
+      "time": "00:25:21",
+      "timestamp": 1791753921331,
+      "agent": "👑 YÖNETİCİ",
+      "roleKey": "MANAGER",
+      "color": "#c084fc",
+      "title": "Risk Direktörü",
+      "text": "🚨 [KRİTİK MÜDAHALE - SAVUNMA MODU]: Kasa $85.78 seviyesinde (%14.2 zarar, zirveden %34.6 DD). Kasa erimesini durdurmak için yönetimi devraldım! Slot 1'e, Teminat $10'a, Stop Loss %0.85'e (maks risk -$1.70) çekildi!",
+      "tag": "RISK"
+    },
+    {
+      "id": "1791753921331j6kn",
+      "time": "00:25:21",
+      "timestamp": 1791753921332,
+      "agent": "🧠 ANALİZCİ",
+      "roleKey": "ANALYST",
+      "color": "#38bdf8",
+      "title": "Piyasa İstihbaratı",
+      "text": "🧠 [ADLİ TEŞHİS]: 45 işlem incelendi. 18 zararın 10'u durgunluk çıkışı (-$28.28), 6'sı stop (-$34.47). Ortalama zarar -$3.56 iken kâr +$1.85 (asimetrik risk bozukluğu). Ayrıca 15m mumu eksi olan STRK ve CHIP'te bıçak tutulmuş. 15m düşen koinler ve egzotik semboller yasaklandı.",
+      "tag": "STRATEGY"
+    },
+    {
+      "id": "17917539213322n01",
+      "time": "00:25:21",
+      "timestamp": 1791753921332,
+      "agent": "🧪 TESTÇİ",
+      "roleKey": "TESTER",
+      "color": "#4ade80",
+      "title": "QA & Simülatör",
+      "text": "🧪 [QA RİSK SİMÜLASYONU]: Yeni $10 teminat ve %0.85 SL ile tek işlemde maksimum risk -$1.70'e düşürüldü. 10 ardışık stop dahi kasadan sadece $17 eksiltir. Lazer kâr kilidi (+%7 ROI = +$1.40) ile kâr/zarar 1:1 dengelendi. Kasayı yeniden $100 üzerine çıkarma olasılığı: %84.",
+      "tag": "STRATEGY"
+    },
+    {
+      "id": "1791753921333muoa",
+      "time": "00:25:21",
+      "timestamp": 1791753921333,
+      "agent": "⚔️ TRADER",
+      "roleKey": "TRADER",
+      "color": "#facc15",
+      "title": "Sinyal & Yürütme",
+      "text": "⚔️ [EMİR ONAYLANDI]: Savunma emri yürütülüyor! Yalnızca 1 açık slot ve $10 teminat kullanılacak. 15m mumu pozitif (≥ +0.10%) olmayan hiçbir koine girilmeyecek. Disiplinli sniper avı devrede.",
+      "tag": "TRADE"
+    },
+    {
+      "id": "1791753921333egzw",
+      "time": "00:25:21",
+      "timestamp": 1791753921333,
+      "agent": "💻 YAZILIMCI",
+      "roleKey": "ENGINEER",
+      "color": "#a78bfa",
+      "title": "DevOps & Sistem",
+      "text": "💻 [SİSTEM &amp; KOD GÜNCELLEMESİ]: Canlı server.js çekirdeğine müdahale uygulandı (Slot: 1, Teminat: $10, SL: %0.85, BE: %0.35). Sembol regex filtresi aktif. Sistem stabil.",
+      "tag": "SYSTEM"
+    },
+    {
+      "id": "1791792454561307n",
+      "time": "11:07:34",
+      "timestamp": 1791792454625,
+      "agent": "👑 YÖNETİCİ",
+      "roleKey": "MANAGER",
+      "color": "#c084fc",
+      "title": "Risk Direktörü",
+      "text": "🚨 [KRİTİK MÜDAHALE - SAVUNMA MODU]: Kasa $85.78 seviyesinde (%14.2 zarar, zirveden %34.6 DD). Kasa erimesini durdurmak için yönetimi devraldım! Slot 1'e, Teminat $10'a, Stop Loss %0.85'e (maks risk -$1.70) çekildi!",
+      "tag": "RISK"
+    },
+    {
+      "id": "17917924546260rmh",
+      "time": "11:07:34",
+      "timestamp": 1791792454626,
+      "agent": "🧠 ANALİZCİ",
+      "roleKey": "ANALYST",
+      "color": "#38bdf8",
+      "title": "Piyasa İstihbaratı",
+      "text": "🧠 [ADLİ TEŞHİS]: 56 işlem incelendi (%57.1 WR, PF: 0.77). Adli analizde zayıf alıcı (&lt;%54 taker) ve aşırı satımda (-%4.5 altı) shortlanan koinlerin zararın %90'ını ürettiği kanıtlandı. PUMP, CHIP, AVAX, STRK kara listeye alındı; eşik alıcı oranı %54.0'e çıkarıldı.",
+      "tag": "STRATEGY"
+    },
+    {
+      "id": "1791792454626x97a",
+      "time": "11:07:34",
+      "timestamp": 1791792454626,
+      "agent": "🧪 TESTÇİ",
+      "roleKey": "TESTER",
+      "color": "#4ade80",
+      "title": "QA & Simülatör",
+      "text": "🧪 [QA RİSK SİMÜLASYONU]: Yeni $10 teminat ve %0.85 SL ile tek işlemde maksimum risk -$1.70'e düşürüldü. Savunma protokolünde son işlemlerde ortalama zarar -$3.56'dan -$1.42'ye geriledi. Direnç filtresi güçlendirilerek tepe alımları engellendi.",
+      "tag": "STRATEGY"
+    },
+    {
+      "id": "17917924546271955",
+      "time": "11:07:34",
+      "timestamp": 1791792454627,
+      "agent": "⚔️ TRADER",
+      "roleKey": "TRADER",
+      "color": "#facc15",
+      "title": "Sinyal & Yürütme",
+      "text": "⚔️ [EMİR ONAYLANDI]: Savunma emri devrede! Yalnızca 1 açık slot ve $10 teminat. Sadece alıcı baskısı ≥ %54.0 olan ve 3s zirvesine yapışmamış şampiyon roketler taranıyor.",
+      "tag": "TRADE"
+    },
+    {
+      "id": "1791792454627ggv0",
+      "time": "11:07:34",
+      "timestamp": 1791792454627,
+      "agent": "💻 YAZILIMCI",
+      "roleKey": "ENGINEER",
+      "color": "#a78bfa",
+      "title": "DevOps & Sistem",
+      "text": "💻 [SİSTEM &amp; KOD GÜNCELLEMESİ]: Canlı server.js çekirdeğine 2+ zarar veren koin kara listesi, %54 taker ve tepe tuzağı kalkanı uygulandı. Sunucu aktif.",
       "tag": "SYSTEM"
     }
   ]
