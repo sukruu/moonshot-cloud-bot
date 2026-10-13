@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 
 const DIALOGUE_FILE = path.join(__dirname, 'team_dialogue.json');
-const MAX_DIALOGUES = 50;
+const MAX_DIALOGUES = 100;
 
 const AGENTS = {
   MANAGER:  { name: '👑 YÖNETİCİ',  color: '#7c3aed', title: 'Risk Direktörü' },

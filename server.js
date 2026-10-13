@@ -1117,6 +1117,7 @@ async function scanLoop() {
           if (scoutInfo) {
             // CVD Uyumsuzluk Kontrolü (Fakeout & Squeeze Engeli)
             if (side === 'LONG' && scoutInfo.cvdDivergence === 'BEARISH_DIVERGENCE') {
+              coinCooldowns[sym] = now + (3 * 60 * 1000);
               addLog(`🛡️ [CVD UYUMSUZLUK VETOSU]: ${sym} LONG engellendi — Ayı Uyumsuzluğu tespit edildi (Fiyat yükselirken kümülatif alıcı hacmi negatif, Suni Pump)!`, 'WARN');
               try {
                 addDialogue('WHALE_HUNTER', `🛑 VETO! ${sym} üzerinde Ayı CVD Uyumsuzluğu var. Fiyat yukarı çekiliyor ancak tahtayı alıcılar değil satıcılar süpürüyor (Fakeout riski), LONG onaylamıyorum!`, 'RISK');
@@ -1124,6 +1125,7 @@ async function scanLoop() {
               continue;
             }
             if (side === 'SHORT' && scoutInfo.cvdDivergence === 'BULLISH_DIVERGENCE') {
+              coinCooldowns[sym] = now + (3 * 60 * 1000);
               addLog(`🛡️ [CVD UYUMSUZLUK VETOSU]: ${sym} SHORT engellendi — Boğa Uyumsuzluğu tespit edildi (Fiyat düşerken kümülatif kurumsal alıcılar absorbe ediyor)!`, 'WARN');
               try {
                 addDialogue('WHALE_HUNTER', `🛑 VETO! ${sym} üzerinde Boğa CVD Uyumsuzluğu var. Fiyat aşağı basılıyor ancak agresif alıcılar dip topluyor (Squeeze riski), SHORT onaylamıyorum!`, 'RISK');
@@ -1132,6 +1134,7 @@ async function scanLoop() {
             }
 
             if (side === 'LONG' && scoutInfo.isApprovedLong === false) {
+              coinCooldowns[sym] = now + (3 * 60 * 1000);
               addLog(`🛡️ [BALİNA AVCISI VETOSU]: ${sym} LONG engellendi — Net para çıkışı (-$${Math.abs(scoutInfo.netFlowM)}M, Alıcı: %${scoutInfo.takerPct}%) tespit edildi!`, 'WARN');
               try {
                 addDialogue('WHALE_HUNTER', `🛑 VETO! ${sym} üzerinde kurumsal para çıkışı var (-$${Math.abs(scoutInfo.netFlowM)}M). Suni yükseliş tuzağı, LONG onaylamıyorum!`, 'RISK');
@@ -1139,6 +1142,7 @@ async function scanLoop() {
               continue;
             }
             if (side === 'SHORT' && scoutInfo.isApprovedShort === false) {
+              coinCooldowns[sym] = now + (3 * 60 * 1000);
               addLog(`🛡️ [BALİNA AVCISI VETOSU]: ${sym} SHORT engellendi — Net para girişi (+$${scoutInfo.netFlowM}M, Alıcı: %${scoutInfo.takerPct}%) tespit edildi!`, 'WARN');
               try {
                 addDialogue('WHALE_HUNTER', `🛑 VETO! ${sym} üzerinde kurumsal para girişi var (+$${scoutInfo.netFlowM}M). Ayı tuzağı (short squeeze riski), SHORT onaylamıyorum!`, 'RISK');
@@ -1157,11 +1161,13 @@ async function scanLoop() {
               if (totalDepth > 0) {
                 const obi = (bidVol - askVol) / totalDepth;
                 if (side === 'LONG' && obi < -0.38) {
+                  coinCooldowns[sym] = now + (2 * 60 * 1000);
                   addLog(`🛡️ [EMİR DEFTERİ DUVAR VETOSU]: ${sym} LONG engellendi — Satış kademelerinde devasa direnç duvarı var (OBI: ${obi.toFixed(2)}, Asks: ${askVol.toFixed(0)} vs Bids: ${bidVol.toFixed(0)})!`, 'WARN');
                   try { addDialogue('WHALE_HUNTER', `🛑 DUVAR ENGELİ! ${sym} üzerinde satış emirleri alışların 2 katından fazla (OBI: ${obi.toFixed(2)}). Direnç duvarı kırılmadan LONG onaylamıyorum!`, 'RISK'); } catch(e) {}
                   continue;
                 }
                 if (side === 'SHORT' && obi > 0.38) {
+                  coinCooldowns[sym] = now + (2 * 60 * 1000);
                   addLog(`🛡️ [EMİR DEFTERİ DUVAR VETOSU]: ${sym} SHORT engellendi — Alış kademelerinde güçlü destek duvarı var (OBI: +${obi.toFixed(2)}, Bids: ${bidVol.toFixed(0)} vs Asks: ${askVol.toFixed(0)})!`, 'WARN');
                   try { addDialogue('WHALE_HUNTER', `🛑 DUVAR ENGELİ! ${sym} üzerinde alış emirleri satışların 2 katından fazla (OBI: +${obi.toFixed(2)}). Destek duvarına çarpıp zıplama riski, SHORT onaylamıyorum!`, 'RISK'); } catch(e) {}
                   continue;
@@ -1176,11 +1182,13 @@ async function scanLoop() {
           const fundingInfo = fundingMap ? fundingMap[sym] : null;
           if (fundingInfo) {
             if (side === 'LONG' && fundingInfo.isApprovedLong === false) {
+              coinCooldowns[sym] = now + (3 * 60 * 1000);
               addLog(`🛡️ [FONLAMA VETOSU]: ${sym} LONG engellendi — Fonlama aşırı şişkin (+%${fundingInfo.fundingRatePct}), tepe likidasyon tuzağı!`, 'WARN');
               try { addDialogue('FREQAI', `🛑 VETO! ${sym} fonlaması çok yüksek (+%${fundingInfo.fundingRatePct}). Küçük yatırımcı long sıkışmasında, LONG onaylamıyorum!`, 'RISK'); } catch(e) {}
               continue;
             }
             if (side === 'SHORT' && fundingInfo.isApprovedShort === false) {
+              coinCooldowns[sym] = now + (3 * 60 * 1000);
               addLog(`🛡️ [FONLAMA VETOSU]: ${sym} SHORT engellendi — Fonlama ağır negatif (%${fundingInfo.fundingRatePct}), short squeeze riski!`, 'WARN');
               try { addDialogue('FREQAI', `🛑 VETO! ${sym} fonlaması aşırı negatif (%${fundingInfo.fundingRatePct}). Short squeeze patlaması kapıda, SHORT onaylamıyorum!`, 'RISK'); } catch(e) {}
               continue;
@@ -1208,6 +1216,7 @@ async function scanLoop() {
           } catch(e) {}
 
           if (!mlEval.isApproved) {
+            coinCooldowns[sym] = now + (3 * 60 * 1000);
             addLog(`🛡️ [FREQ-AI ML VETOSU]: ${sym} ${side} engellendi — Model kazanma olasılığı %${mlEval.winProbabilityPct} < %${mlEval.minRequiredProbability} (${mlEval.topDeterrent})`, 'WARN');
             try {
               addDialogue('FREQAI', `🛑 VETO! ${sym} ${side} için FreqAI model kazanma olasılığı düşük (%${mlEval.winProbabilityPct} < %${mlEval.minRequiredProbability}). Riskli işlem onaylanmadı!`, 'RISK');
@@ -1226,6 +1235,7 @@ async function scanLoop() {
           } catch(e) {}
 
           if (!judgeClearance.approved) {
+            coinCooldowns[sym] = now + (5 * 60 * 1000);
             addLog(`🛡️ [YARGIÇ MAHKEME VETOSU]: ${sym} ${side} engellendi — ${judgeClearance.reason}`, 'WARN');
             try {
               addDialogue('JUDGE', `🛑 MAHKEME VETOSU! ${sym} sanığı için hüküm: ${judgeClearance.verdict}. Gerekçe: ${judgeClearance.reason}. İşlem durduruldu!`, 'RISK');
@@ -3568,7 +3578,7 @@ server.listen(PORT, () => {
     };
 
     setTimeout(runTeam, 2000);
-    setInterval(runTeam, 30 * 60 * 1000);
+    setInterval(runTeam, 5 * 60 * 1000);
   } catch (e) {
     addLog(`Ajan Ekibi yüklenemedi: ${e.message}`, 'WARN');
   }
