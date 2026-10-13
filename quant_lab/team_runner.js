@@ -132,7 +132,9 @@ function calculateConvictionSizing({
   judicialScore = 80,
   balance = 100,
   mode = 'BALANCED',
-  freeMargin = null
+  freeMargin = null,
+  fundingRatePct = 0.01,
+  isShortSqueeze = false
 } = {}) {
   const free = (freeMargin !== null && !isNaN(freeMargin)) ? Number(freeMargin) : balance;
 
@@ -186,6 +188,15 @@ function calculateConvictionSizing({
   if (jud >= 90) score += 10;
   else if (jud >= 80) score += 5;
 
+  // F) 🎯 Negatif Fonlama & Likidasyon Sıkışması (Short Squeeze Hunter - Max +18 puan)
+  const fundRate = Number(fundingRatePct || 0.01);
+  const isSqueeze = (side === 'LONG') && (isShortSqueeze || fundRate <= -0.030);
+  if (isSqueeze) {
+    if (fundRate <= -0.050) score += 18;
+    else if (fundRate <= -0.035) score += 14;
+    else score += 10;
+  }
+
   score = Math.min(100, Math.max(0, score));
 
   // 3) Kasa Büyüklüğüne Göre Dinamik Kelly Tavanı (Maksimum %28 teminat)
@@ -198,16 +209,23 @@ function calculateConvictionSizing({
     let margin = Math.min(maxSafeMargin, Math.max(24.0, Number((balance * 0.25).toFixed(1))));
     if (free < margin) margin = Math.max(10.0, Number(free.toFixed(1)));
 
+    const customLabel = isSqueeze ? '👑 A+ SHORT SQUEEZE ROKETİ' : '👑 A+ ŞAMPİYON VUR-KAÇ';
+    const moonTarget = isSqueeze ? 2.40 : 2.20;
+    const tp1Target = isSqueeze ? 1.05 : 1.00;
+
     return {
       tier: 'TIER_A_PLUS',
-      tierLabel: '👑 A+ ŞAMPİYON VUR-KAÇ',
+      tierLabel: customLabel,
+      isShortSqueeze: isSqueeze,
       margin: margin,
       slPct: 0.90,       // Güçlü ivmede sarkma payı
       bePct: 0.40,       // +%0.40 Spot görünce $0 riske kitle
-      tp1Pct: 1.00,      // +%1.00 Spot (+%20 ROI) -> $25 teminatta +$2.50 kârı anında kasaya kitle
-      moonPct: 2.20,     // +%2.20 Spot (+%44 ROI) -> Kalan yarısı dev vur-kaçla koşsun (+$5.50 kâr)
+      tp1Pct: tp1Target, // TP1 kârı anında kasaya kitle
+      moonPct: moonTarget, // Kalan yarısı dev vur-kaçla koşsun
       convictionScore: score,
-      rationale: `Skor %${score} (Taker: %${effectiveTaker.toFixed(1)}, FreqAI: %${winProb}, Akış: $${flow}M). A+ Şampiyon kurulumu! Teminat $${margin}'a yükseltildi, Moonshot +%2.20.`
+      rationale: isSqueeze 
+        ? `🔥 SHORT SQUEEZE TESPİT EDİLDİ! Fonlama %${fundRate.toFixed(3)} (Ağır Negatif). Balinalar shortçuları patlatıyor! Teminat $${margin}, Moonshot +%${moonTarget.toFixed(2)}.`
+        : `Skor %${score} (Taker: %${effectiveTaker.toFixed(1)}, FreqAI: %${winProb}, Akış: $${flow}M). A+ Şampiyon kurulumu! Teminat $${margin}'a yükseltildi, Moonshot +%2.20.`
     };
   } else if (score >= 65) {
     // 💎 TIER-1 GÜÇLÜ KURULUM

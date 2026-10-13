@@ -81,19 +81,22 @@ const DYNAMIC_LIMITS = {
   candidateSlice: [15, 50]
 };
 
-// ŞAMPİYON ÖNCELİKLİ KOİNLER (Ekran 1 VIP Listesi)
+// ŞAMPİYON ÖNCELİKLİ KOİNLER (Ekran 1 VIP Listesi - En Yüksek Hacim ve Volatilite Roketleri)
 const DEFAULT_VIP_TARGETS = {
-  "ONEUSDT":   { minVol: 50,  label: "🎯 Lazer Sniper ($400M+ Hacim)" },
-  "SAGAUSDT":  { minVol: 50,  label: "🎯 Roket Kırılım ($200M Hacim)" },
-  "BULLAUSDT": { minVol: 30,  label: "🚀 Güçlü İvme" },
-  "ENAUSDT":   { minVol: 50,  label: "💎 Hacim Lideri ($540M Hacim)" },
-  "NEARUSDT":  { minVol: 100, label: "💎 Dev Trendci ($1.2B Hacim)" },
-  "SEIUSDT":   { minVol: 40,  label: "🚀 Hızlı Sıçrayan ($110M Hacim)" },
-  "TIAUSDT":   { minVol: 50,  label: "🚀 Trend Lideri ($300M+ Hacim)" },
-  "SUIUSDT":   { minVol: 100, label: "⚡ Likidite Canavarı ($900M+ Hacim)" },
-  "PLUMEUSDT": { minVol: 20,  label: "⚡ Yeni Ralli" },
-  "BERAUSDT":  { minVol: 20,  label: "🔥 Hızlı Hareket" },
-  "PEOPLEUSDT":{ minVol: 30,  label: "🎯 Yüksek Volatilite" }
+  "PEPEUSDT":  { minVol: 50,  label: "🎯 Meme Hacim Lideri ($800M+ Hacim)" },
+  "WIFUSDT":   { minVol: 50,  label: "🚀 Yüksek Volatilite Roketi ($400M+ Hacim)" },
+  "SUIUSDT":   { minVol: 80,  label: "⚡ Likidite Canavarı ($900M+ Hacim)" },
+  "NEARUSDT":  { minVol: 80,  label: "💎 Dev Trendci ($1.2B Hacim)" },
+  "FETUSDT":   { minVol: 40,  label: "🧠 Yapay Zeka Lideri ($300M+ Hacim)" },
+  "APTUSDT":   { minVol: 40,  label: "⚡ Hızlı L1 Roketi ($250M+ Hacim)" },
+  "TAOUSDT":   { minVol: 40,  label: "💎 Kurumsal AI Likiditesi ($200M+ Hacim)" },
+  "DOGEUSDT":  { minVol: 60,  label: "🐶 Mega Likidite ($600M+ Hacim)" },
+  "NEIROUSDT": { minVol: 30,  label: "🔥 Güncel Volatilite Canavarı" },
+  "ENAUSDT":   { minVol: 40,  label: "💎 Hacim Lideri ($500M+ Hacim)" },
+  "SEIUSDT":   { minVol: 35,  label: "🚀 Hızlı Sıçrayan ($150M Hacim)" },
+  "TIAUSDT":   { minVol: 40,  label: "🚀 Trend Lideri ($300M+ Hacim)" },
+  "PEOPLEUSDT":{ minVol: 30,  label: "🎯 Yüksek Volatilite" },
+  "SAGAUSDT":  { minVol: 30,  label: "🎯 Roket Kırılım ($150M Hacim)" }
 };
 
 let VIP_TARGETS = { ...DEFAULT_VIP_TARGETS };
@@ -786,6 +789,8 @@ async function scanLoop() {
       return p >= 0.0001;
     });
 
+    const fundMap = (teamStatusCache && teamStatusCache.fundingRates && teamStatusCache.fundingRates.fundingMap) || globalFundingMap || {};
+
     const topCandidates = validTickers.map(t => {
       const sym = t.symbol;
       const volM = (parseFloat(t.quoteVolume) || 0) / 1e6;
@@ -813,8 +818,15 @@ async function scanLoop() {
         }
       }
 
+      // 🔥 SHORT SQUEEZE ADAYI ÖNCELİĞİ (Ağır negatif fonlamalı koinleri öne çek)
+      const fItem = fundMap[sym];
+      let squeezeBoost = 0;
+      if (fItem && (fItem.bias === 'SHORT_SQUEEZE_ALERT' || fItem.fundingRatePct <= -0.030)) {
+        squeezeBoost = 45;
+      }
+
       const instantScore = rollMovePct > 0 ? rollMovePct * 12 : Math.abs(rollMovePct) * 8;
-      const hotScore = instantScore + Math.abs(rawChg > 0 ? Math.min(rawChg, 25) : Math.max(rawChg, -25)) + (Math.sqrt(volM) * 1.8) + (isVip ? 20 : 0) + radarBoost;
+      const hotScore = instantScore + Math.abs(rawChg > 0 ? Math.min(rawChg, 25) : Math.max(rawChg, -25)) + (Math.sqrt(volM) * 1.8) + (isVip ? 20 : 0) + radarBoost + squeezeBoost;
 
       return {
         ...t,
@@ -938,6 +950,14 @@ async function scanLoop() {
           if (isEarlyShortMove && (sig.includes("AYI") || sig.includes("ŞELALE") || sig.includes("BALİNA"))) {
             isDirectRadarShort = true;
             radarTag = `[${sig} | 3s: %${chg3.toFixed(1)} / 15m: %${chg15Val.toFixed(1)} / %${(100 - taker).toFixed(0)} Satıcı]`;
+          }
+
+          // 3. NEGATİF FONLAMA SHORT SQUEEZE TETİĞİ (KURUMSAL LİKİDASYON ROKETİ)
+          const fItemLive = fundMap[sym];
+          const isSqueezeAlert = !!(fItemLive && (fItemLive.bias === 'SHORT_SQUEEZE_ALERT' || fItemLive.fundingRatePct <= -0.030));
+          if (isSqueezeAlert && chg15Val >= 0.05 && taker >= 51.5 && chg24Val >= -3.0 && chg24Val < 30.0) {
+            isDirectRadarLong = true;
+            radarTag = `[🔥 SHORT SQUEEZE | Fonlama: %${fItemLive.fundingRatePct} / %${taker.toFixed(0)} Alıcı]`;
           }
 
           // 🛡️ DÜŞEN BIÇAK (FALLING KNIFE) ENGELİ: 15m mumu negatif olan koine LONG, pozitif olan koine SHORT KESİNLİKLE YASAK!
@@ -1239,7 +1259,9 @@ async function scanLoop() {
                 judicialScore: judgeClearance ? judgeClearance.judicialScore : 80,
                 balance: balance,
                 mode: DYNAMIC.mode,
-                freeMargin: currentFreeMargin
+                freeMargin: currentFreeMargin,
+                fundingRatePct: fundingInfo ? fundingInfo.fundingRatePct : 0.01,
+                isShortSqueeze: !!(fundingInfo && (fundingInfo.bias === 'SHORT_SQUEEZE_ALERT' || fundingInfo.fundingRatePct <= -0.030))
               });
             } catch (e) {}
           }
