@@ -1,93 +1,5 @@
 [
   {
-    "id": "1791793732238gh1f",
-    "time": "11:28:52",
-    "timestamp": 1791793732254,
-    "agent": "👑 YÖNETİCİ",
-    "roleKey": "MANAGER",
-    "color": "#c084fc",
-    "title": "Risk Direktörü",
-    "text": "🚨 [KRİTİK MÜDAHALE - SAVUNMA MODU]: Kasa $85.78 seviyesinde (%14.2 zarar, zirveden %34.6 DD). Kasa erimesini durdurmak için yönetimi devraldım! Slot 1'e, Teminat $10'a çekildi!",
-    "tag": "RISK"
-  },
-  {
-    "id": "1791793732255uw0a",
-    "time": "11:28:52",
-    "timestamp": 1791793732255,
-    "agent": "🧠 ANALİZCİ",
-    "roleKey": "ANALYST",
-    "color": "#38bdf8",
-    "title": "Piyasa İstihbaratı",
-    "text": "🧠 [ADLİ TEŞHİS]: 56 işlem incelendi (%57.1 WR, PF: 0.77). Adli analizde zayıf alıcı (&lt;%54 taker) ve aşırı satımda (-%4.5 altı) shortlanan koinlerin zararın %90'ını ürettiği kanıtlandı. PUMP, CHIP, AVAX, STRK kara listeye alındı; eşik alıcı oranı %54.0'e çıkarıldı.",
-    "tag": "STRATEGY"
-  },
-  {
-    "id": "1791793732255gsmy",
-    "time": "11:28:52",
-    "timestamp": 1791793732255,
-    "agent": "🧪 TESTÇİ",
-    "roleKey": "TESTER",
-    "color": "#4ade80",
-    "title": "QA & Simülatör",
-    "text": "🧪 [STRATEJİ OPTİMİZASYONU]: 32 farklı strateji son 24 saatin mumlarında simüle edildi. 🏆 ŞAMPİYON: &quot;🔒 Erken Kilit&quot; (PF: 1.23, WR: %76.5, Sim Kâr: +$3.16 | SL: %0.85, BE: %0.35, TP1: %0.7). En karlı strateji canlıya uygulandı!",
-    "tag": "STRATEGY"
-  },
-  {
-    "id": "1791793732256et8h",
-    "time": "11:28:52",
-    "timestamp": 1791793732256,
-    "agent": "⚔️ TRADER",
-    "roleKey": "TRADER",
-    "color": "#facc15",
-    "title": "Sinyal & Yürütme",
-    "text": "⚔️ [EMİR ONAYLANDI]: Savunma ve Şampiyon &quot;🔒 Erken Kilit&quot; stratejisi yürütülüyor! Tek slot, $10 teminat. Taker ≥ %54.0 ve tepe tuzağı engelli roketler taranıyor.",
-    "tag": "TRADE"
-  },
-  {
-    "id": "1791793732256k57y",
-    "time": "11:28:52",
-    "timestamp": 1791793732256,
-    "agent": "💻 YAZILIMCI",
-    "roleKey": "ENGINEER",
-    "color": "#a78bfa",
-    "title": "DevOps & Sistem",
-    "text": "💻 [SİSTEM &amp; KOD GÜNCELLEMESİ]: Canlı server.js çekirdeğine Şampiyon &quot;🔒 Erken Kilit&quot; parametreleri sıcak yüklendi (Hot-Reload). Parametreler senkronize, sistem stabil.",
-    "tag": "SYSTEM"
-  },
-  {
-    "id": "1791794432322xcqo",
-    "time": "11:40:32",
-    "timestamp": 1791794432336,
-    "agent": "👑 YÖNETİCİ",
-    "roleKey": "MANAGER",
-    "color": "#c084fc",
-    "title": "Risk Direktörü",
-    "text": "🚨 [KRİTİK MÜDAHALE - SAVUNMA MODU]: Kasa $83.59 seviyesinde (%16.4 zarar, zirveden %16.4 DD). Kasa erimesini durdurmak için yönetimi devraldım! Slot 1'e, Teminat $10'a çekildi!",
-    "tag": "RISK"
-  },
-  {
-    "id": "1791794432337or8t",
-    "time": "11:40:32",
-    "timestamp": 1791794432337,
-    "agent": "🧠 ANALİZCİ",
-    "roleKey": "ANALYST",
-    "color": "#38bdf8",
-    "title": "Piyasa İstihbaratı",
-    "text": "🧠 [ADLİ TEŞHİS]: 56 işlem incelendi (%57.1 WR, PF: 0.77). Adli analizde zayıf alıcı (&lt;%54 taker) ve aşırı satımda (-%4.5 altı) shortlanan koinlerin zararın %90'ını ürettiği kanıtlandı. PUMP, CHIP, AVAX, STRK kara listeye alındı; eşik alıcı oranı %54.0'e çıkarıldı.",
-    "tag": "STRATEGY"
-  },
-  {
-    "id": "1791794432337409k",
-    "time": "11:40:32",
-    "timestamp": 1791794432337,
-    "agent": "🧪 TESTÇİ",
-    "roleKey": "TESTER",
-    "color": "#4ade80",
-    "title": "QA & Simülatör",
-    "text": "🧪 [STRATEJİ OPTİMİZASYONU]: 32 farklı strateji son 24 saatin mumlarında simüle edildi. 🏆 ŞAMPİYON: &quot;🔒 Erken Kilit&quot; (PF: 1.59, WR: %83.3, Sim Kâr: +$5 | SL: %0.75, BE: %0.25, TP1: %0.6). En karlı strateji canlıya uygulandı!",
-    "tag": "STRATEGY"
-  },
-  {
     "id": "1791794432338tb3g",
     "time": "11:40:32",
     "timestamp": 1791794432338,
@@ -547,6 +459,94 @@
     "color": "#475569",
     "title": "DevOps & Sistem",
     "text": "💻 [SİSTEM &amp; KOD GÜNCELLEMESİ]: Canlı server.js çekirdeğine Şampiyon &quot;🎯 Dengeli Vur-Kaç&quot; parametreleri sıcak yüklendi (Hot-Reload). Parametreler senkronize, sistem stabil.",
+    "tag": "SYSTEM"
+  },
+  {
+    "id": "1791884934025uufu",
+    "time": "12:48:54",
+    "timestamp": 1791884934088,
+    "agent": "👑 YÖNETİCİ",
+    "roleKey": "MANAGER",
+    "color": "#7c3aed",
+    "title": "Risk Direktörü",
+    "text": "👑 [VUR-KAÇ PORTFÖY DİREKTÖRÜ]: Kasa $103.84, açık slot 0/2. Mod: BALANCED. A+ Şampiyon sinyallerde Kelly teminatı $25-$28'e yükseltilecek! Sert sınırlar: uyumlu.",
+    "tag": "RISK"
+  },
+  {
+    "id": "17918849340890sec",
+    "time": "12:48:54",
+    "timestamp": 1791884934089,
+    "agent": "🧠 ANALİZCİ",
+    "roleKey": "ANALYST",
+    "color": "#0284c7",
+    "title": "Piyasa İstihbaratı",
+    "text": "Rejim: Yatay / Sakin Piyasa. BTC 24s %0.00, $15M+ hacimli koin sayısı 0. Öneri: hacim ≥ $3.5M, 35 aday.",
+    "tag": "REGIME"
+  },
+  {
+    "id": "1791884934089yn50",
+    "time": "12:48:54",
+    "timestamp": 1791884934089,
+    "agent": "🐋 BALİNA AVCISI",
+    "roleKey": "WHALE_HUNTER",
+    "color": "#0891b2",
+    "title": "Para Akışı & Fon",
+    "text": "🐋 [FON AKIŞI]: Net piyasa yönü: BULLISH ($3.1M). Kurumsal boğa alımları taranıyor.",
+    "tag": "FLOW"
+  },
+  {
+    "id": "1791884934090wkcv",
+    "time": "12:48:54",
+    "timestamp": 1791884934090,
+    "agent": "🎯 FREQ-AI & LİKİDASYON",
+    "roleKey": "FREQAI",
+    "color": "#db2777",
+    "title": "ML Olasılık & Fonlama",
+    "text": "🎯 [FREQ-AI &amp; FONLAMA]: ML Karar Motoru hazır (0 işlem kalibre). Ortalama fonlama: %0.0032. Minimum kazanma olasılığı eşiği: %68.",
+    "tag": "STRATEGY"
+  },
+  {
+    "id": "1791884934091i679",
+    "time": "12:48:54",
+    "timestamp": 1791884934091,
+    "agent": "🏛️ BAŞ YARGIÇ",
+    "roleKey": "JUDGE",
+    "color": "#b45309",
+    "title": "Adli Denetçi (Aslan11)",
+    "text": "🏛️ [ASLAN11 ADLİ HÜKÜM]: Mahkeme devrede (54 beraat, 2 mahkumiyet). Ön yargılama vizesi şartı devrede.",
+    "tag": "RISK"
+  },
+  {
+    "id": "1791884934091csrz",
+    "time": "12:48:54",
+    "timestamp": 1791884934091,
+    "agent": "🧪 TESTÇİ",
+    "roleKey": "TESTER",
+    "color": "#059669",
+    "title": "QA & Simülatör",
+    "text": "Backtest (6 koin). Mevcut: PF 0, net $0.00 | Önerilen: PF 0, net $0.00.",
+    "tag": "STRATEGY"
+  },
+  {
+    "id": "1791884934091kpvj",
+    "time": "12:48:54",
+    "timestamp": 1791884934092,
+    "agent": "⚔️ TRADER",
+    "roleKey": "TRADER",
+    "color": "#b45309",
+    "title": "Sinyal & Yürütme",
+    "text": "⚔️ [DİNAMİK YÜRÜTME]: 350+ koin taranıyor. Standart teminat: $20, A+ Şampiyon: $25-$28. Kademeli TP1 +%0.6, Vur-Kaç Moonshot +%1.25.",
+    "tag": "TRADE"
+  },
+  {
+    "id": "1791884934092poas",
+    "time": "12:48:54",
+    "timestamp": 1791884934092,
+    "agent": "💻 YAZILIMCI",
+    "roleKey": "ENGINEER",
+    "color": "#475569",
+    "title": "DevOps & Sistem",
+    "text": "Sunucu çalışma süresi 750 dk. Piyasa ve simülasyon verisi: güncel.",
     "tag": "SYSTEM"
   }
 ]

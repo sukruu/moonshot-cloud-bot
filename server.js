@@ -45,16 +45,22 @@ try {
   evaluatePreTradeClearance = judgeMod.evaluatePreTradeClearance;
 } catch (e) {}
 
+let calculateConvictionSizing = null;
+try {
+  const trMod = require('./quant_lab/team_runner');
+  calculateConvictionSizing = trMod.calculateConvictionSizing;
+} catch (e) {}
+
 // --- EKRAN 1 BİREBİR AYARLARI ---
 let CONFIG = {
   initialBalance: 100.0,     // Bakiye 100 Dolar
-  marginPerTrade: 10.0,      // Teminat 10$ (Risk/Reward koruması: Kasa büyümeden 20$ basılmaz)
+  marginPerTrade: 15.0,      // Temel Teminat 15$ (A+ Şampiyon kurulumunda $25-$28'e esner)
   leverage: 20,              // Kaldıraç 20x
-  maxSlots: 3,               // Max Slot 3 Adet
-  slPct: 0.85,               // Stop Loss %0.85 Spot (20x ile -%17 ROI = -$1.70 maks risk)
+  maxSlots: 2,               // 2 Slot (Dengeli sermaye tahsisi & bağımsız fırsat yakalama)
+  slPct: 0.95,               // Stop Loss %0.95 Spot (20x ile -%19 ROI = -$3.80 maks risk)
   bePct: 0.40,               // Erken Başabaş Kilidi %0.40 Spot (+%8 ROI görünce $0 Riske kitle)
-  moonPct: 1.50,             // Moonshot TP2 Hedefi %1.50 Spot (+%30 ROI)
-  tp1Pct: 0.85,              // Kademeli Kâr Alma TP1 Hedefi %0.85 Spot (+%17 ROI = +$1.70 ile 1:1 R:R)
+  moonPct: 1.80,             // Vur-Kaç Moonshot TP2 Hedefi %1.80 Spot (+%36 ROI)
+  tp1Pct: 0.90,              // Kademeli Kâr Alma TP1 Hedefi %0.90 Spot (+%18 ROI)
   feeRate: 0.0005,           // Binance Futures taker %0.05 (TEK YÖN)
   scanIntervalMs: 4000,
   riskIntervalMs: 2500,
@@ -746,10 +752,11 @@ async function scanLoop() {
 
     // 🛡️ SERBEST MARJİN / SERMAYE KONTROLÜ: Açık pozisyonlar ve yeni işlem için yeterli kasa yoksa bekle
     const usedMargin = activePositions.reduce((acc, p) => acc + (p.margin || 0), 0);
-    const requiredMargin = CONFIG.marginPerTrade || 10.0;
-    if (balance - usedMargin < requiredMargin || balance < requiredMargin) {
+    const freeMargin = balance - usedMargin;
+    const minEntryMargin = 10.0;
+    if (freeMargin < minEntryMargin || balance < minEntryMargin) {
       if (Date.now() - lastScanHeartbeat > 60000) {
-        addLog(`⚠️ Yetersiz Serbest Teminat: Kasa $${balance.toFixed(2)} (Serbest: $${(balance - usedMargin).toFixed(2)}) < Gerekli Teminat $${requiredMargin.toFixed(2)}. Yeni işlem açılmıyor.`, 'WARN');
+        addLog(`⚠️ Yetersiz Serbest Teminat: Kasa $${balance.toFixed(2)} (Serbest: $${freeMargin.toFixed(2)}) < $${minEntryMargin.toFixed(2)}. Yeni işlem açılmıyor.`, 'WARN');
       }
       return;
     }
@@ -1206,9 +1213,46 @@ async function scanLoop() {
             continue;
           }
 
+          // 👑 1. AJAN (PORTFÖY YÖNETİCİSİ) DİNAMİK ASİMETRİK TEMİNAT & VUR-KAÇ BOYUTLANDIRMASI
+          const currentFreeMargin = balance - activePositions.reduce((acc, p) => acc + (p.margin || 0), 0);
+          let sizing = {
+            tier: 'TIER_STANDARD',
+            tierLabel: '🛡️ STANDART VUR-KAÇ',
+            margin: CONFIG.marginPerTrade || 15.0,
+            slPct: CONFIG.slPct || 0.95,
+            bePct: CONFIG.bePct || 0.40,
+            tp1Pct: CONFIG.tp1Pct || 0.90,
+            moonPct: CONFIG.moonPct || 1.80,
+            convictionScore: 65,
+            rationale: ''
+          };
+          if (typeof calculateConvictionSizing === 'function') {
+            try {
+              sizing = calculateConvictionSizing({
+                sym: sym,
+                side: side,
+                takerBuyRatio: rInfo ? (rInfo.takerBuyRatio || 50) : 50,
+                winProbabilityPct: mlEval ? mlEval.winProbabilityPct : 70,
+                netFlowM: scoutInfo ? scoutInfo.netFlowM : 0,
+                vol3hM: rInfo ? (rInfo.vol3hM || 5.0) : 5.0,
+                isVip: VIP_TARGETS[sym] !== undefined,
+                judicialScore: judgeClearance ? judgeClearance.judicialScore : 80,
+                balance: balance,
+                mode: DYNAMIC.mode,
+                freeMargin: currentFreeMargin
+              });
+            } catch (e) {}
+          }
+
+          const tradeMargin = Number(sizing.margin) || CONFIG.marginPerTrade || 15.0;
+          const tradeSlPct = Number(sizing.slPct) || CONFIG.slPct || 0.95;
+          const tradeBePct = Number(sizing.bePct) || CONFIG.bePct || 0.40;
+          const tradeTp1Pct = Number(sizing.tp1Pct) || CONFIG.tp1Pct || 0.90;
+          const tradeMoonPct = Number(sizing.moonPct) || CONFIG.moonPct || 1.80;
+
           const stopPrice = side === "LONG" 
-            ? curP * (1 - CONFIG.slPct / 100) 
-            : curP * (1 + CONFIG.slPct / 100);
+            ? curP * (1 - tradeSlPct / 100) 
+            : curP * (1 + tradeSlPct / 100);
 
           const position = {
             id: Date.now() + Math.random().toString(36).substring(2, 6),
@@ -1227,8 +1271,16 @@ async function scanLoop() {
             pnl: 0.0,
             roi: 0.0,
             entryRsi: 50,
-            margin: CONFIG.marginPerTrade,
+            margin: tradeMargin,
+            initialMargin: tradeMargin,
             leverage: CONFIG.leverage,
+            slPct: tradeSlPct,
+            bePct: tradeBePct,
+            tp1Pct: tradeTp1Pct,
+            moonPct: tradeMoonPct,
+            convictionTier: sizing.tier,
+            convictionScore: sizing.convictionScore,
+            convictionLabel: sizing.tierLabel,
             radarTag: radarTag,
             chg3h: rInfo ? rInfo.chg3h : null,
             vol3hM: rInfo ? rInfo.vol3hM : null,
@@ -1246,7 +1298,7 @@ async function scanLoop() {
           lastTradeOpenTime = Date.now();
           persistState();
 
-          addLog(`🚀 POZİSYON AÇILDI: [${side}] ${sym} @ $${curP.toFixed(4)} (SL: $${stopPrice.toFixed(4)}) ${radarTag}`, 'TRADE');
+          addLog(`🚀 POZİSYON AÇILDI: [${side}] ${sym} @ $${curP.toFixed(4)} | Teminat: $${tradeMargin.toFixed(1)} (${sizing.tierLabel} Skor: %${sizing.convictionScore}) | SL: $${stopPrice.toFixed(4)} | TP1: +%${tradeTp1Pct.toFixed(2)} | Moon: +%${tradeMoonPct.toFixed(2)}`, 'TRADE');
           try {
             const volTxt = (rInfo && rInfo.vol3hM != null) ? `$${rInfo.vol3hM.toFixed(1)}M` : 'bilinmiyor';
             const takerTxt = (rInfo && rInfo.takerBuyRatio != null) ? `%${rInfo.takerBuyRatio.toFixed(1)}` : 'bilinmiyor';
@@ -1256,8 +1308,8 @@ async function scanLoop() {
             addDialogue('WHALE_HUNTER', `🐋 ${sym} ${side} ONAYLANDI: Para akışı lehimize${scoutTxt}. Büyük oyuncularla aynı yöndeyiz!`, 'TRADE');
             addDialogue('FREQAI', `🎯 ${sym} ${side} ONAYLANDI: FreqAI ML Kazanma Olasılığı %${mlEval.winProbabilityPct} (${mlEval.confidence}) | Fonlama: ${fundTxt || '%0.010'}.`, 'TRADE');
             addDialogue('JUDGE', `🏛️ ${sym} ${side} BERAAT: Disiplin Puanı ${judgeClearance.judicialScore}/100. Giriş nizamı ve kurallar onaylandı.`, 'TRADE');
-            addDialogue('TRADER', `⚔️ ${sym} ${side} @ $${curP.toFixed(4)} | Nominal $${(CONFIG.marginPerTrade * CONFIG.leverage).toFixed(0)} (${CONFIG.leverage}x) | SL $${stopPrice.toFixed(4)}.`, 'TRADE');
-            addDialogue('MANAGER', `👑 Slot ${activePositions.length}/${CONFIG.maxSlots}. Bu işlemde maksimum risk: -$${(CONFIG.marginPerTrade * CONFIG.leverage * CONFIG.slPct / 100).toFixed(2)}.`, 'RISK');
+            addDialogue('TRADER', `⚔️ ${sym} ${side} @ $${curP.toFixed(4)} | Nominal $${(tradeMargin * CONFIG.leverage).toFixed(0)} (${CONFIG.leverage}x) | Teminat $${tradeMargin.toFixed(1)} | SL $${stopPrice.toFixed(4)}.`, 'TRADE');
+            addDialogue('MANAGER', `👑 [YÖNETİCİ ASİMETRİK VUR-KAÇ]: ${sym} ${sizing.tierLabel} (Skor %${sizing.convictionScore}). Teminat $${tradeMargin.toFixed(1)} tahsis edildi! Hedef TP1: +%${tradeTp1Pct.toFixed(2)}, Moon: +%${tradeMoonPct.toFixed(2)}. Slot ${activePositions.length}/${CONFIG.maxSlots}.`, 'RISK');
           } catch(e) {}
           break;
         }
@@ -1338,8 +1390,8 @@ async function fastRiskLoop() {
 
       let exitReason = null;
 
-      // 🎯 1. KADEMELİ KÂR ALMA (TP1): +%1.00 Spot (+%20 ROI) Görünce %50 Pozisyon Kapatılır, Kâr Cebe İner!
-      const tp1Goal = CONFIG.tp1Pct || 1.00;
+      // 🎯 1. KADEMELİ KÂR ALMA (TP1): Görünce %50 Pozisyon Kapatılır, Kâr Cebe İner!
+      const tp1Goal = pos.tp1Pct || CONFIG.tp1Pct || 0.90;
       if (!pos.tp1Taken && move >= tp1Goal) {
         pos.tp1Taken = true;
         const closedMargin = pos.margin / 2;
@@ -1349,7 +1401,7 @@ async function fastRiskLoop() {
 
         pos.tp1Pnl = (pos.tp1Pnl || 0) + tp1Profit;
         balance += tp1Profit; // Kâr bakiyeye anında eklenir
-        pos.margin = pos.margin - closedMargin; // Kalan pozisyon marjini yarıya düşer ($10)
+        pos.margin = pos.margin - closedMargin; // Kalan pozisyon marjini yarıya düşer
 
         // Kalan marjin için anlık nominal ve pnl güncellemesi (aynı tickte çıkış olursa çifte kazanç yazılmasını engeller)
         const remNominal = pos.margin * pos.leverage;
@@ -1366,6 +1418,7 @@ async function fastRiskLoop() {
       }
 
       // 🛡️ 2. DİNAMİK İZ SÜREN STOP (TRAILING STOP) & ERKEN BAŞABAŞ KORUMASI
+      const beGoal = pos.bePct || CONFIG.bePct || 0.40;
       let targetStop = null;
       if (mfe >= 1.40) {
         targetStop = isLong ? pos.entryPrice * (1 + (mfe - 0.35) / 100) : pos.entryPrice * (1 - (mfe - 0.35) / 100);
@@ -1373,7 +1426,7 @@ async function fastRiskLoop() {
         targetStop = isLong ? pos.entryPrice * (1 + (mfe - 0.25) / 100) : pos.entryPrice * (1 - (mfe - 0.25) / 100);
       } else if (mfe >= 0.65) {
         targetStop = isLong ? pos.entryPrice * (1 + (mfe - 0.20) / 100) : pos.entryPrice * (1 - (mfe - 0.20) / 100);
-      } else if (mfe >= (CONFIG.bePct || 0.35)) {
+      } else if (mfe >= beGoal) {
         targetStop = isLong ? pos.entryPrice * 1.0015 : pos.entryPrice * 0.9985;
       }
 
@@ -1388,7 +1441,7 @@ async function fastRiskLoop() {
       }
 
       if (targetStop) {
-        if (!pos.beLocked && mfe >= (CONFIG.bePct || 0.35)) {
+        if (!pos.beLocked && mfe >= beGoal) {
           pos.beLocked = true;
           addLog(`🛡️ [BAŞABAŞ KİLİDİ] ${pos.symbol} +%${mfe.toFixed(2)} Gördü, Stop Girişe Çekildi ($0.00 Risk).`, 'TRADE');
         }
@@ -1398,10 +1451,11 @@ async function fastRiskLoop() {
         }
       }
 
-      // 🎯 3. SERT VUR-KAÇ HEDEFİ (+%1.50 Spot = +%30 ROI ile Anında Kapat!)
-      if (!exitReason && move >= CONFIG.moonPct) {
+      // 🎯 3. SERT VUR-KAÇ HEDEFİ (+%1.80 - +%2.20 Spot = +%36 - +%44 ROI ile Anında Kapat!)
+      const moonGoal = pos.moonPct || CONFIG.moonPct || 1.80;
+      if (!exitReason && move >= moonGoal) {
         exitReason = pos.tp1Taken
-          ? `🎯 KADEMELİ MOONSHOT ALINDI (TP1: +%15 ROI + TP2: +%${pos.roi.toFixed(1)} ROI)`
+          ? `🎯 KADEMELİ MOONSHOT ALINDI (TP1 + Kalan: +%${pos.roi.toFixed(1)} ROI / +%${move.toFixed(2)} Spot)`
           : `🎯 VUR-KAÇ HEDEFİ VURULDU (+%${pos.roi.toFixed(1)} ROI / +%${move.toFixed(2)} Spot)`;
       }
 
@@ -1465,7 +1519,7 @@ function closeTrade(pos, exitReason) {
   balance += pos.pnl;
 
   const totalTradePnl = pos.pnl + (pos.tp1Pnl || 0);
-  const initialMargin = (pos.margin + (pos.tp1Taken ? pos.margin : 0)) || 20.0;
+  const initialMargin = pos.initialMargin || (pos.margin + (pos.tp1Taken ? pos.margin : 0)) || 20.0;
   const totalTradeRoi = (totalTradePnl / initialMargin) * 100;
   
   let formattedExitReason = exitReason;
@@ -2739,7 +2793,10 @@ function serveDashboardHtml() {
                 <td style="color:var(--muted);font-weight:700;">\${idx+1}</td>
                 <td>
                   <div style="display:flex; flex-direction:column; gap:2px;">
-                    <span style="font-family:'JetBrains Mono'; font-weight:900; font-size:13px; color:var(--text); letter-spacing:0.5px;">\${p.symbol}</span>
+                    <div style="display:flex; align-items:center; gap:5px;">
+                      <span style="font-family:'JetBrains Mono'; font-weight:900; font-size:13px; color:var(--text); letter-spacing:0.5px;">\${p.symbol}</span>
+                      <span class="badge-strat" style="font-size:8.5px; padding:1px 5px; font-weight:800;">\${p.convictionLabel ? p.convictionLabel + ' ($' + p.margin + ')' : '$' + (p.margin || 15)}</span>
+                    </div>
                     <span style="font-size:9.5px; color:var(--muted); text-overflow:ellipsis; white-space:nowrap; overflow:hidden; max-width:140px;" title="\${tagStr}">⚡ \${tagStr}</span>
                   </div>
                 </td>
@@ -2793,6 +2850,7 @@ function serveDashboardHtml() {
                     <div style="display:flex;align-items:center;gap:6px;">
                       <span class="pos-card-sym">\${p.symbol}</span>
                       <span class="\${isLong ? 'badge-side-long' : 'badge-side-short'}">\${isLong ? '▲ LONG 20x' : '▼ SHORT 20x'}</span>
+                      <span class="badge-strat" style="font-size:8.5px;padding:1px 5px;font-weight:800;">\${p.convictionLabel ? p.convictionLabel + ' ($' + p.margin + ')' : '$' + (p.margin || 15)}</span>
                     </div>
                     <span class="\${isWin ? 'badge-pnl-pos' : 'badge-pnl-neg'}" style="font-size:13px;font-weight:900;">\${roiStr} (\${pnlStr})</span>
                   </div>
@@ -2982,7 +3040,7 @@ function renderActiveRows(positions) {
         <td>
           <div style="display:flex;align-items:center;gap:4px;">
             <span style="font-weight:900;color:var(--text);font-family:'JetBrains Mono';">${p.symbol}</span>
-            <span class="badge-strat">🚀 MOONSHOT</span>
+            <span class="badge-strat">${p.convictionLabel ? p.convictionLabel + ' ($' + p.margin + ')' : '🚀 MOONSHOT ($' + (p.margin || 15) + ')'}</span>
           </div>
         </td>
         <td>
@@ -3051,6 +3109,7 @@ function renderActiveCards(positions) {
           <div style="display:flex;align-items:center;gap:6px;">
             <span class="pos-card-sym">${p.symbol}</span>
             <span class="${isLong ? 'badge-side-long' : 'badge-side-short'}">${isLong ? '▲ LONG 20x' : '▼ SHORT 20x'}</span>
+            <span class="badge-strat" style="font-size:8.5px;padding:1px 5px;font-weight:800;">${p.convictionLabel ? p.convictionLabel + ' ($' + p.margin + ')' : '$' + (p.margin || 15)}</span>
           </div>
           <span class="${isWin ? 'badge-pnl-pos' : 'badge-pnl-neg'}" style="font-size:13px;font-weight:900;">${roiStr} (${pnlStr})</span>
         </div>

@@ -13,7 +13,7 @@ const { getJudgeDossier, runCourtSession } = require('./judge_audit');
 const TEAM_STATUS_FILE = path.join(__dirname, 'team_status.json');
 
 // 🛡️ Sert güvenlik sınırları (hiçbir ajan aşamaz)
-const HARD = { maxMargin: 20, maxLeverage: 20, slMin: 0.75, slMax: 1.50 };
+const HARD = { maxMargin: 30, maxLeverage: 20, slMin: 0.70, slMax: 1.50 };
 
 const fmt = (n, d = 2) => (Number.isFinite(n) ? n.toFixed(d) : '-');
 
@@ -30,21 +30,21 @@ function evaluateExecutiveIntervention(ctx = {}, forensics = {}, regime = {}) {
 
   const summary = forensics.summary || {};
   const recent = forensics.recent || {};
-  const rec = regime.recommendedConfig || { vol3hM: 2.5, candidateSlice: 35 };
+  const rec = regime.recommendedConfig || { vol3hM: 2.2, candidateSlice: 35 };
 
   // Zarar ve geri çekilme tespitleri
   const isSevereLoss = balance < 95.0 || drawdownFromPeak >= 0.20 || (recent.totalTrades >= 8 && recent.profitFactor < 0.75);
   const isModerateLoss = (balance >= 95.0 && balance < 99.0) || drawdownFromPeak >= 0.12;
 
   let mode = 'BALANCED';
-  let targetSlots = 3;
-  let targetMargin = 10.0;
-  let targetSl = 0.85;
+  let targetSlots = 2;
+  let targetMargin = 20.0;
+  let targetSl = 0.95;
   let targetBe = 0.40;
-  let targetTp1 = 0.85;
-  let targetMoon = 1.50;
-  let vol3hMin = rec.vol3hM || 2.5;
-  let candidateSlice = rec.candidateSlice || 30;
+  let targetTp1 = 0.90;
+  let targetMoon = 1.80;
+  let vol3hMin = rec.vol3hM || 2.2;
+  let candidateSlice = rec.candidateSlice || 35;
   let reason = '';
 
   if (isSevereLoss) {
@@ -61,32 +61,37 @@ function evaluateExecutiveIntervention(ctx = {}, forensics = {}, regime = {}) {
   } else if (isModerateLoss) {
     mode = 'CAUTIOUS_RECOVERY';
     targetSlots = 2;
-    targetMargin = 10.0;
+    targetMargin = 12.0;
     targetSl = 0.85;
     targetBe = 0.40;
     targetTp1 = 0.85;
     targetMoon = 1.50;
     vol3hMin = Math.max(vol3hMin, 3.0);
     candidateSlice = 25;
-    reason = `Bakiye $${fmt(balance)}. TEMKİNLİ TOPARLANMA: Slot 2, Teminat $10, SL %0.85, TP1 %0.85.`;
+    reason = `Bakiye $${fmt(balance)}. TEMKİNLİ TOPARLANMA: Slot 2, Teminat $12, SL %0.85, TP1 %0.85.`;
   } else if (balance >= 120.0) {
     mode = 'GROWTH';
-    targetSlots = 4;
-    targetMargin = 20.0;
-    targetSl = 1.25;
-    targetBe = 0.45;
-    targetTp1 = 0.75;
-    targetMoon = 1.60;
-    reason = `Bakiye $${fmt(balance)} (Kârda). BÜYÜME MODU: 4 Slot, $20 Teminat.`;
-  } else {
-    mode = 'BALANCED';
     targetSlots = 3;
-    targetMargin = 15.0;
-    targetSl = 1.15;
-    targetBe = 0.45;
-    targetTp1 = 0.75;
-    targetMoon = 1.50;
-    reason = `Bakiye $${fmt(balance)}. DENGELİ MOD: 3 Slot, $15 Teminat.`;
+    targetMargin = 25.0;
+    targetSl = 1.05;
+    targetBe = 0.40;
+    targetTp1 = 0.95;
+    targetMoon = 2.20;
+    vol3hMin = Math.max(vol3hMin, 2.0);
+    candidateSlice = 40;
+    reason = `Bakiye $${fmt(balance)} (Büyüme). BÜYÜME MODU: 3 Slot, $25 Teminat, Moonshot +%2.20.`;
+  } else {
+    // Mevcut bakiye ~$100-$119 aralığı (Dengeli Vur-Kaç)
+    mode = 'BALANCED';
+    targetSlots = 2;          // 2 slot: Sermaye dağıtımı dengeli ($25 x 2 = $50 oyunda, $50+ serbest rezerv)
+    targetMargin = 20.0;      // Taban teminat $20 (A+ Şampiyon kurulumunda $25-$28'e esner)
+    targetSl = 0.95;          // Sıkı stop (%0.95 Spot = 20x ile -%19 ROI = -$3.80 risk)
+    targetBe = 0.40;          // +%0.40 Spot (+%8 ROI) görünce $0 riske kitle
+    targetTp1 = 0.90;         // +%0.90 Spot (+%18 ROI) ile %50 kârı anında kasaya al
+    targetMoon = 1.80;        // Vur-Kaç hedefi +%1.80 Spot (+%36 ROI)
+    vol3hMin = Math.max(vol3hMin, 2.0);
+    candidateSlice = 35;
+    reason = `Bakiye $${fmt(balance)}. VUR-KAÇ DENGELİ PORTFÖY: 2 Slot, Temel Teminat $20 (A+ Şampiyon $25-$28), Moonshot +%1.80.`;
   }
 
   return {
@@ -109,6 +114,134 @@ function evaluateExecutiveIntervention(ctx = {}, forensics = {}, regime = {}) {
     candidateSlice,
     reason
   };
+}
+
+/**
+ * 👑 Portföy Yöneticisi: Dinamik Teminat & Vur-Kaç Hedef Belirleme Motoru
+ * (Institutional Conviction Sizing Engine - Kelly & Asimetrik Getiri)
+ * GitHub hedge-fund benchmark: orallexa-ai-trading-agent & 51bitquant/ai-hedge-fund-crypto
+ */
+function calculateConvictionSizing({
+  sym = '',
+  side = 'LONG',
+  takerBuyRatio = 50,
+  winProbabilityPct = 70,
+  netFlowM = 0,
+  vol3hM = 5,
+  isVip = false,
+  judicialScore = 80,
+  balance = 100,
+  mode = 'BALANCED',
+  freeMargin = null
+} = {}) {
+  const free = (freeMargin !== null && !isNaN(freeMargin)) ? Number(freeMargin) : balance;
+
+  // 1) Savunma modunda sermaye koruması mutlak önceliklidir
+  if (mode === 'DEFENSIVE_SNIPER') {
+    return {
+      tier: 'TIER_DEFENSIVE',
+      tierLabel: '🛡️ SAVUNMA NİŞANCISI',
+      margin: Math.min(10.0, Math.max(8.0, free)),
+      slPct: 0.80,
+      bePct: 0.35,
+      tp1Pct: 0.80,
+      moonPct: 1.50,
+      convictionScore: 50,
+      rationale: 'Kasa savunma modunda: Sermaye korunuyor, teminat $10 ile sınırlandı.'
+    };
+  }
+
+  // 2) İkna Skoru (0 - 100 Puan) Hesaplanması
+  let score = 50;
+
+  // A) Balina Taker Oranı Katkısı (Max +25 puan)
+  const effectiveTaker = side === 'LONG' ? Number(takerBuyRatio || 50) : (100 - Number(takerBuyRatio || 50));
+  if (effectiveTaker >= 62) score += 25;
+  else if (effectiveTaker >= 58) score += 20;
+  else if (effectiveTaker >= 55) score += 12;
+  else if (effectiveTaker >= 52) score += 5;
+
+  // B) FreqAI Makine Öğrenimi Başarı Olasılığı (Max +20 puan)
+  const winProb = Number(winProbabilityPct || 70);
+  if (winProb >= 82) score += 20;
+  else if (winProb >= 76) score += 15;
+  else if (winProb >= 72) score += 10;
+  else if (winProb >= 68) score += 5;
+
+  // C) Net Kurumsal Para Akışı (Max +15 puan)
+  const flow = Number(netFlowM || 0);
+  const effectiveFlow = side === 'LONG' ? flow : -flow;
+  if (effectiveFlow >= 2.0) score += 15;
+  else if (effectiveFlow >= 1.0) score += 10;
+  else if (effectiveFlow >= 0.3) score += 5;
+
+  // D) Hacim Patlaması & VIP Koin (Max +15 puan)
+  if (isVip) score += 8;
+  const vol = Number(vol3hM || 5);
+  if (vol >= 30) score += 7;
+  else if (vol >= 15) score += 5;
+
+  // E) Yargıç Nizam Puanı (Max +10 puan)
+  const jud = Number(judicialScore || 80);
+  if (jud >= 90) score += 10;
+  else if (jud >= 80) score += 5;
+
+  score = Math.min(100, Math.max(0, score));
+
+  // 3) Kasa Büyüklüğüne Göre Dinamik Kelly Tavanı (Maksimum %28 teminat)
+  const maxSafeMargin = Math.min(30.0, Math.max(12.0, balance * 0.28));
+
+  // 4) Kategori Sınıflandırması & Parametre Belirleme
+  if (score >= 78) {
+    // 👑 A+ ŞAMPİYON VUR-KAÇ KURULUMU (Asimetrik Kâr Fırsatı)
+    // Hedef Teminat: $25 - $28 (Kasa $103 ise ~$26.0)
+    let margin = Math.min(maxSafeMargin, Math.max(24.0, Number((balance * 0.25).toFixed(1))));
+    if (free < margin) margin = Math.max(10.0, Number(free.toFixed(1)));
+
+    return {
+      tier: 'TIER_A_PLUS',
+      tierLabel: '👑 A+ ŞAMPİYON VUR-KAÇ',
+      margin: margin,
+      slPct: 0.90,       // Güçlü ivmede sarkma payı
+      bePct: 0.40,       // +%0.40 Spot görünce $0 riske kitle
+      tp1Pct: 1.00,      // +%1.00 Spot (+%20 ROI) -> $25 teminatta +$2.50 kârı anında kasaya kitle
+      moonPct: 2.20,     // +%2.20 Spot (+%44 ROI) -> Kalan yarısı dev vur-kaçla koşsun (+$5.50 kâr)
+      convictionScore: score,
+      rationale: `Skor %${score} (Taker: %${effectiveTaker.toFixed(1)}, FreqAI: %${winProb}, Akış: $${flow}M). A+ Şampiyon kurulumu! Teminat $${margin}'a yükseltildi, Moonshot +%2.20.`
+    };
+  } else if (score >= 65) {
+    // 💎 TIER-1 GÜÇLÜ KURULUM
+    let margin = Math.min(maxSafeMargin, Math.max(18.0, Number((balance * 0.18).toFixed(1))));
+    if (free < margin) margin = Math.max(10.0, Number(free.toFixed(1)));
+
+    return {
+      tier: 'TIER_HIGH',
+      tierLabel: '💎 TIER-1 GÜÇLÜ SİNYAL',
+      margin: margin,
+      slPct: 0.95,
+      bePct: 0.40,
+      tp1Pct: 0.85,
+      moonPct: 1.80,
+      convictionScore: score,
+      rationale: `Skor %${score}. Güçlü kurumsal sinyal! Teminat $${margin}, Moonshot +%1.80.`
+    };
+  } else {
+    // 🛡️ TIER-2 STANDART TEMKİNLİ KURULUM
+    let margin = Math.min(14.0, Math.max(10.0, Number((balance * 0.12).toFixed(1))));
+    if (free < margin) margin = Math.max(10.0, Number(free.toFixed(1)));
+
+    return {
+      tier: 'TIER_STANDARD',
+      tierLabel: '🛡️ STANDART VUR-KAÇ',
+      margin: margin,
+      slPct: 1.00,
+      bePct: 0.40,
+      tp1Pct: 0.80,
+      moonPct: 1.50,
+      convictionScore: score,
+      rationale: `Skor %${score}. Standart kurulum, kontrollü risk ($${margin} teminat).`
+    };
+  }
 }
 
 /**
@@ -271,7 +404,7 @@ async function runAutonomousTeamSync(ctx = {}) {
   } else {
     meetingLines.push([
       'MANAGER',
-      `Toplantı açıldı. Kasa $${fmt(ctx.balance)}, açık slot ${ctx.activeCount ?? '-'}/${intervention.maxSlots}. Mod: ${intervention.mode}. Sert sınırlar: ${guardrailsOk ? 'uyumlu' : 'İHLAL VAR'}.`,
+      `👑 [VUR-KAÇ PORTFÖY DİREKTÖRÜ]: Kasa $${fmt(ctx.balance)}, açık slot ${ctx.activeCount ?? '-'}/${intervention.maxSlots}. Mod: ${intervention.mode}. A+ Şampiyon sinyallerde Kelly teminatı $25-$28'e yükseltilecek! Sert sınırlar: ${guardrailsOk ? 'uyumlu' : 'İHLAL VAR'}.`,
       'RISK'
     ]);
     meetingLines.push([
@@ -301,7 +434,7 @@ async function runAutonomousTeamSync(ctx = {}) {
     ]);
     meetingLines.push([
       'TRADER',
-      `Giriş filtresi: hacim ≥ $${intervention.vol3hMin}M, ${intervention.candidateSlice} aday. Slot: ${intervention.maxSlots}, Teminat: $${intervention.marginPerTrade}, SL %${intervention.slPct}, BE %${intervention.bePct}.`,
+      `⚔️ [DİNAMİK YÜRÜTME]: 350+ koin taranıyor. Standart teminat: $${intervention.marginPerTrade}, A+ Şampiyon: $25-$28. Kademeli TP1 +%${intervention.tp1Pct}, Vur-Kaç Moonshot +%${intervention.moonPct}.`,
       'TRADE'
     ]);
     meetingLines.push([
@@ -405,4 +538,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { runAutonomousTeamSync, evaluateExecutiveIntervention };
+module.exports = { runAutonomousTeamSync, evaluateExecutiveIntervention, calculateConvictionSizing };
