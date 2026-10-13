@@ -1,99 +1,78 @@
 {
-  "lastSync": "2026-10-13T14:47:01.169Z",
+  "lastSync": "2026-10-13T20:22:20.040Z",
   "executiveIntervention": {
-    "mode": "CAUTIOUS_RECOVERY",
+    "mode": "DEFENSIVE_SNIPER",
     "active": true,
-    "isSevereLoss": false,
-    "isModerateLoss": true,
-    "balance": 95,
+    "isSevereLoss": true,
+    "isModerateLoss": false,
+    "balance": 89.6,
     "initialBalance": 100,
-    "peakBalance": 105,
-    "netDrawdownPct": 5,
-    "drawdownFromPeakPct": 9.5,
-    "maxSlots": 2,
-    "marginPerTrade": 12,
-    "slPct": 0.75,
-    "bePct": 0.4,
-    "tp1Pct": 0.65,
-    "moonPct": 1.3,
-    "vol3hMin": 1.8,
-    "candidateSlice": 35,
-    "reason": "Bakiye $95.00. TEMKİNLİ TOPARLANMA: Slot 2, Teminat $12, SL %0.48, TP1 %0.80.",
-    "championStrategy": {
-      "name": "Grid_SL0.75_BE0.40_TP0.65",
-      "params": {
-        "slPct": 0.75,
-        "bePct": 0.4,
-        "tp1Pct": 0.65,
-        "moonPct": 1.3,
-        "minJump": 0.5
-      },
-      "summary": {
-        "totalTrades": 19,
-        "wins": 14,
-        "losses": 5,
-        "winRatePct": 73.7,
-        "profitFactor": 1.61,
-        "totalPnl": 4.37,
-        "avgPnl": 0.23,
-        "maxDrawdownPct": 4.2
-      },
-      "score": 59.8
-    }
+    "peakBalance": 100,
+    "netDrawdownPct": 10.4,
+    "drawdownFromPeakPct": 10.4,
+    "maxSlots": 1,
+    "marginPerTrade": 10,
+    "slPct": 0.45,
+    "bePct": 0.6,
+    "tp1Pct": 0.55,
+    "moonPct": 1.5,
+    "vol3hMin": 2.2,
+    "candidateSlice": 25,
+    "reason": "Bakiye $89.60 ($100 altında, -%10.4 net / zirveden -%10.4 DD). SAVUNMA MODU AKTİF: Slot 1'e, Teminat $10'a, SL %0.45'e, TP1 %0.55'e ayarlandı."
   },
   "decision": {
     "approved": true,
-    "mode": "CAUTIOUS_RECOVERY",
-    "reason": "Bakiye $95.00. TEMKİNLİ TOPARLANMA: Slot 2, Teminat $12, SL %0.48, TP1 %0.80.",
+    "mode": "DEFENSIVE_SNIPER",
+    "reason": "Bakiye $89.60 ($100 altında, -%10.4 net / zirveden -%10.4 DD). SAVUNMA MODU AKTİF: Slot 1'e, Teminat $10'a, SL %0.45'e, TP1 %0.55'e ayarlandı.",
     "regime": "CHOPPY_RANGE",
     "championStrategy": {
-      "name": "Grid_SL0.75_BE0.40_TP0.65",
+      "name": "🎯 Dengeli Vur-Kaç",
       "params": {
-        "slPct": 0.75,
-        "bePct": 0.4,
-        "tp1Pct": 0.65,
-        "moonPct": 1.3,
-        "minJump": 0.5
+        "slPct": 0.48,
+        "bePct": 0.6,
+        "tp1Pct": 0.55,
+        "moonPct": 1.45,
+        "minJump": 0.55
       },
       "summary": {
-        "totalTrades": 19,
-        "wins": 14,
-        "losses": 5,
-        "winRatePct": 73.7,
-        "profitFactor": 1.61,
-        "totalPnl": 4.37,
-        "avgPnl": 0.23,
-        "maxDrawdownPct": 4.2
+        "totalTrades": 20,
+        "wins": 8,
+        "losses": 12,
+        "winRatePct": 40,
+        "profitFactor": 0.53,
+        "totalPnl": -6.57,
+        "avgPnl": -0.33,
+        "maxDrawdownPct": 7.4
       },
-      "score": 59.8
+      "score": 1.9
     },
     "entryFilters": {
-      "vol3hMin": 1.8,
-      "candidateSlice": 35
+      "vol3hMin": 2.2,
+      "candidateSlice": 25
     },
     "exitParams": {
-      "slPct": 0.75,
-      "bePct": 0.4,
-      "tp1Pct": 0.65,
-      "moonPct": 1.3
+      "slPct": 0.45,
+      "bePct": 0.6,
+      "tp1Pct": 0.55,
+      "moonPct": 1.5
     },
     "riskParams": {
-      "maxSlots": 2,
-      "marginPerTrade": 12,
+      "maxSlots": 1,
+      "marginPerTrade": 10,
       "leverage": 20
     }
   },
   "team": {
     "manager": {
       "role": "👑 Baş Risk & Portföy Direktörü",
-      "status": "ONAYLANDI",
-      "mode": "CAUTIOUS_RECOVERY",
+      "status": "🚨 SAVUNMA MODU MÜDAHALESİ",
+      "mode": "DEFENSIVE_SNIPER",
       "guardrails": {
         "marginOk": true,
         "leverageOk": true,
         "stopLossOk": true
       },
-      "message": "Bakiye $95.00. TEMKİNLİ TOPARLANMA: Slot 2, Teminat $12, SL %0.48, TP1 %0.80."
+      "message": "Bakiye $89.60 ($100 altında, -%10.4 net / zirveden -%10.4 DD). SAVUNMA MODU AKTİF: Slot 1'e, Teminat $10'a, SL %0.45'e, TP1 %0.55'e ayarlandı."
     },
     "analyst": {
       "role": "🧠 Piyasa İstihbaratı",
@@ -105,10 +84,10 @@
     },
     "trader": {
       "role": "⚔️ Sinyal & Yürütme",
-      "targetVolThreshold": "$1.8M (3s)",
-      "candidatePool": "35 aday",
-      "maxSlots": 2,
-      "marginPerTrade": "$12"
+      "targetVolThreshold": "$2.2M (3s)",
+      "candidatePool": "25 aday",
+      "maxSlots": 1,
+      "marginPerTrade": "$10"
     },
     "tester": {
       "role": "🧪 QA & Simülatör",
@@ -118,10 +97,10 @@
           "config": {
             "margin": 20,
             "leverage": 20,
-            "slPct": 0.48,
-            "bePct": 0.55,
-            "tp1Pct": 0.8,
-            "moonPct": 1.8
+            "slPct": 0.45,
+            "bePct": 0.6,
+            "tp1Pct": 0.55,
+            "moonPct": 1.5
           },
           "summary": {
             "totalTrades": 0,
@@ -142,10 +121,10 @@
           "config": {
             "margin": 20,
             "leverage": 20,
-            "slPct": 0.75,
-            "bePct": 0.4,
-            "tp1Pct": 0.65,
-            "moonPct": 1.3
+            "slPct": 0.45,
+            "bePct": 0.6,
+            "tp1Pct": 0.55,
+            "moonPct": 1.5
           },
           "summary": {
             "totalTrades": 0,
@@ -174,7 +153,7 @@
     },
     "engineer": {
       "role": "💻 DevOps & Sistem",
-      "uptimeMin": 120,
+      "uptimeMin": 330,
       "dataOk": false
     },
     "whale_scout": {
@@ -202,7 +181,7 @@
   },
   "forensics": {
     "success": true,
-    "auditedAt": "2026-10-13T14:46:54.324Z",
+    "auditedAt": "2026-10-13T20:22:08.421Z",
     "reliable": false,
     "summary": {
       "totalTrades": 0,
@@ -245,7 +224,7 @@
     "marginPerTrade": 20
   },
   "moneyFlow": {
-    "evaluatedAt": "2026-10-13T14:46:55.331Z",
+    "evaluatedAt": "2026-10-13T20:22:09.689Z",
     "marketFlowBias": "BULLISH",
     "netMarketFlowM": 3.1,
     "topBullInflows": [
@@ -437,7 +416,7 @@
     "scoutSummary": "Piyasa Net Akışı: $3.1M (BULLISH). En Çok Para Giren Boğalar: CKBUSDT (+$4.2M), ENAUSDT (+$3.1M), ZECUSDT (+$2.7M) | En Çok Para Çıkan Ayılar: CHIPUSDT (-$3.4M), STRKUSDT (-$2.8M), FETUSDT (-$2.1M)."
   },
   "fundingRates": {
-    "scannedAt": "2026-10-13T14:46:55.935Z",
+    "scannedAt": "2026-10-13T20:22:10.398Z",
     "avgFundingPct": 0.0032,
     "count": 6,
     "topShortSqueezes": [
@@ -603,227 +582,139 @@
     "courtSummary": "Mahkeme Denetimi: 56 duruşma (2 mahkumiyet, 54 beraat). Ortalama İntizam Skoru: 76/100. Aktif Tedbirli Koinler: Yok."
   },
   "optimizer": {
-    "evaluatedAt": "2026-10-13T14:46:58.456Z",
+    "evaluatedAt": "2026-10-13T20:22:12.823Z",
     "candidatesCount": 32,
-    "hasChampion": true,
+    "hasChampion": false,
     "champion": {
-      "name": "Grid_SL0.75_BE0.40_TP0.65",
+      "name": "🎯 Dengeli Vur-Kaç",
       "params": {
-        "slPct": 0.75,
-        "bePct": 0.4,
-        "tp1Pct": 0.65,
-        "moonPct": 1.3,
-        "minJump": 0.5
+        "slPct": 0.48,
+        "bePct": 0.6,
+        "tp1Pct": 0.55,
+        "moonPct": 1.45,
+        "minJump": 0.55
       },
       "summary": {
-        "totalTrades": 19,
-        "wins": 14,
-        "losses": 5,
-        "winRatePct": 73.7,
-        "profitFactor": 1.61,
-        "totalPnl": 4.37,
-        "avgPnl": 0.23,
-        "maxDrawdownPct": 4.2
+        "totalTrades": 20,
+        "wins": 8,
+        "losses": 12,
+        "winRatePct": 40,
+        "profitFactor": 0.53,
+        "totalPnl": -6.57,
+        "avgPnl": -0.33,
+        "maxDrawdownPct": 7.4
       },
-      "score": 59.8
+      "score": 1.9
     },
     "ranked": [
       {
-        "name": "Grid_SL0.75_BE0.40_TP0.65",
+        "name": "🎯 Dengeli Vur-Kaç",
         "params": {
-          "slPct": 0.75,
-          "bePct": 0.4,
-          "tp1Pct": 0.65,
-          "moonPct": 1.3,
+          "slPct": 0.48,
+          "bePct": 0.6,
+          "tp1Pct": 0.55,
+          "moonPct": 1.45,
+          "minJump": 0.55
+        },
+        "summary": {
+          "totalTrades": 20,
+          "wins": 8,
+          "losses": 12,
+          "winRatePct": 40,
+          "profitFactor": 0.53,
+          "totalPnl": -6.57,
+          "avgPnl": -0.33,
+          "maxDrawdownPct": 7.4
+        },
+        "score": 1.9
+      },
+      {
+        "name": "💎 Trend Avcısı",
+        "params": {
+          "slPct": 0.5,
+          "bePct": 0.65,
+          "tp1Pct": 0.6,
+          "moonPct": 1.6,
+          "minJump": 0.55
+        },
+        "summary": {
+          "totalTrades": 20,
+          "wins": 8,
+          "losses": 12,
+          "winRatePct": 40,
+          "profitFactor": 0.54,
+          "totalPnl": -6.65,
+          "avgPnl": -0.33,
+          "maxDrawdownPct": 7.6
+        },
+        "score": 1.6
+      },
+      {
+        "name": "Grid_SL0.45_BE0.60_TP0.60",
+        "params": {
+          "slPct": 0.45,
+          "bePct": 0.6,
+          "tp1Pct": 0.6,
+          "moonPct": 1.25,
           "minJump": 0.5
         },
         "summary": {
-          "totalTrades": 19,
+          "totalTrades": 33,
           "wins": 14,
-          "losses": 5,
-          "winRatePct": 73.7,
-          "profitFactor": 1.61,
-          "totalPnl": 4.37,
-          "avgPnl": 0.23,
-          "maxDrawdownPct": 4.2
+          "losses": 19,
+          "winRatePct": 42.4,
+          "profitFactor": 0.64,
+          "totalPnl": -7.43,
+          "avgPnl": -0.23,
+          "maxDrawdownPct": 9.4
         },
-        "score": 59.8
+        "score": -0.2
       },
       {
-        "name": "Grid_SL0.75_BE0.40_TP0.65",
+        "name": "Grid_SL0.45_BE0.65_TP0.60",
         "params": {
-          "slPct": 0.75,
-          "bePct": 0.4,
-          "tp1Pct": 0.65,
+          "slPct": 0.45,
+          "bePct": 0.65,
+          "tp1Pct": 0.6,
+          "moonPct": 1.25,
+          "minJump": 0.5
+        },
+        "summary": {
+          "totalTrades": 33,
+          "wins": 14,
+          "losses": 19,
+          "winRatePct": 42.4,
+          "profitFactor": 0.64,
+          "totalPnl": -7.43,
+          "avgPnl": -0.23,
+          "maxDrawdownPct": 9.4
+        },
+        "score": -0.2
+      },
+      {
+        "name": "Grid_SL0.45_BE0.60_TP0.60",
+        "params": {
+          "slPct": 0.45,
+          "bePct": 0.6,
+          "tp1Pct": 0.6,
           "moonPct": 1.5,
           "minJump": 0.5
         },
         "summary": {
-          "totalTrades": 19,
+          "totalTrades": 33,
           "wins": 14,
-          "losses": 5,
-          "winRatePct": 73.7,
-          "profitFactor": 1.61,
-          "totalPnl": 4.37,
-          "avgPnl": 0.23,
-          "maxDrawdownPct": 4.2
+          "losses": 19,
+          "winRatePct": 42.4,
+          "profitFactor": 0.62,
+          "totalPnl": -7.88,
+          "avgPnl": -0.24,
+          "maxDrawdownPct": 9.9
         },
-        "score": 59.8
-      },
-      {
-        "name": "🔒 Erken Kilit",
-        "params": {
-          "slPct": 0.75,
-          "bePct": 0.25,
-          "tp1Pct": 0.6,
-          "moonPct": 1.25,
-          "minJump": 0.45
-        },
-        "summary": {
-          "totalTrades": 29,
-          "wins": 23,
-          "losses": 6,
-          "winRatePct": 79.3,
-          "profitFactor": 1.28,
-          "totalPnl": 3.38,
-          "avgPnl": 0.12,
-          "maxDrawdownPct": 2
-        },
-        "score": 58.4
-      },
-      {
-        "name": "⚡ Lazer Sniper",
-        "params": {
-          "slPct": 0.75,
-          "bePct": 0.3,
-          "tp1Pct": 0.65,
-          "moonPct": 1.3,
-          "minJump": 0.5
-        },
-        "summary": {
-          "totalTrades": 19,
-          "wins": 14,
-          "losses": 5,
-          "winRatePct": 73.7,
-          "profitFactor": 1.48,
-          "totalPnl": 3.38,
-          "avgPnl": 0.18,
-          "maxDrawdownPct": 4.3
-        },
-        "score": 55.6
-      },
-      {
-        "name": "Grid_SL0.75_BE0.30_TP0.65",
-        "params": {
-          "slPct": 0.75,
-          "bePct": 0.3,
-          "tp1Pct": 0.65,
-          "moonPct": 1.3,
-          "minJump": 0.5
-        },
-        "summary": {
-          "totalTrades": 19,
-          "wins": 14,
-          "losses": 5,
-          "winRatePct": 73.7,
-          "profitFactor": 1.48,
-          "totalPnl": 3.38,
-          "avgPnl": 0.18,
-          "maxDrawdownPct": 4.3
-        },
-        "score": 55.6
+        "score": -2.3
       }
     ]
   },
   "dialogues": [
-    {
-      "id": "17917972678387hkx",
-      "time": "12:27:47",
-      "timestamp": 1791797267855,
-      "agent": "👑 YÖNETİCİ",
-      "roleKey": "MANAGER",
-      "color": "#c084fc",
-      "title": "Risk Direktörü",
-      "text": "🚨 [KRİTİK MÜDAHALE - SAVUNMA MODU]: Kasa $85.78 seviyesinde (%14.2 zarar, zirveden %34.6 DD). Kasa erimesini durdurmak için yönetimi devraldım! Slot 1'e, Teminat $10'a çekildi!",
-      "tag": "RISK"
-    },
-    {
-      "id": "1791797267856qrxo",
-      "time": "12:27:47",
-      "timestamp": 1791797267856,
-      "agent": "🧠 ANALİZCİ",
-      "roleKey": "ANALYST",
-      "color": "#38bdf8",
-      "title": "Piyasa İstihbaratı",
-      "text": "🧠 [ADLİ TEŞHİS]: 56 işlem incelendi (%57.1 WR, PF: 0.77). Adli analizde zayıf alıcı (&lt;%54 taker) ve aşırı satımda (-%4.5 altı) shortlanan koinlerin zararın %90'ını ürettiği kanıtlandı. PUMP, CHIP, AVAX, STRK kara listeye alındı; eşik alıcı oranı %54.0'e çıkarıldı.",
-      "tag": "STRATEGY"
-    },
-    {
-      "id": "1791797267856eoc9",
-      "time": "12:27:47",
-      "timestamp": 1791797267856,
-      "agent": "🧪 TESTÇİ",
-      "roleKey": "TESTER",
-      "color": "#4ade80",
-      "title": "QA & Simülatör",
-      "text": "🧪 [STRATEJİ OPTİMİZASYONU]: 32 farklı strateji son 24 saatin mumlarında simüle edildi. 🏆 ŞAMPİYON: &quot;🛡️ Defansif Scalp&quot; (PF: 2.99, WR: %90.5, Sim Kâr: +$7.57 | SL: %0.85, BE: %0.35, TP1: %0.7). En karlı strateji canlıya uygulandı!",
-      "tag": "STRATEGY"
-    },
-    {
-      "id": "1791797267857vzuc",
-      "time": "12:27:47",
-      "timestamp": 1791797267857,
-      "agent": "🐋 BALİNA AVCISI",
-      "roleKey": "WHALE_HUNTER",
-      "color": "#06b6d4",
-      "title": "Para Akışı & Fon",
-      "text": "🐋 [CANLI PARA AKIŞI]: Piyasa net akışı: $3.1M (BULLISH). 🟢 Kurumsal Giriş: CKBUSDT (+$4.2M), ENAUSDT (+$3.1M), ZECUSDT (+$2.7M) | 🔴 Kaçış: CHIPUSDT (-$3.4M), STRKUSDT (-$2.8M), FETUSDT (-$2.1M). Para çıkışı olan koinlere long vetosu devrede!",
-      "tag": "FLOW"
-    },
-    {
-      "id": "1791797267857g6jq",
-      "time": "12:27:47",
-      "timestamp": 1791797267857,
-      "agent": "🎯 FREQ-AI & LİKİDASYON",
-      "roleKey": "FREQAI",
-      "color": "#ec4899",
-      "title": "ML Olasılık & Fonlama",
-      "text": "🎯 [FREQ-AI &amp; FONLAMA]: ML Olasılık Modeli devrede (Eğitim: 56 işlem, Eşik: %72). Ortalama fonlama: %0.0032. Sıkışma adayı: STRKUSDT (%-0.048), CHIPUSDT (%-0.038), ZECUSDT (%0.008). Düşük olasılıklı işlemler veto edilecek.",
-      "tag": "STRATEGY"
-    },
-    {
-      "id": "1791797267857l96f",
-      "time": "12:27:47",
-      "timestamp": 1791797267858,
-      "agent": "🏛️ BAŞ YARGIÇ",
-      "roleKey": "JUDGE",
-      "color": "#eab308",
-      "title": "Adli Denetçi (Aslan11)",
-      "text": "🏛️ [ASLAN11 ADLİ HÜKÜM]: Mahkeme oturumu tamamlandı (56 duruşma, %76 intizam skoru). Disiplinsiz veya delilsiz açılmaya çalışılan her emir anında veto edilecek!",
-      "tag": "RISK"
-    },
-    {
-      "id": "1791797267858gu4p",
-      "time": "12:27:47",
-      "timestamp": 1791797267858,
-      "agent": "⚔️ TRADER",
-      "roleKey": "TRADER",
-      "color": "#facc15",
-      "title": "Sinyal & Yürütme",
-      "text": "⚔️ [EMİR ONAYLANDI]: Savunma ve Şampiyon &quot;🛡️ Defansif Scalp&quot; stratejisi yürütülüyor! Tek slot, $10 teminat. Taker ≥ %54.0 ve tepe tuzağı engelli roketler taranıyor.",
-      "tag": "TRADE"
-    },
-    {
-      "id": "17917972678580nc9",
-      "time": "12:27:47",
-      "timestamp": 1791797267858,
-      "agent": "💻 YAZILIMCI",
-      "roleKey": "ENGINEER",
-      "color": "#a78bfa",
-      "title": "DevOps & Sistem",
-      "text": "💻 [SİSTEM &amp; KOD GÜNCELLEMESİ]: Canlı server.js çekirdeğine Şampiyon &quot;🛡️ Defansif Scalp&quot; parametreleri sıcak yüklendi (Hot-Reload). Parametreler senkronize, sistem stabil.",
-      "tag": "SYSTEM"
-    },
     {
       "id": "17917975773954xjg",
       "time": "12:32:57",
@@ -1174,6 +1065,94 @@
       "color": "#475569",
       "title": "DevOps & Sistem",
       "text": "Sunucu çalışma süresi 120 dk. Piyasa ve simülasyon verisi: güncel.",
+      "tag": "SYSTEM"
+    },
+    {
+      "id": "17919229400193jdz",
+      "time": "23:22:20",
+      "timestamp": 1791922940035,
+      "agent": "👑 YÖNETİCİ",
+      "roleKey": "MANAGER",
+      "color": "#7c3aed",
+      "title": "Risk Direktörü",
+      "text": "🚨 [KRİTİK MÜDAHALE - SAVUNMA MODU]: Kasa $89.60 seviyesinde (%10.4 zarar, zirveden %10.4 DD). Kasa erimesini durdurmak için yönetimi devraldım! Slot 1'e, Teminat $10'a çekildi!",
+      "tag": "RISK"
+    },
+    {
+      "id": "1791922940036553y",
+      "time": "23:22:20",
+      "timestamp": 1791922940036,
+      "agent": "🧠 ANALİZCİ",
+      "roleKey": "ANALYST",
+      "color": "#0284c7",
+      "title": "Piyasa İstihbaratı",
+      "text": "🧠 [ADLİ TEŞHİS]: 56 işlem incelendi (%0 WR, PF: 0). Adli analizde zayıf alıcı (&lt;%54 taker) ve aşırı satımda (-%4.5 altı) shortlanan koinlerin zararın %90'ını ürettiği kanıtlandı. PUMP, CHIP, AVAX, STRK kara listeye alındı; eşik alıcı oranı %54.0'e çıkarıldı.",
+      "tag": "STRATEGY"
+    },
+    {
+      "id": "1791922940037k31z",
+      "time": "23:22:20",
+      "timestamp": 1791922940037,
+      "agent": "🧪 TESTÇİ",
+      "roleKey": "TESTER",
+      "color": "#059669",
+      "title": "QA & Simülatör",
+      "text": "🧪 [STRATEJİ OPTİMİZASYONU]: 32 farklı strateji son 24 saatin mumlarında simüle edildi. 🏆 ŞAMPİYON: &quot;🎯 Dengeli Vur-Kaç&quot; (PF: 0.53, WR: %40, Sim Kâr: -$6.57 | SL: %0.45, BE: %0.6, TP1: %0.55). En karlı strateji canlıya uygulandı!",
+      "tag": "STRATEGY"
+    },
+    {
+      "id": "1791922940037sslo",
+      "time": "23:22:20",
+      "timestamp": 1791922940038,
+      "agent": "🐋 BALİNA AVCISI",
+      "roleKey": "WHALE_HUNTER",
+      "color": "#0891b2",
+      "title": "Para Akışı & Fon",
+      "text": "🐋 [CANLI PARA AKIŞI]: Piyasa net akışı: $3.1M (BULLISH). 🟢 Kurumsal Giriş: CKBUSDT (+$4.2M), ENAUSDT (+$3.1M), ZECUSDT (+$2.7M) | 🔴 Kaçış: CHIPUSDT (-$3.4M), STRKUSDT (-$2.8M), FETUSDT (-$2.1M). Para çıkışı olan koinlere long vetosu devrede!",
+      "tag": "FLOW"
+    },
+    {
+      "id": "1791922940038e59t",
+      "time": "23:22:20",
+      "timestamp": 1791922940038,
+      "agent": "🎯 FREQ-AI & LİKİDASYON",
+      "roleKey": "FREQAI",
+      "color": "#db2777",
+      "title": "ML Olasılık & Fonlama",
+      "text": "🎯 [FREQ-AI &amp; FONLAMA]: ML Olasılık Modeli devrede (Eğitim: 0 işlem, Eşik: %72). Ortalama fonlama: %0.0032. Sıkışma adayı: STRKUSDT (%-0.048), CHIPUSDT (%-0.038), ZECUSDT (%0.008). Düşük olasılıklı işlemler veto edilecek.",
+      "tag": "STRATEGY"
+    },
+    {
+      "id": "17919229400383jt3",
+      "time": "23:22:20",
+      "timestamp": 1791922940039,
+      "agent": "🏛️ BAŞ YARGIÇ",
+      "roleKey": "JUDGE",
+      "color": "#b45309",
+      "title": "Adli Denetçi (Aslan11)",
+      "text": "🏛️ [ASLAN11 ADLİ HÜKÜM]: Mahkeme oturumu tamamlandı (56 duruşma, %76 intizam skoru). Disiplinsiz veya delilsiz açılmaya çalışılan her emir anında veto edilecek!",
+      "tag": "RISK"
+    },
+    {
+      "id": "1791922940039mp1r",
+      "time": "23:22:20",
+      "timestamp": 1791922940039,
+      "agent": "⚔️ TRADER",
+      "roleKey": "TRADER",
+      "color": "#b45309",
+      "title": "Sinyal & Yürütme",
+      "text": "⚔️ [EMİR ONAYLANDI]: Savunma ve Şampiyon &quot;🎯 Dengeli Vur-Kaç&quot; stratejisi yürütülüyor! Tek slot, $10 teminat. Taker ≥ %54.0 ve tepe tuzağı engelli roketler taranıyor.",
+      "tag": "TRADE"
+    },
+    {
+      "id": "17919229400392uj2",
+      "time": "23:22:20",
+      "timestamp": 1791922940040,
+      "agent": "💻 YAZILIMCI",
+      "roleKey": "ENGINEER",
+      "color": "#475569",
+      "title": "DevOps & Sistem",
+      "text": "💻 [SİSTEM &amp; KOD GÜNCELLEMESİ]: Canlı server.js çekirdeğine Şampiyon &quot;🎯 Dengeli Vur-Kaç&quot; parametreleri sıcak yüklendi (Hot-Reload). Parametreler senkronize, sistem stabil.",
       "tag": "SYSTEM"
     }
   ]

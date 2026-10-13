@@ -137,21 +137,21 @@ function summarizeTrades(trades) {
  */
 function generateCandidateStrategies() {
   const named = [
-    { name: "⚡ Lazer Sniper", slPct: 0.75, bePct: 0.30, tp1Pct: 0.65, moonPct: 1.30, minJump: 0.50 },
-    { name: "🛡️ Defansif Scalp", slPct: 0.85, bePct: 0.35, tp1Pct: 0.70, moonPct: 1.40, minJump: 0.50 },
-    { name: "🎯 Dengeli Vur-Kaç", slPct: 0.90, bePct: 0.35, tp1Pct: 0.75, moonPct: 1.45, minJump: 0.55 },
-    { name: "🚀 Hızlı Roket", slPct: 0.80, bePct: 0.30, tp1Pct: 0.70, moonPct: 1.50, minJump: 0.60 },
-    { name: "💎 Trend Avcısı", slPct: 1.00, bePct: 0.40, tp1Pct: 0.80, moonPct: 1.60, minJump: 0.55 },
-    { name: "🔒 Erken Kilit", slPct: 0.75, bePct: 0.25, tp1Pct: 0.60, moonPct: 1.25, minJump: 0.45 },
-    { name: "🌊 Momentum Dalgası", slPct: 0.85, bePct: 0.35, tp1Pct: 0.80, moonPct: 1.55, minJump: 0.60 },
-    { name: "🦅 Yüksek Seçici", slPct: 0.80, bePct: 0.30, tp1Pct: 0.70, moonPct: 1.35, minJump: 0.65 }
+    { name: "⚡ Lazer Sniper", slPct: 0.45, bePct: 0.60, tp1Pct: 0.55, moonPct: 1.30, minJump: 0.50 },
+    { name: "🛡️ Defansif Scalp", slPct: 0.45, bePct: 0.65, tp1Pct: 0.55, moonPct: 1.40, minJump: 0.50 },
+    { name: "🎯 Dengeli Vur-Kaç", slPct: 0.48, bePct: 0.60, tp1Pct: 0.55, moonPct: 1.45, minJump: 0.55 },
+    { name: "🚀 Hızlı Roket", slPct: 0.45, bePct: 0.60, tp1Pct: 0.55, moonPct: 1.50, minJump: 0.60 },
+    { name: "💎 Trend Avcısı", slPct: 0.50, bePct: 0.65, tp1Pct: 0.60, moonPct: 1.60, minJump: 0.55 },
+    { name: "🔒 Erken Kilit", slPct: 0.45, bePct: 0.60, tp1Pct: 0.50, moonPct: 1.25, minJump: 0.45 },
+    { name: "🌊 Momentum Dalgası", slPct: 0.48, bePct: 0.65, tp1Pct: 0.58, moonPct: 1.55, minJump: 0.60 },
+    { name: "🦅 Yüksek Seçici", slPct: 0.45, bePct: 0.60, tp1Pct: 0.55, moonPct: 1.35, minJump: 0.65 }
   ];
 
   const grid = [];
-  const sls = [0.75, 0.85, 0.95, 1.10];
-  const bes = [0.30, 0.35, 0.40];
-  const tp1s = [0.65, 0.75];
-  const moons = [1.30, 1.50];
+  const sls = [0.40, 0.45, 0.50];
+  const tp1s = [0.50, 0.55, 0.60];
+  const bes = [0.60, 0.65];
+  const moons = [1.25, 1.50];
 
   for (const sl of sls) {
     for (const be of bes) {

@@ -636,5 +636,93 @@
     "title": "DevOps & Sistem",
     "text": "Sunucu çalışma süresi 120 dk. Piyasa ve simülasyon verisi: güncel.",
     "tag": "SYSTEM"
+  },
+  {
+    "id": "17919229400193jdz",
+    "time": "23:22:20",
+    "timestamp": 1791922940035,
+    "agent": "👑 YÖNETİCİ",
+    "roleKey": "MANAGER",
+    "color": "#7c3aed",
+    "title": "Risk Direktörü",
+    "text": "🚨 [KRİTİK MÜDAHALE - SAVUNMA MODU]: Kasa $89.60 seviyesinde (%10.4 zarar, zirveden %10.4 DD). Kasa erimesini durdurmak için yönetimi devraldım! Slot 1'e, Teminat $10'a çekildi!",
+    "tag": "RISK"
+  },
+  {
+    "id": "1791922940036553y",
+    "time": "23:22:20",
+    "timestamp": 1791922940036,
+    "agent": "🧠 ANALİZCİ",
+    "roleKey": "ANALYST",
+    "color": "#0284c7",
+    "title": "Piyasa İstihbaratı",
+    "text": "🧠 [ADLİ TEŞHİS]: 56 işlem incelendi (%0 WR, PF: 0). Adli analizde zayıf alıcı (&lt;%54 taker) ve aşırı satımda (-%4.5 altı) shortlanan koinlerin zararın %90'ını ürettiği kanıtlandı. PUMP, CHIP, AVAX, STRK kara listeye alındı; eşik alıcı oranı %54.0'e çıkarıldı.",
+    "tag": "STRATEGY"
+  },
+  {
+    "id": "1791922940037k31z",
+    "time": "23:22:20",
+    "timestamp": 1791922940037,
+    "agent": "🧪 TESTÇİ",
+    "roleKey": "TESTER",
+    "color": "#059669",
+    "title": "QA & Simülatör",
+    "text": "🧪 [STRATEJİ OPTİMİZASYONU]: 32 farklı strateji son 24 saatin mumlarında simüle edildi. 🏆 ŞAMPİYON: &quot;🎯 Dengeli Vur-Kaç&quot; (PF: 0.53, WR: %40, Sim Kâr: -$6.57 | SL: %0.45, BE: %0.6, TP1: %0.55). En karlı strateji canlıya uygulandı!",
+    "tag": "STRATEGY"
+  },
+  {
+    "id": "1791922940037sslo",
+    "time": "23:22:20",
+    "timestamp": 1791922940038,
+    "agent": "🐋 BALİNA AVCISI",
+    "roleKey": "WHALE_HUNTER",
+    "color": "#0891b2",
+    "title": "Para Akışı & Fon",
+    "text": "🐋 [CANLI PARA AKIŞI]: Piyasa net akışı: $3.1M (BULLISH). 🟢 Kurumsal Giriş: CKBUSDT (+$4.2M), ENAUSDT (+$3.1M), ZECUSDT (+$2.7M) | 🔴 Kaçış: CHIPUSDT (-$3.4M), STRKUSDT (-$2.8M), FETUSDT (-$2.1M). Para çıkışı olan koinlere long vetosu devrede!",
+    "tag": "FLOW"
+  },
+  {
+    "id": "1791922940038e59t",
+    "time": "23:22:20",
+    "timestamp": 1791922940038,
+    "agent": "🎯 FREQ-AI & LİKİDASYON",
+    "roleKey": "FREQAI",
+    "color": "#db2777",
+    "title": "ML Olasılık & Fonlama",
+    "text": "🎯 [FREQ-AI &amp; FONLAMA]: ML Olasılık Modeli devrede (Eğitim: 0 işlem, Eşik: %72). Ortalama fonlama: %0.0032. Sıkışma adayı: STRKUSDT (%-0.048), CHIPUSDT (%-0.038), ZECUSDT (%0.008). Düşük olasılıklı işlemler veto edilecek.",
+    "tag": "STRATEGY"
+  },
+  {
+    "id": "17919229400383jt3",
+    "time": "23:22:20",
+    "timestamp": 1791922940039,
+    "agent": "🏛️ BAŞ YARGIÇ",
+    "roleKey": "JUDGE",
+    "color": "#b45309",
+    "title": "Adli Denetçi (Aslan11)",
+    "text": "🏛️ [ASLAN11 ADLİ HÜKÜM]: Mahkeme oturumu tamamlandı (56 duruşma, %76 intizam skoru). Disiplinsiz veya delilsiz açılmaya çalışılan her emir anında veto edilecek!",
+    "tag": "RISK"
+  },
+  {
+    "id": "1791922940039mp1r",
+    "time": "23:22:20",
+    "timestamp": 1791922940039,
+    "agent": "⚔️ TRADER",
+    "roleKey": "TRADER",
+    "color": "#b45309",
+    "title": "Sinyal & Yürütme",
+    "text": "⚔️ [EMİR ONAYLANDI]: Savunma ve Şampiyon &quot;🎯 Dengeli Vur-Kaç&quot; stratejisi yürütülüyor! Tek slot, $10 teminat. Taker ≥ %54.0 ve tepe tuzağı engelli roketler taranıyor.",
+    "tag": "TRADE"
+  },
+  {
+    "id": "17919229400392uj2",
+    "time": "23:22:20",
+    "timestamp": 1791922940040,
+    "agent": "💻 YAZILIMCI",
+    "roleKey": "ENGINEER",
+    "color": "#475569",
+    "title": "DevOps & Sistem",
+    "text": "💻 [SİSTEM &amp; KOD GÜNCELLEMESİ]: Canlı server.js çekirdeğine Şampiyon &quot;🎯 Dengeli Vur-Kaç&quot; parametreleri sıcak yüklendi (Hot-Reload). Parametreler senkronize, sistem stabil.",
+    "tag": "SYSTEM"
   }
 ]

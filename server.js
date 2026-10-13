@@ -57,10 +57,10 @@ let CONFIG = {
   marginPerTrade: 15.0,      // Temel Teminat 15$ (A+ Şampiyon kurulumunda $25-$28'e esner)
   leverage: 20,              // Kaldıraç 20x
   maxSlots: 2,               // 2 Slot (Dengeli sermaye tahsisi & bağımsız fırsat yakalama)
-  slPct: 0.48,               // 🎯 Dar Stop Loss %0.48 Spot (20x ile -%9.6 ROI = ~$1.20 maks risk!)
-  bePct: 0.55,               // 🎯 Başabaş Kilidi %0.55 Spot (+%11 ROI görünce kitle)
-  moonPct: 1.80,             // Vur-Kaç Moonshot TP2 Hedefi %1.80 Spot (+%36 ROI)
-  tp1Pct: 0.80,              // Kademeli Kâr Alma TP1 Hedefi %0.80 Spot (+%16 ROI)
+  slPct: 0.45,               // 🎯 Dar Stop Loss %0.45 Spot (20x ile -%9.0 ROI = ~$1.00 maks risk!)
+  bePct: 0.60,               // 🎯 Başabaş Kilidi %0.60 Spot (TP1 sonrası veya güçlü ivmede)
+  moonPct: 1.60,             // Vur-Kaç Moonshot TP2 Hedefi %1.60 Spot (+%32 ROI)
+  tp1Pct: 0.55,              // 🎯 Kademeli Kâr Alma TP1 Hedefi %0.55 Spot (+%11 ROI) - KÂRI ANINDA CEBE AL!
   feeRate: 0.0005,           // Binance Futures taker %0.05 (TEK YÖN)
   scanIntervalMs: 4000,
   riskIntervalMs: 2500,
@@ -103,7 +103,8 @@ let VIP_TARGETS = { ...DEFAULT_VIP_TARGETS };
 
 const BANNED_SYMBOLS = new Set([
   'BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT',
-  'USDCUSDT', 'FDUSDUSDT', 'TUSDUSDT', 'EURUSDT'
+  'USDCUSDT', 'FDUSDUSDT', 'TUSDUSDT', 'EURUSDT',
+  'AMPUSDT'
 ]);
 
 // --- DURUM DEĞİŞKENLERİ ---
@@ -786,7 +787,7 @@ async function scanLoop() {
     const validTickers = tickers.filter(t => {
       if (!SYMBOL_REGEX.test(t.symbol) || t.symbol.startsWith("USDC") || BANNED_SYMBOLS.has(t.symbol)) return false;
       const p = parseFloat(t.lastPrice);
-      return p >= 0.0001;
+      return p >= 0.005; // 🛡️ Kuruşluk manipülatif ve spreadi yüksek koinler (AMP vb.) filtrelenir
     });
 
     const fundMap = (teamStatusCache && teamStatusCache.fundingRates && teamStatusCache.fundingRates.fundingMap) || globalFundingMap || {};
@@ -1024,13 +1025,37 @@ async function scanLoop() {
         const validWickLong = !upperWickReject;
         const validWickShort = !lowerWickReject;
 
+        // 🛡️ TEPE VE DİP TUZAĞI KORUMASI (Direnç ve Destek Uçlarında Ters Köşeyi Kesinlikle Önle!)
+        const high3 = rInfo ? (rInfo.high3h || curH) : curH;
+        const low3 = rInfo ? (rInfo.low3h || curL) : curL;
+        const rangeSpan = high3 - low3;
+        const rangePct = rangeSpan > 0 ? (curP - low3) / rangeSpan : 0.5;
+        const chg15Val = rInfo ? (rInfo.chg15m || 0) : 0;
+
+        // 1. LONG İÇİN TEPE & DİRENÇ TUZAĞI:
+        // Kanalın tavanındaysa (rangePct >= 0.78), üst fitil ret yediyse, veya gün içinde zaten +%14 şişmişse LONG AÇMA!
+        const isNearPeakTrap = upperWickReject || 
+                               (rangePct >= 0.78) || 
+                               (chg24Val >= 14.0) || 
+                               (chg15Val >= 3.5) || 
+                               ((rInfo && (rInfo.chg3h || 0) >= 8.5) && rangePct >= 0.70);
+
+        // 2. SHORT İÇİN DİP & DESTEK TUZAĞI:
+        // Kanalın tabanındaysa (rangePct <= 0.22), alt fitil alıcı bulduysa, veya gün içinde zaten -%10 çökmüşse SHORT AÇMA!
+        const isNearDipTrap = lowerWickReject || 
+                              (rangePct <= 0.22) || 
+                              (chg24Val <= -10.0) || 
+                              (chg15Val <= -3.5) || 
+                              ((rInfo && (rInfo.chg3h || 0) <= -7.5) && rangePct <= 0.30);
+
         // 🚀 ANLIK ROKET & VOLATILITY SPIKE SNIPER:
-        // Hacim aniden 2.0x patlamış ve son 3 dakikada +%0.45 üzeri dikey yeşil mum dikilmişse:
-        const isRocketSpike = (curV >= avgVol20 * 2.0 || projectedVol >= avgVol20 * 2.2) && 
-                              (curMovePct >= 0.45 || twoCandleMovePct >= 0.70) && 
+        // Hacim aniden 2.2x patlamış, 3 dakikada +%0.70 üzeri dikey yeşil mum dikilmiş ve TEPE TUZAĞINDA DEĞİLSE:
+        const isRocketSpike = !isNearPeakTrap && 
+                              (curV >= avgVol20 * 2.2 || projectedVol >= avgVol20 * 2.5) && 
+                              (curMovePct >= 0.70 || twoCandleMovePct >= 1.00) && 
                               curP > curO && 
                               validWickLong &&
-                              (rInfo ? (rInfo.takerBuyRatio || 50) >= 50.5 : true);
+                              (rInfo ? (rInfo.takerBuyRatio || 50) >= 52.0 : true);
 
         // 🟢 BOĞA GİRİŞ KOŞULLARI:
         let finalLongSignal = false;
@@ -1042,11 +1067,10 @@ async function scanLoop() {
         } else if (isDirectRadarLong && curCandleGreen && freshVolumeLong) {
           finalLongSignal = true;
         } else if (hasMomentum && isWhaleVol && curCandleGreen && freshVolumeLong) {
-          const chg15Val = rInfo ? (rInfo.chg15m || 0) : 0;
           const minTaker = DYNAMIC.mode === 'DEFENSIVE_SNIPER' ? 52.5 : 51.0;
           const hasTakerSupport = rInfo ? (rInfo.takerBuyRatio || 50) >= minTaker : false;
           const hasVolume = rInfo ? (rInfo.vol3hM || 0) >= DYNAMIC.vol3hMin : false;
-          const notOverbought = chg24Val >= -9.0 && chg24Val < 32.0;
+          const notOverbought = chg24Val >= -9.0 && chg24Val < 14.0;
           const strongMomentum = curMovePct >= 0.30;
           if (hasTakerSupport && hasVolume && notOverbought && strongMomentum && chg15Val >= 0.10) {
             finalLongSignal = true;
@@ -1058,47 +1082,19 @@ async function scanLoop() {
         if (isDirectRadarShort && curCandleRed && freshVolumeShort) {
           finalShortSignal = true;
         } else if ((curMovePct <= -minJump && curP < curO) && isWhaleVol && curCandleRed && freshVolumeShort) {
-          const chg15Val = rInfo ? (rInfo.chg15m || 0) : 0;
           const maxTaker = DYNAMIC.mode === 'DEFENSIVE_SNIPER' ? 47.5 : 49.0;
           const hasTakerSell = rInfo ? (rInfo.takerBuyRatio || 50) <= maxTaker : false;
           const hasVolume = rInfo ? (rInfo.vol3hM || 0) >= DYNAMIC.vol3hMin : false;
           const strongMomentumDown = curMovePct <= -0.30;
-          const notOversold = chg24Val <= 8.0 && chg24Val > -20.0;
+          const notOversold = chg24Val <= 8.0 && chg24Val > -10.0;
           if (hasTakerSell && hasVolume && strongMomentumDown && notOversold && chg15Val <= -0.10) {
             finalShortSignal = true;
           }
         }
 
         // 🛡️ DERS 2: Günlük (24s) ve 3s Trend Filtresi
-        const strictTrendOkLong = (chg24Val < 35.0) && (chg24Val >= -9.0) && (!rInfo || (rInfo.chg3h || 0) < 16.0); 
-        const strictTrendOkShort = (chg24Val > -22.0) && (chg24Val <= 8.0);
-
-        // 🛡️ TEPE VE DİP TUZAĞI KORUMASI (Direnç ve Destek Uçlarında Ters Köşeyi Kesinlikle Önle!)
-        let isNearPeakTrap = false;
-        let isNearDipTrap = false;
-        if (rInfo) {
-          const high3 = rInfo.high3h || curH;
-          const low3 = rInfo.low3h || curL;
-          const chg15 = rInfo.chg15m || 0;
-
-          // 1. LONG İÇİN TEPE & DİRENÇ TUZAĞI (Aşırı şişmiş tepe veya üst fitil satış reddi)
-          const isAtResistance = upperWickReject || (high3 > 0 && (curP >= high3 * 0.99) && ((rInfo.chg3h || 0) >= 7.0 || chg24Val >= 18.0));
-          const is15mPumpClimax = chg15 >= 3.5;
-          const isOverheatedPump = (chg24Val >= 18.0 || (rInfo.chg3h || 0) >= 8.5) && (high3 > 0 && curP >= high3 * 0.985);
-          
-          if (isAtResistance || is15mPumpClimax || isOverheatedPump || upperWickReject) {
-            isNearPeakTrap = true;
-          }
-
-          // 2. SHORT İÇİN DİP & DESTEK TUZAĞI (Aşırı çökmüş dip veya alt fitil alış reddi)
-          const isAtSupport = lowerWickReject || (low3 > 0 && (curP <= low3 * 1.01) && ((rInfo.chg3h || 0) <= -6.0 || chg24Val <= -16.0));
-          const is15mDumpClimax = chg15 <= -3.5;
-          const isOverheatedDump = (chg24Val <= -16.0 || (rInfo.chg3h || 0) <= -7.5) && (low3 > 0 && curP <= low3 * 1.015);
-
-          if (isAtSupport || is15mDumpClimax || isOverheatedDump || lowerWickReject) {
-            isNearDipTrap = true;
-          }
-        }
+        const strictTrendOkLong = (chg24Val < 14.0) && (chg24Val >= -9.0) && (!rInfo || (rInfo.chg3h || 0) < 16.0); 
+        const strictTrendOkShort = (chg24Val > -10.0) && (chg24Val <= 8.0);
 
         // 🛡️ BTC TREND KORUMASI: BTC yönünün tersine işlem AÇILAMAZ!
         const btcSafeForLong = (btc5mNumeric >= -0.08) && (btc15mNumeric >= -0.12);
@@ -1265,10 +1261,10 @@ async function scanLoop() {
             tier: 'TIER_STANDARD',
             tierLabel: '🛡️ STANDART VUR-KAÇ',
             margin: CONFIG.marginPerTrade || 15.0,
-            slPct: CONFIG.slPct || 0.48,
-            bePct: CONFIG.bePct || 0.55,
-            tp1Pct: CONFIG.tp1Pct || 0.80,
-            moonPct: CONFIG.moonPct || 1.80,
+            slPct: CONFIG.slPct || 0.45,
+            bePct: CONFIG.bePct || 0.60,
+            tp1Pct: CONFIG.tp1Pct || 0.55,
+            moonPct: CONFIG.moonPct || 1.60,
             convictionScore: 65,
             rationale: ''
           };
@@ -1296,16 +1292,16 @@ async function scanLoop() {
             sizing.tier = 'TIER_ROCKET_SNIPER';
             sizing.tierLabel = '🚀 ANLIK ROKET VUR-KAÇ';
             sizing.slPct = 0.45;
-            sizing.bePct = 0.50;
-            sizing.tp1Pct = 0.75;
+            sizing.bePct = 0.60;
+            sizing.tp1Pct = 0.55;
             sizing.moonPct = 1.60;
           }
 
           const tradeMargin = Number(sizing.margin) || CONFIG.marginPerTrade || 15.0;
-          const tradeSlPct = Number(sizing.slPct) || CONFIG.slPct || 0.48;
-          const tradeBePct = Number(sizing.bePct) || CONFIG.bePct || 0.55;
-          const tradeTp1Pct = Number(sizing.tp1Pct) || CONFIG.tp1Pct || 0.80;
-          const tradeMoonPct = Number(sizing.moonPct) || CONFIG.moonPct || 1.80;
+          const tradeSlPct = Number(sizing.slPct) || CONFIG.slPct || 0.45;
+          const tradeBePct = Number(sizing.bePct) || CONFIG.bePct || 0.60;
+          const tradeTp1Pct = Number(sizing.tp1Pct) || CONFIG.tp1Pct || 0.55;
+          const tradeMoonPct = Number(sizing.moonPct) || CONFIG.moonPct || 1.60;
 
           const stopPrice = side === "LONG" 
             ? curP * (1 - tradeSlPct / 100) 
@@ -1448,7 +1444,7 @@ async function fastRiskLoop() {
       let exitReason = null;
 
       // 🎯 1. KADEMELİ KÂR ALMA (TP1): Görünce %50 Pozisyon Kapatılır, Kâr Cebe İner!
-      const tp1Goal = pos.tp1Pct || CONFIG.tp1Pct || 0.90;
+      const tp1Goal = pos.tp1Pct || CONFIG.tp1Pct || 0.55;
       if (!pos.tp1Taken && move >= tp1Goal) {
         pos.tp1Taken = true;
         const closedMargin = pos.margin / 2;
@@ -1475,7 +1471,7 @@ async function fastRiskLoop() {
       }
 
       // 🛡️ 2. DİNAMİK İZ SÜREN STOP (TRAILING STOP) & ERKEN BAŞABAŞ KORUMASI
-      const beGoal = pos.bePct || CONFIG.bePct || 0.40;
+      const beGoal = pos.bePct || CONFIG.bePct || 0.60;
       let targetStop = null;
       if (mfe >= 1.40) {
         targetStop = isLong ? pos.entryPrice * (1 + (mfe - 0.35) / 100) : pos.entryPrice * (1 - (mfe - 0.35) / 100);
@@ -1540,14 +1536,14 @@ async function fastRiskLoop() {
       }
 
       // 🚨 6. AJAN ACİL DURUM TAHLİYESİ (MAKRO PİYASA TERS DÖNÜŞ FRENİ)
-      // Açık SHORT varken BTC sert yukarı fırlarsa (+%0.18 üzeri) ve pozisyon eksideyse (ROI <= -2.0%):
-      // Açık LONG varken BTC sert aşağı çökerse (-%0.18 altı) ve pozisyon eksideyse (ROI <= -2.0%):
+      // Açık SHORT varken BTC sert yukarı fırlarsa (+%0.35 üzeri) ve pozisyon eksideyse (ROI <= -2.0%):
+      // Açık LONG varken BTC sert aşağı çökerse (-%0.35 altı) ve pozisyon eksideyse (ROI <= -2.0%):
       // Tam stop loss'u (-%18 ROI) bekleyip kasayı delme! Ajanlar piyasa dönüşünü anında keser!
       if (!exitReason && pos.roi <= -2.0) {
-        if (!isLong && (btc15mNumeric >= 0.18 || btc5mNumeric >= 0.20)) {
+        if (!isLong && (btc15mNumeric >= 0.35 || btc5mNumeric >= 0.40)) {
           exitReason = `🚨 [AJAN ACİL TAHLİYE]: BTC Boğa Dalgası Başlattı (${btc15mTrend}), SHORT Pozisyonu Kurtarıldı (Erken Kesildi: %${pos.roi.toFixed(1)} ROI)`;
           try { addDialogue('WHALE_HUNTER', `🚨 ACİL TAHLİYE! BTC sert yeşile döndü (${btc15mTrend}). ${pos.symbol} SHORT pozisyonu tam stop beklenmeden hemen tahliye edildi!`, 'RISK'); } catch(e) {}
-        } else if (isLong && (btc15mNumeric <= -0.18 || btc5mNumeric <= -0.20)) {
+        } else if (isLong && (btc15mNumeric <= -0.35 || btc5mNumeric <= -0.40)) {
           exitReason = `🚨 [AJAN ACİL TAHLİYE]: BTC Sert Satış Dalgası Başlattı (${btc15mTrend}), LONG Pozisyonu Kurtarıldı (Erken Kesildi: %${pos.roi.toFixed(1)} ROI)`;
           try { addDialogue('WHALE_HUNTER', `🚨 ACİL TAHLİYE! BTC sert kırmızıya çöktü (${btc15mTrend}). ${pos.symbol} LONG pozisyonu tam stop beklenmeden hemen tahliye edildi!`, 'RISK'); } catch(e) {}
         }
