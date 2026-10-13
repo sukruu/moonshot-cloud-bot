@@ -302,14 +302,14 @@ class FreqAiMasterEngine {
     const isHighUncertainty = stdDev >= 18;
 
     // Minimum Eşik Belirleme
-    const minRequiredProbability = (mode === 'DEFENSIVE_SNIPER') ? 72 : 68;
+    const minRequiredProbability = (mode === 'DEFENSIVE_SNIPER') ? 66 : 60;
     const effectiveThreshold = isHighUncertainty ? (minRequiredProbability + 4) : minRequiredProbability;
     const isApproved = winProbabilityPct >= effectiveThreshold;
 
     let confidence = 'DÜŞÜK';
     if (winProbabilityPct >= 82 && !isHighUncertainty) confidence = 'ÇOK YÜKSEK (KONSENSÜS)';
     else if (winProbabilityPct >= 72) confidence = 'YÜKSEK';
-    else if (winProbabilityPct >= 65) confidence = 'ORTA';
+    else if (winProbabilityPct >= 60) confidence = 'ORTA';
 
     const breakdown = [
       `XGBoost: %${pXgb}`,

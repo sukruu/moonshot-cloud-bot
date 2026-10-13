@@ -55,7 +55,7 @@ function evaluateExecutiveIntervention(ctx = {}, forensics = {}, regime = {}) {
     targetBe = 0.35;          // 🛡️ Erken başabaş kilidi: +%0.35 Spot (+%7 ROI) görünce kitle
     targetTp1 = 0.80;         // 🛡️ +%0.80 Spot (+%16 ROI) görünce %50 kâr al (1:1 R:R)
     targetMoon = 1.50;        // 🛡️ +%1.50 Spot (+%30 ROI)
-    vol3hMin = Math.max(vol3hMin, 3.5); // Sığ ve manipülatif koinler yasak
+    vol3hMin = Math.max(vol3hMin, 2.5); // Sığ ve manipülatif koinler yasak
     candidateSlice = 20;      // Sadece en likit 20 aday
     reason = `Bakiye $${fmt(balance)} ($${initial} altında, -%${fmt(netDrawdown * 100, 1)} net / zirveden -%${fmt(drawdownFromPeak * 100, 1)} DD). SAVUNMA MODU AKTİF: Slot 1'e, Teminat $10'a, SL %0.80'e indirildi.`;
   } else if (isModerateLoss) {
@@ -66,7 +66,7 @@ function evaluateExecutiveIntervention(ctx = {}, forensics = {}, regime = {}) {
     targetBe = 0.40;
     targetTp1 = 0.85;
     targetMoon = 1.50;
-    vol3hMin = Math.max(vol3hMin, 3.0);
+    vol3hMin = Math.max(vol3hMin, 2.0);
     candidateSlice = 25;
     reason = `Bakiye $${fmt(balance)}. TEMKİNLİ TOPARLANMA: Slot 2, Teminat $12, SL %0.85, TP1 %0.85.`;
   } else if (balance >= 120.0) {
@@ -77,7 +77,7 @@ function evaluateExecutiveIntervention(ctx = {}, forensics = {}, regime = {}) {
     targetBe = 0.40;
     targetTp1 = 0.95;
     targetMoon = 2.20;
-    vol3hMin = Math.max(vol3hMin, 2.0);
+    vol3hMin = Math.max(vol3hMin, 1.8);
     candidateSlice = 40;
     reason = `Bakiye $${fmt(balance)} (Büyüme). BÜYÜME MODU: 3 Slot, $25 Teminat, Moonshot +%2.20.`;
   } else {
@@ -89,7 +89,7 @@ function evaluateExecutiveIntervention(ctx = {}, forensics = {}, regime = {}) {
     targetBe = 0.40;          // +%0.40 Spot (+%8 ROI) görünce $0 riske kitle
     targetTp1 = 0.90;         // +%0.90 Spot (+%18 ROI) ile %50 kârı anında kasaya al
     targetMoon = 1.80;        // Vur-Kaç hedefi +%1.80 Spot (+%36 ROI)
-    vol3hMin = Math.max(vol3hMin, 2.0);
+    vol3hMin = Math.max(vol3hMin, 1.8);
     candidateSlice = 35;
     reason = `Bakiye $${fmt(balance)}. VUR-KAÇ DENGELİ PORTFÖY: 2 Slot, Temel Teminat $20 (A+ Şampiyon $25-$28), Moonshot +%1.80.`;
   }

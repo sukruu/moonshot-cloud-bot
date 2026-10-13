@@ -936,17 +936,17 @@ async function scanLoop() {
           const chg15Val = (rInfo.chg15m !== undefined && rInfo.chg15m !== null) ? rInfo.chg15m : 0;
           const sig = rInfo.signal || "";
 
-          // 1. YÜKSELİRKEN VUR-KAÇ (LONG): 15m kesinlikle pozitif olmalı (≥ +0.10%) + Taker >= 54.0% (Savunmada 54.0%) + 24s >= -1.0%
-          const minTakerLong = DYNAMIC.mode === 'DEFENSIVE_SNIPER' ? 54.0 : 52.5;
-          const isEarlyLongMove = chg15Val >= 0.10 && (chg3 >= 1.2 || chg15Val >= 0.9) && chg3 <= 14.0 && chg24Val >= -1.0 && chg24Val < 30.0 && taker >= minTakerLong;
+          // 1. YÜKSELİRKEN VUR-KAÇ (LONG): 15m kesinlikle pozitif olmalı (≥ +0.10%) + Taker >= 51.0% (Savunmada 52.5%) + 24s >= -2.0%
+          const minTakerLong = DYNAMIC.mode === 'DEFENSIVE_SNIPER' ? 52.5 : 51.0;
+          const isEarlyLongMove = chg15Val >= 0.10 && (chg3 >= 1.0 || chg15Val >= 0.8) && chg3 <= 14.0 && chg24Val >= -2.0 && chg24Val < 30.0 && taker >= minTakerLong;
           if (isEarlyLongMove && (sig.includes("BOĞA") || sig.includes("ROKET") || sig.includes("SIÇRAMA") || sig.includes("BALİNA"))) {
             isDirectRadarLong = true;
             radarTag = `[${sig} | 3s: +%${chg3.toFixed(1)} / 15m: +%${chg15Val.toFixed(1)} / %${taker.toFixed(0)} Alıcı]`;
           }
 
-          // 2. DÜŞERKEN VUR-KAÇ (SHORT): 15m kesinlikle negatif olmalı (≤ -0.10%) + Taker <= 46.0% + 3s >= -4.5% (Aşırı satım engeli)
-          const maxTakerShort = DYNAMIC.mode === 'DEFENSIVE_SNIPER' ? 46.0 : 47.5;
-          const isEarlyShortMove = chg15Val <= -0.10 && (chg3 <= -1.2 || chg15Val <= -0.9) && chg3 >= -4.5 && chg24Val <= 1.0 && chg24Val > -15.0 && taker <= maxTakerShort;
+          // 2. DÜŞERKEN VUR-KAÇ (SHORT): 15m kesinlikle negatif olmalı (≤ -0.10%) + Taker <= 49.0% + 3s >= -6.5% (Aşırı satım engeli)
+          const maxTakerShort = DYNAMIC.mode === 'DEFENSIVE_SNIPER' ? 47.5 : 49.0;
+          const isEarlyShortMove = chg15Val <= -0.10 && (chg3 <= -1.0 || chg15Val <= -0.8) && chg3 >= -6.5 && chg24Val <= 2.0 && chg24Val > -18.0 && taker <= maxTakerShort;
           if (isEarlyShortMove && (sig.includes("AYI") || sig.includes("ŞELALE") || sig.includes("BALİNA"))) {
             isDirectRadarShort = true;
             radarTag = `[${sig} | 3s: %${chg3.toFixed(1)} / 15m: %${chg15Val.toFixed(1)} / %${(100 - taker).toFixed(0)} Satıcı]`;
@@ -955,7 +955,7 @@ async function scanLoop() {
           // 3. NEGATİF FONLAMA SHORT SQUEEZE TETİĞİ (KURUMSAL LİKİDASYON ROKETİ)
           const fItemLive = fundMap[sym];
           const isSqueezeAlert = !!(fItemLive && (fItemLive.bias === 'SHORT_SQUEEZE_ALERT' || fItemLive.fundingRatePct <= -0.030));
-          if (isSqueezeAlert && chg15Val >= 0.05 && taker >= 51.5 && chg24Val >= -3.0 && chg24Val < 30.0) {
+          if (isSqueezeAlert && chg15Val >= 0.05 && taker >= 50.8 && chg24Val >= -3.0 && chg24Val < 30.0) {
             isDirectRadarLong = true;
             radarTag = `[🔥 SHORT SQUEEZE | Fonlama: %${fItemLive.fundingRatePct} / %${taker.toFixed(0)} Alıcı]`;
           }
@@ -970,13 +970,13 @@ async function scanLoop() {
             radarOkShort = false;
           }
 
-          // 🛡️ AŞIRI SATIM & DİP TUZAĞI ENGELİ: Koin zaten 3 saatte -%4.5 veya 24 saatte -%15 çöktüyse SHORT YASAK!
-          if (chg3 <= -4.5 || chg24Val <= -15.0) {
+          // 🛡️ AŞIRI SATIM & DİP TUZAĞI ENGELİ: Koin zaten 3 saatte -%6.5 veya 24 saatte -%18 çöktüyse SHORT YASAK!
+          if (chg3 <= -6.5 || chg24Val <= -18.0) {
             radarOkShort = false;
             isDirectRadarShort = false;
           }
-          // 🛡️ AŞIRI ALIM & TEPE TUZAĞI ENGELİ: Koin zaten 3 saatte +%12 veya 24 saatte +%35 fırladıysa LONG YASAK!
-          if (chg3 >= 12.0 || chg24Val >= 35.0) {
+          // 🛡️ AŞIRI ALIM & TEPE TUZAĞI ENGELİ: Koin zaten 3 saatte +%14 veya 24 saatte +%35 fırladıysa LONG YASAK!
+          if (chg3 >= 14.0 || chg24Val >= 35.0) {
             radarOkLong = false;
             isDirectRadarLong = false;
           }
@@ -991,17 +991,15 @@ async function scanLoop() {
             isDirectRadarLong = false;
           }
 
-          if (taker < 51.5 && chg3 < 0.0) radarOkLong = false;
-          if (taker > 48.5 && chg3 > 0.0) radarOkShort = false;
+          if (taker < 50.5 && chg3 < 0.0) radarOkLong = false;
+          if (taker > 49.5 && chg3 > 0.0) radarOkShort = false;
 
           // 🚫 24s-3s YÖN UYUMSUZLUĞU FİLTRESİ: Günlük trend işlem yönüne ters ise ASLA girme!
-          // Günlükte düşen koine LONG AÇILMAZ (龙虾 -4.4% engeli)!
-          // Günlükte yükselen koine SHORT AÇILMAZ (STRK +5.7% engeli)!
-          if (isDirectRadarLong && chg24Val < -1.5) {
+          if (isDirectRadarLong && chg24Val < -2.0) {
             isDirectRadarLong = false;
             radarOkLong = false;
           }
-          if (isDirectRadarShort && chg24Val > 1.5) {
+          if (isDirectRadarShort && chg24Val > 2.0) {
             isDirectRadarShort = false;
             radarOkShort = false;
           }
@@ -1031,11 +1029,11 @@ async function scanLoop() {
           finalLongSignal = true;
         } else if (hasMomentum && isWhaleVol && curCandleGreen && freshVolumeLong) {
           const chg15Val = rInfo ? (rInfo.chg15m || 0) : 0;
-          const minTaker = DYNAMIC.mode === 'DEFENSIVE_SNIPER' ? 54.0 : 52.5;
+          const minTaker = DYNAMIC.mode === 'DEFENSIVE_SNIPER' ? 52.5 : 51.0;
           const hasTakerSupport = rInfo ? (rInfo.takerBuyRatio || 50) >= minTaker : false;
           const hasVolume = rInfo ? (rInfo.vol3hM || 0) >= DYNAMIC.vol3hMin : false;
-          const notOverbought = chg24Val >= 0.0 && chg24Val < 25.0;
-          const strongMomentum = curMovePct >= 0.35;
+          const notOverbought = chg24Val >= -2.0 && chg24Val < 30.0;
+          const strongMomentum = curMovePct >= 0.30;
           if (hasTakerSupport && hasVolume && notOverbought && strongMomentum && chg15Val >= 0.10) {
             finalLongSignal = true;
           }
@@ -1047,19 +1045,19 @@ async function scanLoop() {
           finalShortSignal = true;
         } else if ((curMovePct <= -minJump && curP < curO) && isWhaleVol && curCandleRed && freshVolumeShort) {
           const chg15Val = rInfo ? (rInfo.chg15m || 0) : 0;
-          const maxTaker = DYNAMIC.mode === 'DEFENSIVE_SNIPER' ? 46.0 : 47.5;
+          const maxTaker = DYNAMIC.mode === 'DEFENSIVE_SNIPER' ? 47.5 : 49.0;
           const hasTakerSell = rInfo ? (rInfo.takerBuyRatio || 50) <= maxTaker : false;
           const hasVolume = rInfo ? (rInfo.vol3hM || 0) >= DYNAMIC.vol3hMin : false;
-          const strongMomentumDown = curMovePct <= -0.35;
-          const notOversold = chg24Val <= 0.0 && chg24Val > -15.0;
+          const strongMomentumDown = curMovePct <= -0.30;
+          const notOversold = chg24Val <= 2.0 && chg24Val > -18.0;
           if (hasTakerSell && hasVolume && strongMomentumDown && notOversold && chg15Val <= -0.10) {
             finalShortSignal = true;
           }
         }
 
         // 🛡️ DERS 2: Günlük (24s) ve 3s Trend Filtresi
-        const strictTrendOkLong = (chg24Val < 30.0) && (chg24Val >= -1.5) && (!rInfo || (rInfo.chg3h || 0) < 14.0); 
-        const strictTrendOkShort = (chg24Val > -18.0) && (chg24Val <= 1.5);
+        const strictTrendOkLong = (chg24Val < 32.0) && (chg24Val >= -2.0) && (!rInfo || (rInfo.chg3h || 0) < 16.0); 
+        const strictTrendOkShort = (chg24Val > -20.0) && (chg24Val <= 2.0);
 
         // 🛡️ TEPE VE DİP TUZAĞI KORUMASI (Direnç ve Destek Uçlarında Ters Köşeyi Kesinlikle Önle!)
         let isNearPeakTrap = false;
@@ -1069,25 +1067,19 @@ async function scanLoop() {
           const low3 = rInfo.low3h || curL;
           const chg15 = rInfo.chg15m || 0;
 
-          // 1. LONG İÇİN TEPE & DİRENÇ TUZAĞI (BRUSDT vb. zirveden alma tuzaklarını engelle!)
-          // A) Zirveye çok yakınsa: 3 saatlik zirvenin %1.5 yakınına yapışmışsa ve (3s >= +3.0% veya 24s >= +6.0% veya fitil reddi varsa) ASLA ALMA!
-          const isAtResistance = high3 > 0 && (curP >= high3 * 0.985) && ((rInfo.chg3h || 0) >= 3.0 || chg24Val >= 6.0 || upperWickReject);
-          // B) Son 15 dakikada dikey fırlamışsa (+%3.2 üzeri dikey mum - tepe kovalama engeli)
-          const is15mPumpClimax = chg15 >= 3.2;
-          // C) Günlükte veya 3 saatte aşırı şişmişse ve tepeye yakınsa
-          const isOverheatedPump = (chg24Val >= 12.0 || (rInfo.chg3h || 0) >= 7.0) && (high3 > 0 && curP >= high3 * 0.982);
+          // 1. LONG İÇİN TEPE & DİRENÇ TUZAĞI (Aşırı şişmiş tepe veya üst fitil satış reddi)
+          const isAtResistance = upperWickReject || (high3 > 0 && (curP >= high3 * 0.99) && ((rInfo.chg3h || 0) >= 7.0 || chg24Val >= 18.0));
+          const is15mPumpClimax = chg15 >= 3.5;
+          const isOverheatedPump = (chg24Val >= 18.0 || (rInfo.chg3h || 0) >= 8.5) && (high3 > 0 && curP >= high3 * 0.985);
           
           if (isAtResistance || is15mPumpClimax || isOverheatedPump || upperWickReject) {
             isNearPeakTrap = true;
           }
 
-          // 2. SHORT İÇİN DİP & DESTEK TUZAĞI (FET, PROMUSDT, KORUUSDT vb. dipten shortlama tuzaklarını engelle!)
-          // A) Desteğe çok yakınsa: 3 saatlik dibin %1.5 yakınına yapışmışsa ve (3s <= -3.0% veya 24s <= -6.0% veya alt fitil varsa) ASLA SHORTLAMA!
-          const isAtSupport = low3 > 0 && (curP <= low3 * 1.015) && ((rInfo.chg3h || 0) <= -3.0 || chg24Val <= -6.0 || lowerWickReject);
-          // B) Son 15 dakikada dikey çökmüşse (15m <= -3.0% - aşırı satım / PROMUSDT engeli)
-          const is15mDumpClimax = chg15 <= -3.0;
-          // C) Günlükte veya 3 saatte aşırı çökmüşse ve dibe yakınsa
-          const isOverheatedDump = (chg24Val <= -10.0 || (rInfo.chg3h || 0) <= -5.0) && (low3 > 0 && curP <= low3 * 1.018);
+          // 2. SHORT İÇİN DİP & DESTEK TUZAĞI (Aşırı çökmüş dip veya alt fitil alış reddi)
+          const isAtSupport = lowerWickReject || (low3 > 0 && (curP <= low3 * 1.01) && ((rInfo.chg3h || 0) <= -6.0 || chg24Val <= -16.0));
+          const is15mDumpClimax = chg15 <= -3.5;
+          const isOverheatedDump = (chg24Val <= -16.0 || (rInfo.chg3h || 0) <= -7.5) && (low3 > 0 && curP <= low3 * 1.015);
 
           if (isAtSupport || is15mDumpClimax || isOverheatedDump || lowerWickReject) {
             isNearDipTrap = true;
@@ -1095,15 +1087,13 @@ async function scanLoop() {
         }
 
         // 🛡️ BTC TREND KORUMASI: BTC yönünün tersine işlem AÇILAMAZ!
-        // BTC 15m veya 5m yeşilken SHORT KESİNLİKLE YASAK! (Dipten zıplayan piyasada ters köşeyi önle)
-        // BTC 15m veya 5m kırmızı iken LONG KESİNLİKLE YASAK!
         const btcSafeForLong = (btc5mNumeric >= -0.08) && (btc15mNumeric >= -0.12);
         const btcSafeForShort = (btc5mNumeric <= 0.08) && (btc15mNumeric <= 0.08);
 
         // 🎯 TREND ŞARTI: LONG için 15m kesinlikle pozitif (>= +0.10%), SHORT için kesinlikle negatif (<= -0.10%) olmalı!
         const cur15m = (rInfo && rInfo.chg15m !== undefined) ? rInfo.chg15m : 0;
-        const longTrendOk = !!rInfo && cur15m >= 0.10 && ((rInfo.chg3h || 0) >= 1.2 || cur15m >= 0.9 || (rInfo.signal && rInfo.signal.includes("BALİNA"))) && chg24Val >= -1.0;
-        const shortTrendOk = !!rInfo && cur15m <= -0.10 && ((rInfo.chg3h || 0) <= -1.2 || cur15m <= -0.9 || (rInfo.signal && rInfo.signal.includes("BALİNA"))) && chg24Val <= 1.0;
+        const longTrendOk = !!rInfo && cur15m >= 0.10 && ((rInfo.chg3h || 0) >= 1.0 || cur15m >= 0.8 || (rInfo.signal && rInfo.signal.includes("BALİNA"))) && chg24Val >= -2.0;
+        const shortTrendOk = !!rInfo && cur15m <= -0.10 && ((rInfo.chg3h || 0) <= -1.0 || cur15m <= -0.8 || (rInfo.signal && rInfo.signal.includes("BALİNA"))) && chg24Val <= 2.0;
 
         const isLongPump = finalLongSignal && longTrendOk && validWickLong && radarOkLong && strictTrendOkLong && !isNearPeakTrap && btcSafeForLong && !nearMax6m;
         const isShortDump = finalShortSignal && shortTrendOk && validWickShort && radarOkShort && strictTrendOkShort && !isNearDipTrap && btcSafeForShort;

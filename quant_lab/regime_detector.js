@@ -55,8 +55,8 @@ async function detectMarketRegime() {
   let regime = 'CHOPPY_RANGE';
   let description = 'Yatay / Sakin Piyasa';
   let recommended = {
-    vol3hM: 3.5,
-    candidateSlice: 30,
+    vol3hM: 1.8,
+    candidateSlice: 35,
     bePct: 0.45,
     tp1Pct: 0.75,
     moonPct: 1.50,
