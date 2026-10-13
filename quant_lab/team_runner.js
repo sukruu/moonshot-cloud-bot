@@ -39,11 +39,11 @@ function evaluateExecutiveIntervention(ctx = {}, forensics = {}, regime = {}) {
   let mode = 'BALANCED';
   let targetSlots = 2;
   let targetMargin = 20.0;
-  let targetSl = 0.95;
-  let targetBe = 0.40;
-  let targetTp1 = 0.90;
+  let targetSl = 0.48;
+  let targetBe = 0.55;
+  let targetTp1 = 0.80;
   let targetMoon = 1.80;
-  let vol3hMin = rec.vol3hM || 2.2;
+  let vol3hMin = rec.vol3hM || 1.8;
   let candidateSlice = rec.candidateSlice || 35;
   let reason = '';
 
@@ -51,30 +51,30 @@ function evaluateExecutiveIntervention(ctx = {}, forensics = {}, regime = {}) {
     mode = 'DEFENSIVE_SNIPER';
     targetSlots = 1;          // 🛑 Tek slot! Dağılma yok, sadece 1 şampiyon pozisyon
     targetMargin = 10.0;      // 🛡️ $10 teminat (Maksimum kayıp sınırlandı)
-    targetSl = 0.80;          // 🛡️ Stop Loss %0.80 Spot (-16% ROI = -$1.60 risk)
-    targetBe = 0.35;          // 🛡️ Erken başabaş kilidi: +%0.35 Spot (+%7 ROI) görünce kitle
-    targetTp1 = 0.80;         // 🛡️ +%0.80 Spot (+%16 ROI) görünce %50 kâr al (1:1 R:R)
+    targetSl = 0.45;          // 🛡️ Sıkı Stop Loss %0.45 Spot (-9% ROI = -$0.90 risk!)
+    targetBe = 0.50;          // 🛡️ Başabaş kilidi: +%0.50 Spot (+%10 ROI) görünce kitle
+    targetTp1 = 0.75;         // 🛡️ +%0.75 Spot (+%15 ROI) görünce %50 kâr al
     targetMoon = 1.50;        // 🛡️ +%1.50 Spot (+%30 ROI)
-    vol3hMin = Math.max(vol3hMin, 2.5); // Sığ ve manipülatif koinler yasak
-    candidateSlice = 20;      // Sadece en likit 20 aday
-    reason = `Bakiye $${fmt(balance)} ($${initial} altında, -%${fmt(netDrawdown * 100, 1)} net / zirveden -%${fmt(drawdownFromPeak * 100, 1)} DD). SAVUNMA MODU AKTİF: Slot 1'e, Teminat $10'a, SL %0.80'e indirildi.`;
+    vol3hMin = Math.max(vol3hMin, 2.2); // Sığ ve manipülatif koinler yasak
+    candidateSlice = 25;      // Sadece en likit 25 aday
+    reason = `Bakiye $${fmt(balance)} ($${initial} altında, -%${fmt(netDrawdown * 100, 1)} net / zirveden -%${fmt(drawdownFromPeak * 100, 1)} DD). SAVUNMA MODU AKTİF: Slot 1'e, Teminat $10'a, SL %0.45'e indirildi.`;
   } else if (isModerateLoss) {
     mode = 'CAUTIOUS_RECOVERY';
     targetSlots = 2;
     targetMargin = 12.0;
-    targetSl = 0.85;
-    targetBe = 0.40;
-    targetTp1 = 0.85;
+    targetSl = 0.48;          // 🛡️ Sıkı Stop Loss %0.48 Spot (-9.6% ROI = -$1.15 risk!)
+    targetBe = 0.55;          // 🛡️ Başabaş kilidi: +%0.55 Spot (+%11 ROI) görünce kitle
+    targetTp1 = 0.80;
     targetMoon = 1.50;
     vol3hMin = Math.max(vol3hMin, 1.8);
     candidateSlice = 35;
-    reason = `Bakiye $${fmt(balance)}. TEMKİNLİ TOPARLANMA: Slot 2, Teminat $12, SL %0.85, TP1 %0.85.`;
+    reason = `Bakiye $${fmt(balance)}. TEMKİNLİ TOPARLANMA: Slot 2, Teminat $12, SL %0.48, TP1 %0.80.`;
   } else if (balance >= 120.0) {
     mode = 'GROWTH';
     targetSlots = 3;
     targetMargin = 25.0;
-    targetSl = 1.05;
-    targetBe = 0.40;
+    targetSl = 0.50;
+    targetBe = 0.55;
     targetTp1 = 0.95;
     targetMoon = 2.20;
     vol3hMin = Math.max(vol3hMin, 1.8);
@@ -85,13 +85,13 @@ function evaluateExecutiveIntervention(ctx = {}, forensics = {}, regime = {}) {
     mode = 'BALANCED';
     targetSlots = 2;          // 2 slot: Sermaye dağıtımı dengeli ($25 x 2 = $50 oyunda, $50+ serbest rezerv)
     targetMargin = 20.0;      // Taban teminat $20 (A+ Şampiyon kurulumunda $25-$28'e esner)
-    targetSl = 0.95;          // Sıkı stop (%0.95 Spot = 20x ile -%19 ROI = -$3.80 risk)
-    targetBe = 0.40;          // +%0.40 Spot (+%8 ROI) görünce $0 riske kitle
-    targetTp1 = 0.90;         // +%0.90 Spot (+%18 ROI) ile %50 kârı anında kasaya al
+    targetSl = 0.48;          // 🎯 Sıkı stop (%0.48 Spot = 20x ile -%9.6 ROI = -$1.90 maks risk!)
+    targetBe = 0.55;          // +%0.55 Spot (+%11 ROI) görünce $0 riske kitle
+    targetTp1 = 0.80;         // +%0.80 Spot (+%16 ROI) ile %50 kârı anında kasaya al
     targetMoon = 1.80;        // Vur-Kaç hedefi +%1.80 Spot (+%36 ROI)
     vol3hMin = Math.max(vol3hMin, 1.8);
     candidateSlice = 35;
-    reason = `Bakiye $${fmt(balance)}. VUR-KAÇ DENGELİ PORTFÖY: 2 Slot, Temel Teminat $20 (A+ Şampiyon $25-$28), Moonshot +%1.80.`;
+    reason = `Bakiye $${fmt(balance)}. VUR-KAÇ DENGELİ PORTFÖY: 2 Slot, SL %0.48, TP1 %0.80, Moonshot +%1.80.`;
   }
 
   return {
@@ -218,8 +218,8 @@ function calculateConvictionSizing({
       tierLabel: customLabel,
       isShortSqueeze: isSqueeze,
       margin: margin,
-      slPct: 0.90,       // Güçlü ivmede sarkma payı
-      bePct: 0.40,       // +%0.40 Spot görünce $0 riske kitle
+      slPct: 0.48,       // 🎯 Dar Stop Loss (-%9.6 ROI = ~$1.25 risk!)
+      bePct: 0.55,       // 🎯 +%0.55 Spot görünce $0 riske kitle
       tp1Pct: tp1Target, // TP1 kârı anında kasaya kitle
       moonPct: moonTarget, // Kalan yarısı dev vur-kaçla koşsun
       convictionScore: score,
@@ -236,9 +236,9 @@ function calculateConvictionSizing({
       tier: 'TIER_HIGH',
       tierLabel: '💎 TIER-1 GÜÇLÜ SİNYAL',
       margin: margin,
-      slPct: 0.95,
-      bePct: 0.40,
-      tp1Pct: 0.85,
+      slPct: 0.48,
+      bePct: 0.55,
+      tp1Pct: 0.80,
       moonPct: 1.80,
       convictionScore: score,
       rationale: `Skor %${score}. Güçlü kurumsal sinyal! Teminat $${margin}, Moonshot +%1.80.`
@@ -252,9 +252,9 @@ function calculateConvictionSizing({
       tier: 'TIER_STANDARD',
       tierLabel: '🛡️ STANDART VUR-KAÇ',
       margin: margin,
-      slPct: 1.00,
-      bePct: 0.40,
-      tp1Pct: 0.80,
+      slPct: 0.45,
+      bePct: 0.50,
+      tp1Pct: 0.75,
       moonPct: 1.50,
       convictionScore: score,
       rationale: `Skor %${score}. Standart kurulum, kontrollü risk ($${margin} teminat).`

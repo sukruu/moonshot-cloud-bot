@@ -57,10 +57,10 @@ let CONFIG = {
   marginPerTrade: 15.0,      // Temel Teminat 15$ (A+ Şampiyon kurulumunda $25-$28'e esner)
   leverage: 20,              // Kaldıraç 20x
   maxSlots: 2,               // 2 Slot (Dengeli sermaye tahsisi & bağımsız fırsat yakalama)
-  slPct: 0.95,               // Stop Loss %0.95 Spot (20x ile -%19 ROI = -$3.80 maks risk)
-  bePct: 0.40,               // Erken Başabaş Kilidi %0.40 Spot (+%8 ROI görünce $0 Riske kitle)
+  slPct: 0.48,               // 🎯 Dar Stop Loss %0.48 Spot (20x ile -%9.6 ROI = ~$1.20 maks risk!)
+  bePct: 0.55,               // 🎯 Başabaş Kilidi %0.55 Spot (+%11 ROI görünce kitle)
   moonPct: 1.80,             // Vur-Kaç Moonshot TP2 Hedefi %1.80 Spot (+%36 ROI)
-  tp1Pct: 0.90,              // Kademeli Kâr Alma TP1 Hedefi %0.90 Spot (+%18 ROI)
+  tp1Pct: 0.80,              // Kademeli Kâr Alma TP1 Hedefi %0.80 Spot (+%16 ROI)
   feeRate: 0.0005,           // Binance Futures taker %0.05 (TEK YÖN)
   scanIntervalMs: 4000,
   riskIntervalMs: 2500,
@@ -1024,9 +1024,22 @@ async function scanLoop() {
         const validWickLong = !upperWickReject;
         const validWickShort = !lowerWickReject;
 
+        // 🚀 ANLIK ROKET & VOLATILITY SPIKE SNIPER:
+        // Hacim aniden 2.0x patlamış ve son 3 dakikada +%0.45 üzeri dikey yeşil mum dikilmişse:
+        const isRocketSpike = (curV >= avgVol20 * 2.0 || projectedVol >= avgVol20 * 2.2) && 
+                              (curMovePct >= 0.45 || twoCandleMovePct >= 0.70) && 
+                              curP > curO && 
+                              validWickLong &&
+                              (rInfo ? (rInfo.takerBuyRatio || 50) >= 50.5 : true);
+
         // 🟢 BOĞA GİRİŞ KOŞULLARI:
         let finalLongSignal = false;
-        if (isDirectRadarLong && curCandleGreen && freshVolumeLong) {
+        let isRocketSignal = false;
+        if (isRocketSpike) {
+          finalLongSignal = true;
+          isRocketSignal = true;
+          radarTag = `[🚀 ANLIK ROKET SPIKE | 3dk: +%${curMovePct.toFixed(2)} | Hacim: ${(curV/avgVol20).toFixed(1)}x Kat]`;
+        } else if (isDirectRadarLong && curCandleGreen && freshVolumeLong) {
           finalLongSignal = true;
         } else if (hasMomentum && isWhaleVol && curCandleGreen && freshVolumeLong) {
           const chg15Val = rInfo ? (rInfo.chg15m || 0) : 0;
@@ -1252,9 +1265,9 @@ async function scanLoop() {
             tier: 'TIER_STANDARD',
             tierLabel: '🛡️ STANDART VUR-KAÇ',
             margin: CONFIG.marginPerTrade || 15.0,
-            slPct: CONFIG.slPct || 0.95,
-            bePct: CONFIG.bePct || 0.40,
-            tp1Pct: CONFIG.tp1Pct || 0.90,
+            slPct: CONFIG.slPct || 0.48,
+            bePct: CONFIG.bePct || 0.55,
+            tp1Pct: CONFIG.tp1Pct || 0.80,
             moonPct: CONFIG.moonPct || 1.80,
             convictionScore: 65,
             rationale: ''
@@ -1279,10 +1292,19 @@ async function scanLoop() {
             } catch (e) {}
           }
 
+          if (isRocketSignal) {
+            sizing.tier = 'TIER_ROCKET_SNIPER';
+            sizing.tierLabel = '🚀 ANLIK ROKET VUR-KAÇ';
+            sizing.slPct = 0.45;
+            sizing.bePct = 0.50;
+            sizing.tp1Pct = 0.75;
+            sizing.moonPct = 1.60;
+          }
+
           const tradeMargin = Number(sizing.margin) || CONFIG.marginPerTrade || 15.0;
-          const tradeSlPct = Number(sizing.slPct) || CONFIG.slPct || 0.95;
-          const tradeBePct = Number(sizing.bePct) || CONFIG.bePct || 0.40;
-          const tradeTp1Pct = Number(sizing.tp1Pct) || CONFIG.tp1Pct || 0.90;
+          const tradeSlPct = Number(sizing.slPct) || CONFIG.slPct || 0.48;
+          const tradeBePct = Number(sizing.bePct) || CONFIG.bePct || 0.55;
+          const tradeTp1Pct = Number(sizing.tp1Pct) || CONFIG.tp1Pct || 0.80;
           const tradeMoonPct = Number(sizing.moonPct) || CONFIG.moonPct || 1.80;
 
           const stopPrice = side === "LONG" 
@@ -3575,8 +3597,8 @@ server.listen(PORT, () => {
           DYNAMIC.updatedAt = Date.now();
           if (d.exitParams) {
             const ep = d.exitParams;
-            CONFIG.slPct = clamp(Number(ep.slPct) || CONFIG.slPct, [0.75, 1.50]);
-            CONFIG.bePct = clamp(Number(ep.bePct) || CONFIG.bePct, [0.25, 0.60]);
+            CONFIG.slPct = clamp(Number(ep.slPct) || CONFIG.slPct, [0.40, 1.50]);
+            CONFIG.bePct = clamp(Number(ep.bePct) || CONFIG.bePct, [0.25, 0.70]);
             CONFIG.tp1Pct = clamp(Number(ep.tp1Pct) || CONFIG.tp1Pct, [0.40, 1.50]);
             CONFIG.moonPct = clamp(Number(ep.moonPct) || CONFIG.moonPct, [1.00, 3.00]);
           }
