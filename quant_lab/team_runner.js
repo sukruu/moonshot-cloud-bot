@@ -66,8 +66,8 @@ function evaluateExecutiveIntervention(ctx = {}, forensics = {}, regime = {}) {
     targetBe = 0.40;
     targetTp1 = 0.85;
     targetMoon = 1.50;
-    vol3hMin = Math.max(vol3hMin, 2.0);
-    candidateSlice = 25;
+    vol3hMin = Math.max(vol3hMin, 1.8);
+    candidateSlice = 35;
     reason = `Bakiye $${fmt(balance)}. TEMKİNLİ TOPARLANMA: Slot 2, Teminat $12, SL %0.85, TP1 %0.85.`;
   } else if (balance >= 120.0) {
     mode = 'GROWTH';
