@@ -137,21 +137,21 @@ function summarizeTrades(trades) {
  */
 function generateCandidateStrategies() {
   const named = [
-    { name: "⚡ Lazer Sniper", slPct: 0.45, bePct: 0.60, tp1Pct: 0.55, moonPct: 1.30, minJump: 0.50 },
-    { name: "🛡️ Defansif Scalp", slPct: 0.45, bePct: 0.65, tp1Pct: 0.55, moonPct: 1.40, minJump: 0.50 },
-    { name: "🎯 Dengeli Vur-Kaç", slPct: 0.48, bePct: 0.60, tp1Pct: 0.55, moonPct: 1.45, minJump: 0.55 },
-    { name: "🚀 Hızlı Roket", slPct: 0.45, bePct: 0.60, tp1Pct: 0.55, moonPct: 1.50, minJump: 0.60 },
-    { name: "💎 Trend Avcısı", slPct: 0.50, bePct: 0.65, tp1Pct: 0.60, moonPct: 1.60, minJump: 0.55 },
-    { name: "🔒 Erken Kilit", slPct: 0.45, bePct: 0.60, tp1Pct: 0.50, moonPct: 1.25, minJump: 0.45 },
-    { name: "🌊 Momentum Dalgası", slPct: 0.48, bePct: 0.65, tp1Pct: 0.58, moonPct: 1.55, minJump: 0.60 },
-    { name: "🦅 Yüksek Seçici", slPct: 0.45, bePct: 0.60, tp1Pct: 0.55, moonPct: 1.35, minJump: 0.65 }
+    { name: "🏔️ Marscoin Trend Roketi", slPct: 1.10, bePct: 1.00, tp1Pct: 1.20, moonPct: 2.40, minJump: 0.70 },
+    { name: "🚀 Hızlı Balina İvmesi", slPct: 1.05, bePct: 0.95, tp1Pct: 1.15, moonPct: 2.30, minJump: 0.75 },
+    { name: "💎 Kurumsal Moonshot", slPct: 1.15, bePct: 1.05, tp1Pct: 1.30, moonPct: 2.60, minJump: 0.80 },
+    { name: "⚡ Marscoin Flaş Sniper", slPct: 1.00, bePct: 0.90, tp1Pct: 1.15, moonPct: 2.20, minJump: 0.70 },
+    { name: "🌊 Momentum Dalgası", slPct: 1.10, bePct: 1.00, tp1Pct: 1.25, moonPct: 2.50, minJump: 0.75 },
+    { name: "🛡️ Defansif Marscoin", slPct: 1.10, bePct: 0.95, tp1Pct: 1.20, moonPct: 2.30, minJump: 0.70 },
+    { name: "🎯 Dengeli Vur-Kaç", slPct: 1.05, bePct: 1.00, tp1Pct: 1.20, moonPct: 2.40, minJump: 0.75 },
+    { name: "🦅 Yüksek Seçici Roket", slPct: 1.15, bePct: 1.05, tp1Pct: 1.25, moonPct: 2.50, minJump: 0.80 }
   ];
 
   const grid = [];
-  const sls = [0.40, 0.45, 0.50];
-  const tp1s = [0.50, 0.55, 0.60];
-  const bes = [0.60, 0.65];
-  const moons = [1.25, 1.50];
+  const sls = [1.00, 1.10, 1.20];
+  const bes = [0.90, 1.00];
+  const tp1s = [1.15, 1.25];
+  const moons = [2.20, 2.60];
 
   for (const sl of sls) {
     for (const be of bes) {
@@ -164,7 +164,7 @@ function generateCandidateStrategies() {
             bePct: be,
             tp1Pct: tp1,
             moonPct: moon,
-            minJump: 0.50
+            minJump: 0.70
           });
         }
       }

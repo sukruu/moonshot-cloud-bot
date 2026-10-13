@@ -724,5 +724,93 @@
     "title": "DevOps & Sistem",
     "text": "💻 [SİSTEM &amp; KOD GÜNCELLEMESİ]: Canlı server.js çekirdeğine Şampiyon &quot;🎯 Dengeli Vur-Kaç&quot; parametreleri sıcak yüklendi (Hot-Reload). Parametreler senkronize, sistem stabil.",
     "tag": "SYSTEM"
+  },
+  {
+    "id": "1791924832770vmjc",
+    "time": "23:53:52",
+    "timestamp": 1791924832786,
+    "agent": "👑 YÖNETİCİ",
+    "roleKey": "MANAGER",
+    "color": "#7c3aed",
+    "title": "Risk Direktörü",
+    "text": "👑 [VUR-KAÇ PORTFÖY DİREKTÖRÜ]: Kasa $89.60, açık slot 0/2. Mod: MARSCOIN_ROCKET. A+ Şampiyon sinyallerde Kelly teminatı $25-$28'e yükseltilecek! Sert sınırlar: uyumlu.",
+    "tag": "RISK"
+  },
+  {
+    "id": "1791924832787vxa5",
+    "time": "23:53:52",
+    "timestamp": 1791924832787,
+    "agent": "🧠 ANALİZCİ",
+    "roleKey": "ANALYST",
+    "color": "#0284c7",
+    "title": "Piyasa İstihbaratı",
+    "text": "Rejim: Yatay / Sakin Piyasa. BTC 24s %0.00, $15M+ hacimli koin sayısı 0. Öneri: hacim ≥ $2.5M, 35 aday.",
+    "tag": "REGIME"
+  },
+  {
+    "id": "1791924832787cftl",
+    "time": "23:53:52",
+    "timestamp": 1791924832788,
+    "agent": "🐋 BALİNA AVCISI",
+    "roleKey": "WHALE_HUNTER",
+    "color": "#0891b2",
+    "title": "Para Akışı & Fon",
+    "text": "🐋 [FON AKIŞI]: Net piyasa yönü: BULLISH ($3.1M). Kurumsal boğa alımları taranıyor.",
+    "tag": "FLOW"
+  },
+  {
+    "id": "1791924832788wh0g",
+    "time": "23:53:52",
+    "timestamp": 1791924832788,
+    "agent": "🎯 FREQ-AI & LİKİDASYON",
+    "roleKey": "FREQAI",
+    "color": "#db2777",
+    "title": "ML Olasılık & Fonlama",
+    "text": "🎯 [FREQ-AI &amp; FONLAMA]: ML Karar Motoru hazır (0 işlem kalibre). Ortalama fonlama: %0.0032. Minimum kazanma olasılığı eşiği: %68.",
+    "tag": "STRATEGY"
+  },
+  {
+    "id": "17919248327899ahp",
+    "time": "23:53:52",
+    "timestamp": 1791924832789,
+    "agent": "🏛️ BAŞ YARGIÇ",
+    "roleKey": "JUDGE",
+    "color": "#b45309",
+    "title": "Adli Denetçi (Aslan11)",
+    "text": "🏛️ [ASLAN11 ADLİ HÜKÜM]: Mahkeme devrede (54 beraat, 2 mahkumiyet). Ön yargılama vizesi şartı devrede.",
+    "tag": "RISK"
+  },
+  {
+    "id": "1791924832789u8bc",
+    "time": "23:53:52",
+    "timestamp": 1791924832790,
+    "agent": "🧪 TESTÇİ",
+    "roleKey": "TESTER",
+    "color": "#059669",
+    "title": "QA & Simülatör",
+    "text": "Backtest (6 koin). Mevcut: PF 0, net $0.00 | Önerilen: PF 0, net $0.00.",
+    "tag": "STRATEGY"
+  },
+  {
+    "id": "1791924832790vdln",
+    "time": "23:53:52",
+    "timestamp": 1791924832790,
+    "agent": "⚔️ TRADER",
+    "roleKey": "TRADER",
+    "color": "#b45309",
+    "title": "Sinyal & Yürütme",
+    "text": "⚔️ [DİNAMİK YÜRÜTME]: 350+ koin taranıyor. Standart teminat: $15, A+ Şampiyon: $25-$28. Kademeli TP1 +%1.2, Vur-Kaç Moonshot +%2.4.",
+    "tag": "TRADE"
+  },
+  {
+    "id": "1791924832791rmfa",
+    "time": "23:53:52",
+    "timestamp": 1791924832791,
+    "agent": "💻 YAZILIMCI",
+    "roleKey": "ENGINEER",
+    "color": "#475569",
+    "title": "DevOps & Sistem",
+    "text": "Sunucu çalışma süresi 360 dk. Piyasa ve simülasyon verisi: güncel.",
+    "tag": "SYSTEM"
   }
 ]

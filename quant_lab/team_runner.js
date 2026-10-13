@@ -48,50 +48,50 @@ function evaluateExecutiveIntervention(ctx = {}, forensics = {}, regime = {}) {
   let reason = '';
 
   if (isSevereLoss) {
-    mode = 'DEFENSIVE_SNIPER';
-    targetSlots = 1;          // 🛑 Tek slot! Dağılma yok, sadece 1 şampiyon pozisyon
-    targetMargin = 10.0;      // 🛡️ $10 teminat (Maksimum kayıp sınırlandı)
-    targetSl = 0.45;          // 🛡️ Sıkı Stop Loss %0.45 Spot (-9% ROI = -$0.90 risk!)
-    targetTp1 = 0.55;         // 💰 +%0.55 Spot (+%11 ROI) görünce %50 kâr al (KÂR ÖNCE CEBE!)
-    targetBe = 0.60;          // 🛡️ Başabaş kilidi: +%0.60 Spot (+%12 ROI) görünce kitle
-    targetMoon = 1.50;        // 🛡️ +%1.50 Spot (+%30 ROI)
-    vol3hMin = Math.max(vol3hMin, 2.2); // Sığ ve manipülatif koinler yasak
-    candidateSlice = 25;      // Sadece en likit 25 aday
-    reason = `Bakiye $${fmt(balance)} ($${initial} altında, -%${fmt(netDrawdown * 100, 1)} net / zirveden -%${fmt(drawdownFromPeak * 100, 1)} DD). SAVUNMA MODU AKTİF: Slot 1'e, Teminat $10'a, SL %0.45'e, TP1 %0.55'e ayarlandı.`;
-  } else if (isModerateLoss) {
-    mode = 'CAUTIOUS_RECOVERY';
-    targetSlots = 2;
-    targetMargin = 12.0;
-    targetSl = 0.45;          // 🛡️ Sıkı Stop Loss %0.45 Spot (-9% ROI = -$1.08 risk!)
-    targetTp1 = 0.55;         // 💰 +%0.55 Spot (+%11 ROI) görünce %50 kâr al
-    targetBe = 0.60;          // 🛡️ Başabaş kilidi: +%0.60 Spot (+%12 ROI) görünce kitle
-    targetMoon = 1.50;
-    vol3hMin = Math.max(vol3hMin, 1.8);
+    mode = 'MARSCOIN_ROCKET';
+    targetSlots = 2;          // 2 slot bağımsız roket yakalama
+    targetMargin = 15.0;      // 🏔️ $15 teminat
+    targetSl = 1.10;          // 🏔️ Marscoin Sağlıklı Stop Loss %1.10 Spot (Nefes alanı tam)
+    targetTp1 = 1.20;         // 💰 %1.20 Spot (+%24 ROI) ile %50 kârı anında nakde çevir
+    targetBe = 1.00;          // 🛡️ Başabaş kilidi: +%1.00 Spot (+%20 ROI) görünce kitle
+    targetMoon = 2.40;        // 🚀 Dev Moonshot +%2.40 Spot (+%48 ROI)
+    vol3hMin = Math.max(vol3hMin, 2.5); // Gerçek likidite
     candidateSlice = 35;
-    reason = `Bakiye $${fmt(balance)}. TEMKİNLİ TOPARLANMA: Slot 2, Teminat $12, SL %0.45, TP1 %0.55.`;
+    reason = `Bakiye $${fmt(balance)}. 🏔️ MARSCOIN ROKET MODU AKTİF: Slot 2, Teminat $15, SL %1.10, TP1 %1.20, Moonshot %2.40.`;
+  } else if (isModerateLoss) {
+    mode = 'MARSCOIN_ROCKET';
+    targetSlots = 2;
+    targetMargin = 15.0;
+    targetSl = 1.10;
+    targetTp1 = 1.20;
+    targetBe = 1.00;
+    targetMoon = 2.40;
+    vol3hMin = Math.max(vol3hMin, 2.5);
+    candidateSlice = 35;
+    reason = `Bakiye $${fmt(balance)}. 🏔️ MARSCOIN ROKET MODU AKTİF: Slot 2, Teminat $15, SL %1.10, TP1 %1.20, Moonshot %2.40.`;
   } else if (balance >= 120.0) {
     mode = 'GROWTH';
     targetSlots = 3;
-    targetMargin = 25.0;
-    targetSl = 0.48;
-    targetTp1 = 0.60;
-    targetBe = 0.65;
-    targetMoon = 2.00;
-    vol3hMin = Math.max(vol3hMin, 1.8);
+    targetMargin = 20.0;
+    targetSl = 1.10;
+    targetTp1 = 1.30;
+    targetBe = 1.00;
+    targetMoon = 2.80;
+    vol3hMin = Math.max(vol3hMin, 2.5);
     candidateSlice = 40;
-    reason = `Bakiye $${fmt(balance)} (Büyüme). BÜYÜME MODU: 3 Slot, $25 Teminat, SL %0.48, TP1 %0.60.`;
+    reason = `Bakiye $${fmt(balance)} (Büyüme). BÜYÜME MODU: 3 Slot, $20 Teminat, SL %1.10, TP1 %1.30.`;
   } else {
     // Mevcut bakiye ~$100-$119 aralığı (Dengeli Vur-Kaç)
-    mode = 'BALANCED';
-    targetSlots = 2;          // 2 slot: Sermaye dağıtımı dengeli ($25 x 2 = $50 oyunda, $50+ serbest rezerv)
-    targetMargin = 20.0;      // Taban teminat $20 (A+ Şampiyon kurulumunda $25-$28'e esner)
-    targetSl = 0.45;          // 🎯 Sıkı stop (%0.45 Spot = 20x ile -%9.0 ROI = -$1.80 maks risk!)
-    targetTp1 = 0.55;         // 💰 +%0.55 Spot (+%11 ROI) ile %50 kârı anında kasaya al
-    targetBe = 0.60;          // +%0.60 Spot (+%12 ROI) görünce $0 riske kitle
-    targetMoon = 1.60;        // Vur-Kaç hedefi +%1.60 Spot (+%32 ROI)
-    vol3hMin = Math.max(vol3hMin, 1.8);
+    mode = 'MARSCOIN_ROCKET';
+    targetSlots = 2;
+    targetMargin = 15.0;
+    targetSl = 1.10;
+    targetTp1 = 1.20;
+    targetBe = 1.00;
+    targetMoon = 2.40;
+    vol3hMin = Math.max(vol3hMin, 2.5);
     candidateSlice = 35;
-    reason = `Bakiye $${fmt(balance)}. VUR-KAÇ DENGELİ PORTFÖY: 2 Slot, SL %0.45, TP1 %0.55, Moonshot +%1.60.`;
+    reason = `Bakiye $${fmt(balance)}. 🏔️ MARSCOIN ROKET MODU AKTİF: 2 Slot, SL %1.10, TP1 %1.20, Moonshot +%2.40.`;
   }
 
   return {
@@ -218,46 +218,46 @@ function calculateConvictionSizing({
       tierLabel: customLabel,
       isShortSqueeze: isSqueeze,
       margin: margin,
-      slPct: 0.45,       // 🎯 Dar Stop Loss (-%9.0 ROI = ~$0.90 - $1.25 risk!)
-      bePct: 0.60,       // 🎯 +%0.60 Spot görünce $0 riske kitle
-      tp1Pct: 0.55,      // 💰 TP1 kârı anında kasaya kitle (%50 kapat)
-      moonPct: moonTarget, // Kalan yarısı dev vur-kaçla koşsun
+      slPct: 1.10,       // 🏔️ Marscoin Sağlıklı Stop Loss
+      bePct: 1.00,       // 🛡️ +%1.00 Spot görünce $0 riske kitle
+      tp1Pct: 1.20,      // 💰 TP1 kârı %1.20 Spot (+%24 ROI)
+      moonPct: 2.40,     // 🚀 Dev Marscoin Moonshot +%2.40 Spot (+%48 ROI)
       convictionScore: score,
       rationale: isSqueeze 
         ? `🔥 SHORT SQUEEZE TESPİT EDİLDİ! Fonlama %${fundRate.toFixed(3)} (Ağır Negatif). Balinalar shortçuları patlatıyor! Teminat $${margin}, Moonshot +%${moonTarget.toFixed(2)}.`
-        : `Skor %${score} (Taker: %${effectiveTaker.toFixed(1)}, FreqAI: %${winProb}, Akış: $${flow}M). A+ Şampiyon kurulumu! Teminat $${margin}'a yükseltildi, Moonshot +%2.20.`
+        : `Skor %${score} (Taker: %${effectiveTaker.toFixed(1)}, FreqAI: %${winProb}, Akış: $${flow}M). A+ Şampiyon kurulumu! Teminat $${margin}'a yükseltildi, Moonshot +%2.40.`
     };
   } else if (score >= 65) {
     // 💎 TIER-1 GÜÇLÜ KURULUM
     let margin = Math.min(maxSafeMargin, Math.max(18.0, Number((balance * 0.18).toFixed(1))));
-    if (free < margin) margin = Math.max(10.0, Number(free.toFixed(1)));
+    if (free < margin) margin = Math.max(12.0, Number(free.toFixed(1)));
 
     return {
       tier: 'TIER_HIGH',
       tierLabel: '💎 TIER-1 GÜÇLÜ SİNYAL',
       margin: margin,
-      slPct: 0.45,
-      bePct: 0.60,
-      tp1Pct: 0.55,
-      moonPct: 1.60,
+      slPct: 1.10,
+      bePct: 1.00,
+      tp1Pct: 1.20,
+      moonPct: 2.40,
       convictionScore: score,
-      rationale: `Skor %${score}. Güçlü kurumsal sinyal! Teminat $${margin}, TP1 %0.55.`
+      rationale: `Skor %${score}. Güçlü kurumsal sinyal! Teminat $${margin}, TP1 %1.20, Moonshot +%2.40.`
     };
   } else {
-    // 🛡️ TIER-2 STANDART TEMKİNLİ KURULUM
-    let margin = Math.min(14.0, Math.max(10.0, Number((balance * 0.12).toFixed(1))));
+    // 🛡️ TIER-2 STANDART MARSCOIN KURULUM
+    let margin = Math.min(15.0, Math.max(12.0, Number((balance * 0.15).toFixed(1))));
     if (free < margin) margin = Math.max(10.0, Number(free.toFixed(1)));
 
     return {
       tier: 'TIER_STANDARD',
-      tierLabel: '🛡️ STANDART VUR-KAÇ',
+      tierLabel: '🏔️ STANDART MARSCOIN ROKET',
       margin: margin,
-      slPct: 0.45,
-      bePct: 0.60,
-      tp1Pct: 0.55,
-      moonPct: 1.50,
+      slPct: 1.10,
+      bePct: 1.00,
+      tp1Pct: 1.20,
+      moonPct: 2.40,
       convictionScore: score,
-      rationale: `Skor %${score}. Standart kurulum, kontrollü risk ($${margin} teminat).`
+      rationale: `Skor %${score}. Marscoin kurulumu ($${margin} teminat, TP1 %1.20, Moonshot +%2.40).`
     };
   }
 }

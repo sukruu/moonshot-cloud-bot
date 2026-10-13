@@ -54,13 +54,13 @@ try {
 // --- EKRAN 1 BİREBİR AYARLARI ---
 let CONFIG = {
   initialBalance: 100.0,     // Bakiye 100 Dolar
-  marginPerTrade: 15.0,      // Temel Teminat 15$ (A+ Şampiyon kurulumunda $25-$28'e esner)
+  marginPerTrade: 15.0,      // Temel Teminat 15$
   leverage: 20,              // Kaldıraç 20x
-  maxSlots: 2,               // 2 Slot (Dengeli sermaye tahsisi & bağımsız fırsat yakalama)
-  slPct: 0.45,               // 🎯 Dar Stop Loss %0.45 Spot (20x ile -%9.0 ROI = ~$1.00 maks risk!)
-  bePct: 0.60,               // 🎯 Başabaş Kilidi %0.60 Spot (TP1 sonrası veya güçlü ivmede)
-  moonPct: 1.60,             // Vur-Kaç Moonshot TP2 Hedefi %1.60 Spot (+%32 ROI)
-  tp1Pct: 0.55,              // 🎯 Kademeli Kâr Alma TP1 Hedefi %0.55 Spot (+%11 ROI) - KÂRI ANINDA CEBE AL!
+  maxSlots: 2,               // 2 Slot
+  slPct: 1.10,               // 🏔️ MARSCOIN SAĞLIKLI STOP: %1.10 Spot (20x ile -%22 ROI - Koin rahat nefes alır!)
+  bePct: 1.00,               // 🛡️ MARSCOIN BAŞABAŞ: Yalnızca +%1.00 Spot (+%20 ROI) görünce maliyete çeker (Erken boğma yok!)
+  moonPct: 2.40,             // 🚀 MARSCOIN MOONSHOT: %2.40 Spot (+%48 ROI - Dev kârı kasaya indirir!)
+  tp1Pct: 1.20,              // 💰 MARSCOIN TP1: %1.20 Spot (+%24 ROI) ile %50 kârı anında nakde çevirir!
   feeRate: 0.0005,           // Binance Futures taker %0.05 (TEK YÖN)
   scanIntervalMs: 4000,
   riskIntervalMs: 2500,
@@ -919,10 +919,6 @@ async function scanLoop() {
         const twoCandleMovePct = ((curP - prevO) / prevO) * 100;
         const minJump = isVip ? 0.40 : 0.60;
 
-        const isWhaleVol = curV >= avgVol20 * 1.5 || (curV + prevV) >= avgVol20 * 2.2 || prevV >= avgVol20 * 1.5;
-        const isDailyTrending = chg >= 2.0 && chg <= 80.0;
-        const hasMomentum = (curMovePct >= minJump && curP > curO) || (twoCandleMovePct >= (minJump + 0.25) && curP >= curO * 0.998);
-
         let radarOkLong = true;
         let radarOkShort = true;
         let isDirectRadarLong = false;
@@ -1018,95 +1014,52 @@ async function scanLoop() {
         const freshVolumeLong = projectedVol >= avgVol20 * 1.2 || curV >= avgVol20 * 1.05 || prevV >= avgVol20 * 1.2 || (curV + prevV) >= avgVol20 * 1.6;
         const freshVolumeShort = projectedVol >= avgVol20 * 1.2 || curV >= avgVol20 * 1.05 || prevV >= avgVol20 * 1.2 || (curV + prevV) >= avgVol20 * 1.6;
 
-        // 🕯️ MUM FİTİL TEYİDİ & İĞNE TUZAKLARI (Satış/Alış Baskısı Retlerini Yakala)
-        const candleRange = curH - curL;
-        const upperWickReject = candleRange > 0 && (curH - Math.max(curP, curO)) / candleRange > 0.35;
-        const lowerWickReject = candleRange > 0 && (Math.min(curP, curO) - curL) / candleRange > 0.35;
-        const validWickLong = !upperWickReject;
-        const validWickShort = !lowerWickReject;
+        // 🏔️ MARSCOIN EFSANEVİ ROKET MOTORU (GERÇEK KAR MAKİNESİ)
+        // 1. Kural: Hacim Şartı (Gerçek Balina = En az 2.0x hacim patlaması)
+        const isWhaleVol = curV >= avgVol20 * 2.0 || (curV + prevV) >= avgVol20 * 3.0 || prevV >= avgVol20 * 2.0;
 
-        // 🛡️ TEPE VE DİP TUZAĞI KORUMASI (Direnç ve Destek Uçlarında Ters Köşeyi Kesinlikle Önle!)
-        const high3 = rInfo ? (rInfo.high3h || curH) : curH;
-        const low3 = rInfo ? (rInfo.low3h || curL) : curL;
-        const rangeSpan = high3 - low3;
-        const rangePct = rangeSpan > 0 ? (curP - low3) / rangeSpan : 0.5;
-        const chg15Val = rInfo ? (rInfo.chg15m || 0) : 0;
+        // 2. Kural: Günlük Trend Takibi (%2 - %80 arası roketler)
+        const isDailyTrending = chg24Val >= 2.0 && chg24Val <= 80.0;
 
-        // 1. LONG İÇİN TEPE & DİRENÇ TUZAĞI:
-        // Kanalın tavanındaysa (rangePct >= 0.78), üst fitil ret yediyse, veya gün içinde zaten +%14 şişmişse LONG AÇMA!
-        const isNearPeakTrap = upperWickReject || 
-                               (rangePct >= 0.78) || 
-                               (chg24Val >= 14.0) || 
-                               (chg15Val >= 3.5) || 
-                               ((rInfo && (rInfo.chg3h || 0) >= 8.5) && rangePct >= 0.70);
+        // 3. Kural: Sıfır Bekleme Dikey İvme (En az %0.75 zıplama)
+        const hasMomentum = (curMovePct >= 0.75 && curP > curO) || 
+                            (twoCandleMovePct >= 1.05 && curP >= curO * 0.998);
 
-        // 2. SHORT İÇİN DİP & DESTEK TUZAĞI:
-        // Kanalın tabanındaysa (rangePct <= 0.22), alt fitil alıcı bulduysa, veya gün içinde zaten -%10 çökmüşse SHORT AÇMA!
-        const isNearDipTrap = lowerWickReject || 
-                              (rangePct <= 0.22) || 
-                              (chg24Val <= -10.0) || 
-                              (chg15Val <= -3.5) || 
-                              ((rInfo && (rInfo.chg3h || 0) <= -7.5) && rangePct <= 0.30);
+        // 4. Kural: Mum Dikliği (Wick Filtresi) - Zirveden %0.8'den fazla satış yememiş, mum dimdik!
+        const noWickLong = curP >= curH * 0.992;
+        const noWickShort = curP <= curL * 1.008;
 
-        // 🚀 ANLIK ROKET & VOLATILITY SPIKE SNIPER:
-        // Hacim aniden 2.2x patlamış, 3 dakikada +%0.70 üzeri dikey yeşil mum dikilmiş ve TEPE TUZAĞINDA DEĞİLSE:
-        const isRocketSpike = !isNearPeakTrap && 
-                              (curV >= avgVol20 * 2.2 || projectedVol >= avgVol20 * 2.5) && 
-                              (curMovePct >= 0.70 || twoCandleMovePct >= 1.00) && 
-                              curP > curO && 
-                              validWickLong &&
-                              (rInfo ? (rInfo.takerBuyRatio || 50) >= 52.0 : true);
+        // 5. Kural: Likidite & Alıcı Hakimiyeti ($2.5M altı sığ çöpler elenir)
+        const hasRealLiquidity = rInfo ? ((rInfo.vol3hM || 0) >= 2.5) : true;
+        const hasBuyerDominance = rInfo ? ((rInfo.takerBuyRatio || 50) >= 50.0) : true;
 
-        // 🟢 BOĞA GİRİŞ KOŞULLARI:
-        let finalLongSignal = false;
+        // 🟢 MARSCOIN LONG ATEŞLEMESİ:
+        let isLongPump = false;
         let isRocketSignal = false;
-        if (isRocketSpike) {
-          finalLongSignal = true;
-          isRocketSignal = true;
-          radarTag = `[🚀 ANLIK ROKET SPIKE | 3dk: +%${curMovePct.toFixed(2)} | Hacim: ${(curV/avgVol20).toFixed(1)}x Kat]`;
-        } else if (isDirectRadarLong && curCandleGreen && freshVolumeLong) {
-          finalLongSignal = true;
-        } else if (hasMomentum && isWhaleVol && curCandleGreen && freshVolumeLong) {
-          const minTaker = DYNAMIC.mode === 'DEFENSIVE_SNIPER' ? 52.5 : 51.0;
-          const hasTakerSupport = rInfo ? (rInfo.takerBuyRatio || 50) >= minTaker : false;
-          const hasVolume = rInfo ? (rInfo.vol3hM || 0) >= DYNAMIC.vol3hMin : false;
-          const notOverbought = chg24Val >= -9.0 && chg24Val < 14.0;
-          const strongMomentum = curMovePct >= 0.30;
-          if (hasTakerSupport && hasVolume && notOverbought && strongMomentum && chg15Val >= 0.10) {
-            finalLongSignal = true;
+        if (hasRealLiquidity && noWickLong && hasBuyerDominance && !nearMax6m) {
+          const isSpikeVol = (curV >= avgVol20 * 2.2 || projectedVol >= avgVol20 * 2.5) && (curMovePct >= 0.70 || twoCandleMovePct >= 1.00) && curP > curO;
+          if (isSpikeVol) {
+            isLongPump = true;
+            isRocketSignal = true;
+            radarTag = `[🚀 MARSCOIN ROKET SPIKE | 3dk: +%${curMovePct.toFixed(2)} | Hacim: ${(curV/avgVol20).toFixed(1)}x Kat]`;
+          } else if (hasMomentum && isWhaleVol) {
+            isLongPump = true;
+            radarTag = `[⚡ MARSCOIN BALİNA İVMESİ | 3dk: +%${curMovePct.toFixed(2)} | Hacim: ${(curV/avgVol20).toFixed(1)}x Kat]`;
+          } else if (isDailyTrending && curMovePct >= 0.70 && isWhaleVol) {
+            isLongPump = true;
+            radarTag = `[🏔️ MARSCOIN TREND ROKETİ | Günlük: +%${chg24Val.toFixed(1)} | 3dk: +%${curMovePct.toFixed(2)}]`;
           }
         }
 
-        // 🔴 AYI GİRİŞ KOŞULLARI:
-        let finalShortSignal = false;
-        if (isDirectRadarShort && curCandleRed && freshVolumeShort) {
-          finalShortSignal = true;
-        } else if ((curMovePct <= -minJump && curP < curO) && isWhaleVol && curCandleRed && freshVolumeShort) {
-          const maxTaker = DYNAMIC.mode === 'DEFENSIVE_SNIPER' ? 47.5 : 49.0;
-          const hasTakerSell = rInfo ? (rInfo.takerBuyRatio || 50) <= maxTaker : false;
-          const hasVolume = rInfo ? (rInfo.vol3hM || 0) >= DYNAMIC.vol3hMin : false;
-          const strongMomentumDown = curMovePct <= -0.30;
-          const notOversold = chg24Val <= 8.0 && chg24Val > -10.0;
-          if (hasTakerSell && hasVolume && strongMomentumDown && notOversold && chg15Val <= -0.10) {
-            finalShortSignal = true;
-          }
+        // 🔴 MARSCOIN SHORT ATEŞLEMESİ:
+        // Sadece ve sadece aşırı şişmiş (%12+ günlük) ve 2x hacimle şelale başlatan koinler shortlanır! Dipte asla short yok!
+        let isShortDump = false;
+        const isDailyOverbought = chg24Val >= 12.0;
+        const hasDownWaterfall = (curMovePct <= -0.90 && curP < curO) && isWhaleVol;
+        if (hasRealLiquidity && isDailyOverbought && hasDownWaterfall && noWickShort) {
+          isShortDump = true;
+          radarTag = `[🌊 MARSCOIN ŞELALE SHORT | Günlük: +%${chg24Val.toFixed(1)} | 3dk: %${curMovePct.toFixed(2)}]`;
         }
-
-        // 🛡️ DERS 2: Günlük (24s) ve 3s Trend Filtresi
-        const strictTrendOkLong = (chg24Val < 14.0) && (chg24Val >= -9.0) && (!rInfo || (rInfo.chg3h || 0) < 16.0); 
-        const strictTrendOkShort = (chg24Val > -10.0) && (chg24Val <= 8.0);
-
-        // 🛡️ BTC TREND KORUMASI: BTC yönünün tersine işlem AÇILAMAZ!
-        const btcSafeForLong = (btc5mNumeric >= -0.08) && (btc15mNumeric >= -0.12);
-        const btcSafeForShort = (btc5mNumeric <= 0.08) && (btc15mNumeric <= 0.08);
-
-        // 🎯 TREND ŞARTI: LONG için 15m kesinlikle pozitif (>= +0.10%), SHORT için kesinlikle negatif (<= -0.10%) olmalı!
-        const cur15m = (rInfo && rInfo.chg15m !== undefined) ? rInfo.chg15m : 0;
-        const longTrendOk = !!rInfo && cur15m >= 0.10 && ((rInfo.chg3h || 0) >= 1.0 || cur15m >= 0.8 || (rInfo.signal && rInfo.signal.includes("BALİNA"))) && chg24Val >= -9.0;
-        const shortTrendOk = !!rInfo && cur15m <= -0.10 && ((rInfo.chg3h || 0) <= -1.0 || cur15m <= -0.8 || (rInfo.signal && rInfo.signal.includes("BALİNA"))) && chg24Val <= 8.0;
-
-        const isLongPump = finalLongSignal && longTrendOk && validWickLong && radarOkLong && strictTrendOkLong && !isNearPeakTrap && btcSafeForLong && !nearMax6m;
-        const isShortDump = finalShortSignal && shortTrendOk && validWickShort && radarOkShort && strictTrendOkShort && !isNearDipTrap && btcSafeForShort;
 
         if (isLongPump || isShortDump) {
           const side = isLongPump ? "LONG" : "SHORT";
@@ -1243,15 +1196,8 @@ async function scanLoop() {
             continue;
           }
 
-          // 👑 1. YÖNETİCİ KORELASYON & AYNI YÖN VETOSU:
-          // Aynı anda 2 adet tam teminatlı SHORT veya 2 adet LONG açarak tek bir BTC hareketinde çifte stop yemeyi KESİNLİKLE engelle!
-          const sameSidePositions = activePositions.filter(p => p.side === side);
-          if (sameSidePositions.length >= 1) {
-            coinCooldowns[sym] = now + (3 * 60 * 1000);
-            addLog(`🛡️ [YÖNETİCİ KORELASYON VETOSU]: ${sym} ${side} engellendi — Zaten açık bir ${side} pozisyonu (${sameSidePositions[0].symbol}) var! Portföy yön riski sınırlandı.`, 'WARN');
-            try {
-              addDialogue('MANAGER', `🛑 VETO! Zaten açık ${side} pozisyonumuz (${sameSidePositions[0].symbol}) var. Aynı yöne 2. pozisyon açıp portföyü tek bir BTC hareketine kurban edemem! İşlem reddedildi.`, 'RISK');
-            } catch(e) {}
+          // 👑 1. SLOT DOLULUK KONTROLÜ (Maksimum slot sınırını aşma)
+          if (activePositions.length >= CONFIG.maxSlots) {
             continue;
           }
 
@@ -1259,14 +1205,14 @@ async function scanLoop() {
           const currentFreeMargin = balance - activePositions.reduce((acc, p) => acc + (p.margin || 0), 0);
           let sizing = {
             tier: 'TIER_STANDARD',
-            tierLabel: '🛡️ STANDART VUR-KAÇ',
+            tierLabel: '🏔️ MARSCOIN ROKET',
             margin: CONFIG.marginPerTrade || 15.0,
-            slPct: CONFIG.slPct || 0.45,
-            bePct: CONFIG.bePct || 0.60,
-            tp1Pct: CONFIG.tp1Pct || 0.55,
-            moonPct: CONFIG.moonPct || 1.60,
-            convictionScore: 65,
-            rationale: ''
+            slPct: CONFIG.slPct || 1.10,
+            bePct: CONFIG.bePct || 1.00,
+            tp1Pct: CONFIG.tp1Pct || 1.20,
+            moonPct: CONFIG.moonPct || 2.40,
+            convictionScore: 70,
+            rationale: '🏔️ Marscoin Roket Sinyali'
           };
           if (typeof calculateConvictionSizing === 'function') {
             try {
@@ -1290,18 +1236,18 @@ async function scanLoop() {
 
           if (isRocketSignal) {
             sizing.tier = 'TIER_ROCKET_SNIPER';
-            sizing.tierLabel = '🚀 ANLIK ROKET VUR-KAÇ';
-            sizing.slPct = 0.45;
-            sizing.bePct = 0.60;
-            sizing.tp1Pct = 0.55;
-            sizing.moonPct = 1.60;
+            sizing.tierLabel = '🚀 MARSCOIN ANLIK ROKET';
+            sizing.slPct = 1.10;
+            sizing.bePct = 1.00;
+            sizing.tp1Pct = 1.20;
+            sizing.moonPct = 2.40;
           }
 
           const tradeMargin = Number(sizing.margin) || CONFIG.marginPerTrade || 15.0;
-          const tradeSlPct = Number(sizing.slPct) || CONFIG.slPct || 0.45;
-          const tradeBePct = Number(sizing.bePct) || CONFIG.bePct || 0.60;
-          const tradeTp1Pct = Number(sizing.tp1Pct) || CONFIG.tp1Pct || 0.55;
-          const tradeMoonPct = Number(sizing.moonPct) || CONFIG.moonPct || 1.60;
+          const tradeSlPct = Number(sizing.slPct) || CONFIG.slPct || 1.10;
+          const tradeBePct = Number(sizing.bePct) || CONFIG.bePct || 1.00;
+          const tradeTp1Pct = Number(sizing.tp1Pct) || CONFIG.tp1Pct || 1.20;
+          const tradeMoonPct = Number(sizing.moonPct) || CONFIG.moonPct || 2.40;
 
           const stopPrice = side === "LONG" 
             ? curP * (1 - tradeSlPct / 100) 
@@ -1444,7 +1390,7 @@ async function fastRiskLoop() {
       let exitReason = null;
 
       // 🎯 1. KADEMELİ KÂR ALMA (TP1): Görünce %50 Pozisyon Kapatılır, Kâr Cebe İner!
-      const tp1Goal = pos.tp1Pct || CONFIG.tp1Pct || 0.55;
+      const tp1Goal = pos.tp1Pct || CONFIG.tp1Pct || 1.20;
       if (!pos.tp1Taken && move >= tp1Goal) {
         pos.tp1Taken = true;
         const closedMargin = pos.margin / 2;
@@ -1471,23 +1417,21 @@ async function fastRiskLoop() {
       }
 
       // 🛡️ 2. DİNAMİK İZ SÜREN STOP (TRAILING STOP) & ERKEN BAŞABAŞ KORUMASI
-      const beGoal = pos.bePct || CONFIG.bePct || 0.60;
+      const beGoal = pos.bePct || CONFIG.bePct || 1.00;
       let targetStop = null;
-      if (mfe >= 1.40) {
+      if (mfe >= 2.00) {
+        targetStop = isLong ? pos.entryPrice * (1 + (mfe - 0.45) / 100) : pos.entryPrice * (1 - (mfe - 0.45) / 100);
+      } else if (mfe >= 1.50) {
         targetStop = isLong ? pos.entryPrice * (1 + (mfe - 0.35) / 100) : pos.entryPrice * (1 - (mfe - 0.35) / 100);
-      } else if (mfe >= 0.90) {
-        targetStop = isLong ? pos.entryPrice * (1 + (mfe - 0.25) / 100) : pos.entryPrice * (1 - (mfe - 0.25) / 100);
-      } else if (mfe >= 0.65) {
-        targetStop = isLong ? pos.entryPrice * (1 + (mfe - 0.20) / 100) : pos.entryPrice * (1 - (mfe - 0.20) / 100);
       } else if (mfe >= beGoal) {
-        targetStop = isLong ? pos.entryPrice * 1.0015 : pos.entryPrice * 0.9985;
+        targetStop = isLong ? pos.entryPrice * 1.0020 : pos.entryPrice * 0.9980;
       }
 
-      // ⏱️ Durgunluk stop daraltması: Pozisyon 15 dk boyunca hiç ivme alamamışsa (MFE < %0.25),
-      // stopu tam stop yerine -%0.55 spot (-%11 ROI) seviyesine çekerek sermayeyi koru!
+      // ⏱️ Durgunluk stop daraltması: Pozisyon 20 dk boyunca hiç ivme alamamışsa (MFE < %0.25),
+      // stopu tam stop yerine -%0.65 spot seviyesine çekerek sermayeyi koru!
       const durMinLive = (now - pos.entryTime) / 60000;
-      if (!pos.beLocked && durMinLive >= 15 && (pos.mfe || 0) < 0.25) {
-        const stagStop = isLong ? pos.entryPrice * (1 - 0.55 / 100) : pos.entryPrice * (1 + 0.55 / 100);
+      if (!pos.beLocked && durMinLive >= 20 && (pos.mfe || 0) < 0.25) {
+        const stagStop = isLong ? pos.entryPrice * (1 - 0.65 / 100) : pos.entryPrice * (1 + 0.65 / 100);
         if (!targetStop || (isLong && stagStop > targetStop) || (!isLong && stagStop < targetStop)) {
           targetStop = stagStop;
         }
@@ -1504,8 +1448,8 @@ async function fastRiskLoop() {
         }
       }
 
-      // 🎯 3. SERT VUR-KAÇ HEDEFİ (+%1.80 - +%2.20 Spot = +%36 - +%44 ROI ile Anında Kapat!)
-      const moonGoal = pos.moonPct || CONFIG.moonPct || 1.80;
+      // 🎯 3. SERT VUR-KAÇ HEDEFİ (+%2.20 - +%3.00 Spot = +%44 - +%60 ROI ile Anında Kapat!)
+      const moonGoal = pos.moonPct || CONFIG.moonPct || 2.40;
       if (!exitReason && move >= moonGoal) {
         exitReason = pos.tp1Taken
           ? `🎯 KADEMELİ MOONSHOT ALINDI (TP1 + Kalan: +%${pos.roi.toFixed(1)} ROI / +%${move.toFixed(2)} Spot)`
@@ -1539,11 +1483,11 @@ async function fastRiskLoop() {
       // Açık SHORT varken BTC sert yukarı fırlarsa (+%0.35 üzeri) ve pozisyon eksideyse (ROI <= -2.0%):
       // Açık LONG varken BTC sert aşağı çökerse (-%0.35 altı) ve pozisyon eksideyse (ROI <= -2.0%):
       // Tam stop loss'u (-%18 ROI) bekleyip kasayı delme! Ajanlar piyasa dönüşünü anında keser!
-      if (!exitReason && pos.roi <= -2.0) {
-        if (!isLong && (btc15mNumeric >= 0.35 || btc5mNumeric >= 0.40)) {
+      if (!exitReason && pos.roi <= -5.0) {
+        if (!isLong && (btc15mNumeric >= 0.65 || btc5mNumeric >= 0.70)) {
           exitReason = `🚨 [AJAN ACİL TAHLİYE]: BTC Boğa Dalgası Başlattı (${btc15mTrend}), SHORT Pozisyonu Kurtarıldı (Erken Kesildi: %${pos.roi.toFixed(1)} ROI)`;
           try { addDialogue('WHALE_HUNTER', `🚨 ACİL TAHLİYE! BTC sert yeşile döndü (${btc15mTrend}). ${pos.symbol} SHORT pozisyonu tam stop beklenmeden hemen tahliye edildi!`, 'RISK'); } catch(e) {}
-        } else if (isLong && (btc15mNumeric <= -0.35 || btc5mNumeric <= -0.40)) {
+        } else if (isLong && (btc15mNumeric <= -0.65 || btc5mNumeric <= -0.70)) {
           exitReason = `🚨 [AJAN ACİL TAHLİYE]: BTC Sert Satış Dalgası Başlattı (${btc15mTrend}), LONG Pozisyonu Kurtarıldı (Erken Kesildi: %${pos.roi.toFixed(1)} ROI)`;
           try { addDialogue('WHALE_HUNTER', `🚨 ACİL TAHLİYE! BTC sert kırmızıya çöktü (${btc15mTrend}). ${pos.symbol} LONG pozisyonu tam stop beklenmeden hemen tahliye edildi!`, 'RISK'); } catch(e) {}
         }
