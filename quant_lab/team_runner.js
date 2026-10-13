@@ -13,7 +13,7 @@ const { getJudgeDossier, runCourtSession } = require('./judge_audit');
 const TEAM_STATUS_FILE = path.join(__dirname, 'team_status.json');
 
 // 🛡️ Sert güvenlik sınırları (hiçbir ajan aşamaz)
-const HARD = { maxMargin: 30, maxLeverage: 20, slMin: 0.70, slMax: 1.50 };
+const HARD = { maxMargin: 30, maxLeverage: 20, slMin: 0.35, slMax: 1.50 };
 
 const fmt = (n, d = 2) => (Number.isFinite(n) ? n.toFixed(d) : '-');
 

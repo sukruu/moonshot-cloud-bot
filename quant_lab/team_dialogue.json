@@ -548,5 +548,93 @@
     "title": "DevOps & Sistem",
     "text": "Sunucu çalışma süresi 750 dk. Piyasa ve simülasyon verisi: güncel.",
     "tag": "SYSTEM"
+  },
+  {
+    "id": "1791902821149pb2b",
+    "time": "17:47:01",
+    "timestamp": 1791902821164,
+    "agent": "👑 YÖNETİCİ",
+    "roleKey": "MANAGER",
+    "color": "#7c3aed",
+    "title": "Risk Direktörü",
+    "text": "👑 [VUR-KAÇ PORTFÖY DİREKTÖRÜ]: Kasa $95.00, açık slot 0/2. Mod: CAUTIOUS_RECOVERY. A+ Şampiyon sinyallerde Kelly teminatı $25-$28'e yükseltilecek! Sert sınırlar: uyumlu.",
+    "tag": "RISK"
+  },
+  {
+    "id": "1791902821165r876",
+    "time": "17:47:01",
+    "timestamp": 1791902821165,
+    "agent": "🧠 ANALİZCİ",
+    "roleKey": "ANALYST",
+    "color": "#0284c7",
+    "title": "Piyasa İstihbaratı",
+    "text": "Rejim: Yatay / Sakin Piyasa. BTC 24s %0.00, $15M+ hacimli koin sayısı 0. Öneri: hacim ≥ $1.8M, 35 aday.",
+    "tag": "REGIME"
+  },
+  {
+    "id": "1791902821166yr4p",
+    "time": "17:47:01",
+    "timestamp": 1791902821166,
+    "agent": "🐋 BALİNA AVCISI",
+    "roleKey": "WHALE_HUNTER",
+    "color": "#0891b2",
+    "title": "Para Akışı & Fon",
+    "text": "🐋 [FON AKIŞI]: Net piyasa yönü: BULLISH ($3.1M). Kurumsal boğa alımları taranıyor.",
+    "tag": "FLOW"
+  },
+  {
+    "id": "1791902821166o1ed",
+    "time": "17:47:01",
+    "timestamp": 1791902821166,
+    "agent": "🎯 FREQ-AI & LİKİDASYON",
+    "roleKey": "FREQAI",
+    "color": "#db2777",
+    "title": "ML Olasılık & Fonlama",
+    "text": "🎯 [FREQ-AI &amp; FONLAMA]: ML Karar Motoru hazır (0 işlem kalibre). Ortalama fonlama: %0.0032. Minimum kazanma olasılığı eşiği: %68.",
+    "tag": "STRATEGY"
+  },
+  {
+    "id": "17919028211670qq2",
+    "time": "17:47:01",
+    "timestamp": 1791902821167,
+    "agent": "🏛️ BAŞ YARGIÇ",
+    "roleKey": "JUDGE",
+    "color": "#b45309",
+    "title": "Adli Denetçi (Aslan11)",
+    "text": "🏛️ [ASLAN11 ADLİ HÜKÜM]: Mahkeme devrede (54 beraat, 2 mahkumiyet). Ön yargılama vizesi şartı devrede.",
+    "tag": "RISK"
+  },
+  {
+    "id": "1791902821167b6hl",
+    "time": "17:47:01",
+    "timestamp": 1791902821167,
+    "agent": "🧪 TESTÇİ",
+    "roleKey": "TESTER",
+    "color": "#059669",
+    "title": "QA & Simülatör",
+    "text": "Backtest (6 koin). Mevcut: PF 0, net $0.00 | Önerilen: PF 0, net $0.00.",
+    "tag": "STRATEGY"
+  },
+  {
+    "id": "1791902821168skdl",
+    "time": "17:47:01",
+    "timestamp": 1791902821168,
+    "agent": "⚔️ TRADER",
+    "roleKey": "TRADER",
+    "color": "#b45309",
+    "title": "Sinyal & Yürütme",
+    "text": "⚔️ [DİNAMİK YÜRÜTME]: 350+ koin taranıyor. Standart teminat: $12, A+ Şampiyon: $25-$28. Kademeli TP1 +%0.65, Vur-Kaç Moonshot +%1.3.",
+    "tag": "TRADE"
+  },
+  {
+    "id": "1791902821168obac",
+    "time": "17:47:01",
+    "timestamp": 1791902821168,
+    "agent": "💻 YAZILIMCI",
+    "roleKey": "ENGINEER",
+    "color": "#475569",
+    "title": "DevOps & Sistem",
+    "text": "Sunucu çalışma süresi 120 dk. Piyasa ve simülasyon verisi: güncel.",
+    "tag": "SYSTEM"
   }
 ]
