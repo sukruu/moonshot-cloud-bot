@@ -923,12 +923,14 @@ async function scanLoop() {
         let isDirectRadarShort = false;
         let radarTag = "";
         const chg24Val = rInfo ? (rInfo.chg24h !== undefined ? rInfo.chg24h : chg) : chg;
+        const chg15Val = (rInfo && rInfo.chg15m !== undefined && rInfo.chg15m !== null) ? rInfo.chg15m : 0;
+        const chg3Val = (rInfo && rInfo.chg3h !== undefined && rInfo.chg3h !== null) ? rInfo.chg3h : 0;
+        const takerRatio = (rInfo && rInfo.takerBuyRatio !== undefined && rInfo.takerBuyRatio !== null) ? rInfo.takerBuyRatio : 50;
 
         if (rInfo) {
           // 🎯 RADAR DOĞRUDAN VUR-KAÇ TETİĞİ (GECİKMELİ GİRİŞ ENGELLİ)
-          const taker = rInfo.takerBuyRatio || 50;
-          const chg3 = rInfo.chg3h || 0;
-          const chg15Val = (rInfo.chg15m !== undefined && rInfo.chg15m !== null) ? rInfo.chg15m : 0;
+          const taker = takerRatio;
+          const chg3 = chg3Val;
           const sig = rInfo.signal || "";
 
           // 1. YÜKSELİRKEN VUR-KAÇ (LONG): 15m pozitif + Taker >= 50.0% + Radar Boğa/Roket/Balina/Sıçrama
