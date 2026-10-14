@@ -13,44 +13,21 @@ const { getJudgeDossier, runCourtSession } = require('./judge_audit');
 const TEAM_STATUS_FILE = path.join(__dirname, 'team_status.json');
 
 // 🛡️ Sert güvenlik sınırları (hiçbir ajan aşamaz)
-const HARD = { maxMargin: 30, maxLeverage: 20, slMin: 0.35, slMax: 1.50 };
+const HARD = { maxMargin: 30, maxLeverage: 20, slMin: 0.20, slMax: 0.50 };
 
 const fmt = (n, d = 2) => (Number.isFinite(n) ? n.toFixed(d) : '-');
 
-/** Rejime göre vur-kaç çıkış parametreleri (geniş roket hedefleri yatay piyasada kâr yemez) */
+/** Hızlı vur-kaç: 1 dk giriş, +%0.42'de komple çıkış. Rejim bu bandı genişletemez. */
 function scalpParamsFromRegime(regime = {}, defensive = false) {
   const rec = regime.recommendedConfig || {};
-  const r = regime.regime || 'CHOPPY_RANGE';
-  if (r === 'AGGRESSIVE_BULL_RALLY') {
-    return {
-      mode: defensive ? 'DEFENSIVE_SNIPER' : 'MOMENTUM_ROCKET',
-      slPct: defensive ? 0.42 : 0.55,
-      bePct: 0.50,
-      tp1Pct: 0.90,
-      moonPct: 1.80,
-      vol3hMin: Math.max(rec.vol3hM || 8, 6),
-      candidateSlice: rec.candidateSlice || 25
-    };
-  }
-  if (r === 'BEAR_DUMP_PRESSURE') {
-    return {
-      mode: defensive ? 'DEFENSIVE_SNIPER' : 'VUR_KAC_SCALP',
-      slPct: defensive ? 0.40 : 0.45,
-      bePct: 0.35,
-      tp1Pct: 0.65,
-      moonPct: 1.10,
-      vol3hMin: Math.max(rec.vol3hM || 5, 4),
-      candidateSlice: rec.candidateSlice || 20
-    };
-  }
   return {
-    mode: defensive ? 'DEFENSIVE_SNIPER' : 'VUR_KAC_SCALP',
-    slPct: defensive ? 0.42 : 0.48,
-    bePct: Math.min(rec.bePct ?? 0.40, 0.45),
-    tp1Pct: Math.min(rec.tp1Pct ?? 0.70, 0.75),
-    moonPct: Math.min(rec.moonPct ?? 1.00, 1.20),
-    vol3hMin: Math.max(rec.vol3hM ?? 1.8, 1.5),
-    candidateSlice: rec.candidateSlice ?? 35
+    mode: defensive ? 'DEFENSIVE_SNIPER' : 'HIZLI_VUR_KAC',
+    slPct: 0.25,
+    bePct: 0.20,
+    tp1Pct: 0.60,
+    moonPct: 0.42,
+    vol3hMin: Math.max(rec.vol3hM || 1.5, 1.2),
+    candidateSlice: rec.candidateSlice || 30
   };
 }
 
@@ -93,18 +70,12 @@ function evaluateExecutiveIntervention(ctx = {}, forensics = {}, regime = {}) {
     targetMargin = 13.0;
     reason = `Bakiye $${fmt(balance)}. 🎯 DİKKATLİ VUR-KAÇ: SL %${targetSl}, TP1 %${targetTp1}, Moon %${targetMoon}.`;
   } else if (balance >= 120.0) {
-    mode = 'GROWTH';
+    mode = 'HIZLI_VUR_KAC';
     targetSlots = 3;
     targetMargin = 18.0;
-    targetSl = 0.52;
-    targetTp1 = 0.85;
-    targetBe = 0.45;
-    targetMoon = 1.35;
-    vol3hMin = Math.max(vol3hMin, 2.0);
-    candidateSlice = 40;
-    reason = `Bakiye $${fmt(balance)} (Büyüme). 3 slot vur-kaç: SL %${targetSl}, Moon %${targetMoon}.`;
+    reason = `Bakiye $${fmt(balance)} (Büyüme). Hızlı vur-kaç, 3 slot, Moon %${targetMoon}.`;
   } else {
-    reason = `Bakiye $${fmt(balance)}. 🎯 VUR-KAÇ (${regime.regime || 'CHOPPY'}): SL %${targetSl}, TP1 %${targetTp1}, Moon %${targetMoon}.`;
+    reason = `Bakiye $${fmt(balance)}. ⚡ HIZLI VUR-KAÇ (${regime.regime || 'CHOPPY'}): SL %${targetSl}, çıkış %${targetMoon}.`;
   }
 
   return {
@@ -157,10 +128,10 @@ function calculateConvictionSizing({
       tier: 'TIER_DEFENSIVE',
       tierLabel: '🛡️ SAVUNMA NİŞANCISI',
       margin: Math.min(10.0, Math.max(8.0, free)),
-      slPct: 0.80,
-      bePct: 0.35,
-      tp1Pct: 0.80,
-      moonPct: 1.50,
+      slPct: 0.25,
+      bePct: 0.20,
+      tp1Pct: 0.60,
+      moonPct: 0.42,
       convictionScore: 50,
       rationale: 'Kasa savunma modunda: Sermaye korunuyor, teminat $10 ile sınırlandı.'
     };
@@ -231,10 +202,10 @@ function calculateConvictionSizing({
       tierLabel: customLabel,
       isShortSqueeze: isSqueeze,
       margin: margin,
-      slPct: 0.48,
-      bePct: 0.40,
-      tp1Pct: 0.70,
-      moonPct: 1.00,
+      slPct: 0.25,
+      bePct: 0.20,
+      tp1Pct: 0.60,
+      moonPct: 0.42,
       convictionScore: score,
       rationale: isSqueeze 
         ? `🔥 SHORT SQUEEZE TESPİT EDİLDİ! Fonlama %${fundRate.toFixed(3)} (Ağır Negatif). Balinalar shortçuları patlatıyor! Teminat $${margin}, Moonshot +%${moonTarget.toFixed(2)}.`
@@ -249,10 +220,10 @@ function calculateConvictionSizing({
       tier: 'TIER_HIGH',
       tierLabel: '💎 TIER-1 GÜÇLÜ SİNYAL',
       margin: margin,
-      slPct: 0.48,
-      bePct: 0.40,
-      tp1Pct: 0.70,
-      moonPct: 1.00,
+      slPct: 0.25,
+      bePct: 0.20,
+      tp1Pct: 0.60,
+      moonPct: 0.42,
       convictionScore: score,
       rationale: `Skor %${score}. Güçlü sinyal! Teminat $${margin}, TP1 %0.70, Moon %1.00.`
     };
@@ -265,10 +236,10 @@ function calculateConvictionSizing({
       tier: 'TIER_STANDARD',
       tierLabel: '🏔️ STANDART MARSCOIN ROKET',
       margin: margin,
-      slPct: 0.48,
-      bePct: 0.40,
-      tp1Pct: 0.70,
-      moonPct: 1.00,
+      slPct: 0.25,
+      bePct: 0.20,
+      tp1Pct: 0.60,
+      moonPct: 0.42,
       convictionScore: score,
       rationale: `Skor %${score}. Vur-kaç ($${margin}, TP1 %0.70, Moon %1.00).`
     };
@@ -324,12 +295,11 @@ async function runAutonomousTeamSync(ctx = {}) {
     console.error("Optimizer hatası:", e.message);
   }
 
-  const choppy = regime.regime === 'CHOPPY_RANGE' || regime.regime === 'WEEKEND_LOW_LIQUIDITY';
   const capScalpExit = (p) => ({
-    slPct: Math.min(Number(p.slPct) || 0.48, choppy ? 0.55 : 0.65),
-    bePct: Math.min(Number(p.bePct) || 0.40, choppy ? 0.45 : 0.55),
-    tp1Pct: Math.min(Number(p.tp1Pct) || 0.70, choppy ? 0.75 : 0.95),
-    moonPct: Math.min(Number(p.moonPct) || 1.00, choppy ? 1.20 : 1.80)
+    slPct: Math.min(Math.max(Number(p.slPct) || 0.25, 0.20), 0.32),
+    bePct: Math.min(Math.max(Number(p.bePct) || 0.20, 0.15), 0.26),
+    tp1Pct: Math.min(Math.max(Number(p.tp1Pct) || 0.60, 0.50), 0.75),
+    moonPct: Math.min(Math.max(Number(p.moonPct) || 0.42, 0.32), 0.45)
   });
 
   // Şampiyon yalnızca anlamlı PF ile ve yatay piyasada sıkı tavanla uygulanır
