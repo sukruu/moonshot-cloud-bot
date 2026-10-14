@@ -305,7 +305,7 @@ async function runAutonomousTeamSync(ctx = {}) {
   // Şampiyon yalnızca anlamlı PF ile ve yatay piyasada sıkı tavanla uygulanır
   if (optimizer && optimizer.hasChampion && champion && champion.params) {
     const pf = champion.summary && champion.summary.profitFactor;
-    if (pf >= 1.15) {
+    if (pf >= 1.25) {
       const capped = capScalpExit(champion.params);
       Object.assign(proposedExit, capped);
       Object.assign(intervention, capped);

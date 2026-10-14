@@ -994,9 +994,10 @@ async function scanLoop() {
         // 🕐 1. ANLIK MUM TEYİDİ & FRESH MOMENTUM
         const candleStart = (k3m[lastIdx] && k3m[lastIdx][0]) ? k3m[lastIdx][0] : (Date.now() - 60000);
         const candleElapsedSec = Math.max(8, Math.min(60, (Date.now() - candleStart) / 1000));
-        const projectedVol = curV * (60 / candleElapsedSec);
-
-        const volMult = Math.max(curV, projectedVol) / avgVol20;
+        // İlk 25 sn'de hacmi 60 sn'ye şişirme; kısmi mum zaten 1.6 kat ise gir
+        const volMult = candleElapsedSec >= 25
+          ? (curV * (60 / candleElapsedSec)) / avgVol20
+          : curV / avgVol20;
         const isWhaleVol = volMult >= 1.6;
 
         // Mum zaten %0.50 koşmuşsa geç kalınmış demektir
@@ -1043,7 +1044,31 @@ async function scanLoop() {
 
           // 🐋 6. AJAN (BALİNA & PARA AKIŞI AVCISI) KONTROLÜ
           const scoutMap = (teamStatusCache && teamStatusCache.moneyFlow && teamStatusCache.moneyFlow.flowMap) || globalWhaleFlowMap || null;
-          const scoutInfo = scoutMap ? scoutMap[sym] : null;
+          let scoutInfo = scoutMap ? scoutMap[sym] : null;
+          if (!scoutInfo && k3m && k3m.length >= 8) {
+            let quote = 0;
+            let takerBuy = 0;
+            const recent = k3m.slice(-12);
+            for (const k of recent) {
+              quote += parseFloat(k[7]) || 0;
+              takerBuy += parseFloat(k[10]) || 0;
+            }
+            const takerPct = quote > 0 ? (takerBuy / quote) * 100 : 50;
+            const netFlowM = ((takerBuy * 2) - quote) / 1e6;
+            const open0 = parseFloat(recent[0][1]) || 0;
+            const closeN = parseFloat(recent[recent.length - 1][4]) || 0;
+            const priceChg = open0 > 0 ? ((closeN - open0) / open0) * 100 : 0;
+            let cvdDivergence = 'NONE';
+            if (priceChg >= 0.35 && takerPct <= 47) cvdDivergence = 'BEARISH_DIVERGENCE';
+            else if (priceChg <= -0.35 && takerPct >= 53) cvdDivergence = 'BULLISH_DIVERGENCE';
+            scoutInfo = {
+              cvdDivergence,
+              isApprovedLong: takerPct >= 48 && netFlowM >= -0.02,
+              isApprovedShort: takerPct <= 52 && netFlowM <= 0.02,
+              netFlowM: Number(netFlowM.toFixed(3)),
+              takerPct
+            };
+          }
           if (scoutInfo) {
             if (side === 'LONG' && scoutInfo.cvdDivergence === 'BEARISH_DIVERGENCE') {
               addLog(`🛑 [BALİNA VETO]: ${sym} LONG — Ayı CVD uyumsuzluğu (fakeout).`, 'WARN');
@@ -1067,8 +1092,8 @@ async function scanLoop() {
           try {
             const depthData = await fetchBinance(`/fapi/v1/depth?symbol=${sym}&limit=10`);
             if (depthData && Array.isArray(depthData.bids) && Array.isArray(depthData.asks)) {
-              const bidVol = depthData.bids.reduce((acc, b) => acc + (parseFloat(b[1]) || 0), 0);
-              const askVol = depthData.asks.reduce((acc, a) => acc + (parseFloat(a[1]) || 0), 0);
+              const bidVol = depthData.bids.reduce((acc, b) => acc + ((parseFloat(b[0]) || 0) * (parseFloat(b[1]) || 0)), 0);
+              const askVol = depthData.asks.reduce((acc, a) => acc + ((parseFloat(a[0]) || 0) * (parseFloat(a[1]) || 0)), 0);
               const totalDepth = bidVol + askVol;
               if (totalDepth > 0) {
                 const obi = (bidVol - askVol) / totalDepth;
@@ -1134,8 +1159,7 @@ async function scanLoop() {
             });
           } catch(e) {}
 
-          // Yargıç sadece kronik sabıkalı ağır cezalarda (-70 puan ve altı) işlemi veto eder
-          if (judgeClearance && judgeClearance.judicialScore <= -70) {
+          if (judgeClearance && judgeClearance.approved === false) {
             coinCooldowns[sym] = now + (3 * 60 * 1000);
             addLog(`🛡️ [YARGIÇ AĞIR CEZA VETOSU]: ${sym} ${side} engellendi — ${judgeClearance.reason}`, 'WARN');
             try {

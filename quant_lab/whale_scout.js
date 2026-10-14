@@ -51,7 +51,7 @@ async function trackWhaleMoneyFlow() {
 
     // En aktif 50 koini hacme göre sırala
     valid.sort((a, b) => parseFloat(b.quoteVolume) - parseFloat(a.quoteVolume));
-    const topActive = valid.slice(0, 45);
+    const topActive = valid.slice(0, 80);
 
     // Her koinin son 15 dakikalık (veya 1 saatlik) klines verisini 10'arlı paralel gruplarla incele
     const chunkSize = 10;
