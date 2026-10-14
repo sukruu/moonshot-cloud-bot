@@ -17,38 +17,11 @@ const HISTORY_FILE = path.join(DATA_DIR, 'trades_history.json');
 const CSV_FILE = path.join(DATA_DIR, 'trades_history.csv');
 const STATE_FILE = path.join(DATA_DIR, 'bot_state.json');
 const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
-const TEAM_STATUS_FILE = path.join(DATA_DIR, 'quant_lab', 'team_status.json');
-let teamStatusCache = null;
-let addDialogue = () => {};
-try {
-  const dlgMod = require('./quant_lab/team_dialogue');
-  addDialogue = dlgMod.addDialogue;
-} catch (e) {}
-
-try {
-  if (fs.existsSync(TEAM_STATUS_FILE)) {
-    teamStatusCache = JSON.parse(fs.readFileSync(TEAM_STATUS_FILE, 'utf8'));
-  }
-} catch (e) {}
-
-let globalWhaleFlowMap = (teamStatusCache && teamStatusCache.moneyFlow && teamStatusCache.moneyFlow.flowMap) || {};
-let globalFundingMap = (teamStatusCache && teamStatusCache.fundingRates && teamStatusCache.fundingRates.fundingMap) || {};
-let predictTradeProbability = () => ({ isApproved: true, winProbabilityPct: null, modelReady: false, confidence: 'EĞİTİLMEDİ' });
-try {
-  const mlMod = require('./quant_lab/freqai_ml_engine');
-  predictTradeProbability = mlMod.predictTradeProbability;
-} catch (e) {}
 
 let evaluatePreTradeClearance = () => ({ approved: true, judicialScore: 85, verdict: 'BERAAT', reason: '' });
 try {
   const judgeMod = require('./quant_lab/judge_audit');
   evaluatePreTradeClearance = judgeMod.evaluatePreTradeClearance;
-} catch (e) {}
-
-let calculateConvictionSizing = null;
-try {
-  const trMod = require('./quant_lab/team_runner');
-  calculateConvictionSizing = trMod.calculateConvictionSizing;
 } catch (e) {}
 
 // --- EKRAN 1 BİREBİR AYARLARI ---
@@ -67,28 +40,71 @@ let CONFIG = {
   radarIntervalMs: 20000
 };
 
-// 🤖 AJAN EKİBİNİN CANLI OLARAK DEĞİŞTİREBİLDİĞİ GİRİŞ FİLTRELERİ
-// (Yönetici onayı + sert sınırlar dahilinde team_runner tarafından güncellenir)
+// Giriş genişliği. Ajan toplantısı bunu değiştirmez.
 let DYNAMIC = {
-  vol3hMin: 1.0,         // 3 saatlik minimum hacim ($M)
-  candidateSlice: 35,    // Kline ile derin incelenen aday sayısı
-  regime: 'DEFAULT',
-  mode: 'BALANCED',      // 'DEFENSIVE_SNIPER', 'CAUTIOUS_RECOVERY', 'GROWTH', 'BALANCED'
+  vol3hMin: 1.0,
+  candidateSlice: 35,
+  regime: 'SCALP',
+  mode: 'HIZLI_VUR_KAC',
   updatedAt: 0
 };
-const DYNAMIC_LIMITS = {
-  vol3hMin: [0.5, 15.0],
-  candidateSlice: [15, 50]
-};
 
-function getMarketFlowBias() {
-  const bias = teamStatusCache && teamStatusCache.moneyFlow && teamStatusCache.moneyFlow.marketFlowBias;
-  return bias || 'NEUTRAL';
+let userRisk = { maxSlots: 2, marginPerTrade: 15 };
+let circuitOn = false;
+
+function rememberUserRisk() {
+  userRisk = {
+    maxSlots: CONFIG.maxSlots,
+    marginPerTrade: CONFIG.marginPerTrade
+  };
 }
 
-function isChoppyRegime() {
-  const r = DYNAMIC.regime || '';
-  return r === 'CHOPPY_RANGE' || r === 'WEEKEND_LOW_LIQUIDITY' || r === 'DEFAULT';
+function applyCircuitBreaker() {
+  const initial = Number(CONFIG.initialBalance) || 100;
+  const peak = Math.max(getPeakBalance(), initial, balance);
+  const dd = peak > 0 ? (peak - balance) / peak : 0;
+  const severe = balance < 95 || dd >= 0.08;
+  if (severe) {
+    const nextMargin = Math.min(Number(userRisk.marginPerTrade) || 12, 10);
+    const changed = !circuitOn || CONFIG.maxSlots !== 1 || CONFIG.marginPerTrade !== nextMargin;
+    circuitOn = true;
+    CONFIG.maxSlots = 1;
+    CONFIG.marginPerTrade = nextMargin;
+    DYNAMIC.mode = 'DEFENSIVE_SNIPER';
+    if (changed) {
+      addLog(`🛑 Devre kesici: kasa $${balance.toFixed(2)}, zirveden %${(dd * 100).toFixed(1)}. Slot 1, teminat $${nextMargin}. Çıkış ayarı aynı.`, 'RISK');
+    }
+    return;
+  }
+  if (circuitOn) {
+    circuitOn = false;
+    CONFIG.maxSlots = userRisk.maxSlots;
+    CONFIG.marginPerTrade = userRisk.marginPerTrade;
+    DYNAMIC.mode = 'HIZLI_VUR_KAC';
+    addLog(`✅ Devre kesici kapandı. Slot ${CONFIG.maxSlots}, teminat $${CONFIG.marginPerTrade}.`, 'INFO');
+  } else {
+    DYNAMIC.mode = 'HIZLI_VUR_KAC';
+  }
+}
+
+function engineSnapshot() {
+  return {
+    mode: DYNAMIC.mode,
+    circuit: circuitOn,
+    liveSlots: CONFIG.maxSlots,
+    liveMargin: CONFIG.marginPerTrade,
+    userSlots: userRisk.maxSlots,
+    userMargin: userRisk.marginPerTrade,
+    gates: {
+      entry: '1dk %0.15-%0.35, hacim 1.6x',
+      book: 'OBI veto',
+      judge: 'açık',
+      flow: 'son 12 mum',
+      freqai: 'kapalı',
+      funding: 'kapalı',
+      team: 'kapalı'
+    }
+  };
 }
 
 // ŞAMPİYON ÖNCELİKLİ KOİNLER (Ekran 1 VIP Listesi - En Yüksek Hacim ve Volatilite Roketleri)
@@ -204,7 +220,7 @@ function loadSettings() {
 
 function getSettingsPayload() {
   return {
-    slots: CONFIG.maxSlots, margin: CONFIG.marginPerTrade, lev: CONFIG.leverage,
+    slots: userRisk.maxSlots, margin: userRisk.marginPerTrade, lev: CONFIG.leverage,
     sl: CONFIG.slPct, be: CONFIG.bePct, moon: CONFIG.moonPct, tp1: CONFIG.tp1Pct
   };
 }
@@ -240,6 +256,7 @@ function initStorage() {
   } catch (err) {
     addLog(`Dosya okuma: ${err.message}`, 'WARN');
   }
+  rememberUserRisk();
 }
 
 function rebuildCoinLossHistory() {
@@ -746,6 +763,7 @@ async function scanLoop() {
   if (isScanRunning || !isBotActive) return;
   isScanRunning = true;
   try {
+    applyCircuitBreaker();
     if (activePositions.length >= CONFIG.maxSlots) {
       checkSlotRotation();
       return;
@@ -802,8 +820,6 @@ async function scanLoop() {
       return p >= 0.005; // 🛡️ Kuruşluk manipülatif ve spreadi yüksek koinler (AMP vb.) filtrelenir
     });
 
-    const fundMap = (teamStatusCache && teamStatusCache.fundingRates && teamStatusCache.fundingRates.fundingMap) || globalFundingMap || {};
-
     const topCandidates = validTickers.map(t => {
       const sym = t.symbol;
       const volM = (parseFloat(t.quoteVolume) || 0) / 1e6;
@@ -831,15 +847,8 @@ async function scanLoop() {
         }
       }
 
-      // 🔥 SHORT SQUEEZE ADAYI ÖNCELİĞİ (Ağır negatif fonlamalı koinleri öne çek)
-      const fItem = fundMap[sym];
-      let squeezeBoost = 0;
-      if (fItem && (fItem.bias === 'SHORT_SQUEEZE_ALERT' || fItem.fundingRatePct <= -0.030)) {
-        squeezeBoost = 45;
-      }
-
       const instantScore = rollMovePct > 0 ? rollMovePct * 12 : Math.abs(rollMovePct) * 8;
-      const hotScore = instantScore + Math.abs(rawChg > 0 ? Math.min(rawChg, 25) : Math.max(rawChg, -25)) + (Math.sqrt(volM) * 1.8) + (isVip ? 20 : 0) + radarBoost + squeezeBoost;
+      const hotScore = instantScore + Math.abs(rawChg > 0 ? Math.min(rawChg, 25) : Math.max(rawChg, -25)) + (Math.sqrt(volM) * 1.8) + (isVip ? 20 : 0) + radarBoost;
 
       return {
         ...t,
@@ -962,15 +971,6 @@ async function scanLoop() {
             radarTag = `[${sig} | 3s: %${chg3.toFixed(1)} / 15m: %${chg15Val.toFixed(1)} / %${(100 - taker).toFixed(0)} Satıcı]`;
           }
 
-          // 3. NEGATİF FONLAMA SHORT SQUEEZE TETİĞİ (KURUMSAL LİKİDASYON ROKETİ)
-          const fItemLive = fundMap[sym];
-          const isSqueezeAlert = !!(fItemLive && (fItemLive.bias === 'SHORT_SQUEEZE_ALERT' || fItemLive.fundingRatePct <= -0.030));
-          if (isSqueezeAlert && chg15Val >= 0.05 && taker >= 50.0) {
-            isDirectRadarLong = true;
-            radarTag = `[🔥 SHORT SQUEEZE | Fonlama: %${fItemLive.fundingRatePct} / %${taker.toFixed(0)} Alıcı]`;
-          }
-
-          // 🛡️ DÜŞEN BIÇAK ENGELİ: Sadece aşırı zıt yönlerde engelle
           if (chg15Val < -0.40) {
             isDirectRadarLong = false;
             radarOkLong = false;
@@ -979,8 +979,6 @@ async function scanLoop() {
             isDirectRadarShort = false;
             radarOkShort = false;
           }
-
-          // 🛡️ SİNYAL TERSİNE İŞLEM AÇMA YASAĞI
           if (sig.includes("ROKET") || sig.includes("BOĞA")) {
             radarOkShort = false;
             isDirectRadarShort = false;
@@ -1031,21 +1029,15 @@ async function scanLoop() {
         // 🔴 MARSCOIN SHORT ATEŞLEMESİ:
         let isShortDump = false;
         if (hasRealLiquidity && noWickShort && hasSellerDominance && inShortBand && isWhaleVol && radarOkShort) {
-          const flowBias = getMarketFlowBias();
-          const blockCounterTrendShort = isChoppyRegime() && flowBias === 'BULLISH';
-          if (!blockCounterTrendShort) {
-            isShortDump = true;
-            radarTag = `[⚡ HIZLI VUR-KAÇ SHORT | 1dk: %${curMovePct.toFixed(2)} | Hacim: ${volMult.toFixed(1)}x]`;
-          }
+          isShortDump = true;
+          radarTag = `[⚡ HIZLI VUR-KAÇ SHORT | 1dk: %${curMovePct.toFixed(2)} | Hacim: ${volMult.toFixed(1)}x]`;
         }
 
         if (isLongPump || isShortDump) {
           const side = isLongPump ? "LONG" : "SHORT";
 
-          // 🐋 6. AJAN (BALİNA & PARA AKIŞI AVCISI) KONTROLÜ
-          const scoutMap = (teamStatusCache && teamStatusCache.moneyFlow && teamStatusCache.moneyFlow.flowMap) || globalWhaleFlowMap || null;
-          let scoutInfo = scoutMap ? scoutMap[sym] : null;
-          if (!scoutInfo && k3m && k3m.length >= 8) {
+          let scoutInfo = null;
+          if (k3m && k3m.length >= 8) {
             let quote = 0;
             let takerBuy = 0;
             const recent = k3m.slice(-12);
@@ -1071,19 +1063,19 @@ async function scanLoop() {
           }
           if (scoutInfo) {
             if (side === 'LONG' && scoutInfo.cvdDivergence === 'BEARISH_DIVERGENCE') {
-              addLog(`🛑 [BALİNA VETO]: ${sym} LONG — Ayı CVD uyumsuzluğu (fakeout).`, 'WARN');
+              addLog(`🛑 [AKIŞ VETO]: ${sym} LONG — son 12 mumda fiyat yükselirken alıcı zayıf.`, 'WARN');
               continue;
             }
             if (side === 'SHORT' && scoutInfo.cvdDivergence === 'BULLISH_DIVERGENCE') {
-              addLog(`🛑 [BALİNA VETO]: ${sym} SHORT — Boğa CVD uyumsuzluğu (squeeze).`, 'WARN');
+              addLog(`🛑 [AKIŞ VETO]: ${sym} SHORT — son 12 mumda fiyat düşerken alıcı güçlü.`, 'WARN');
               continue;
             }
             if (side === 'LONG' && scoutInfo.isApprovedLong === false) {
-              addLog(`🛑 [BALİNA VETO]: ${sym} LONG — Kurumsal para çıkışı (-$${Math.abs(scoutInfo.netFlowM)}M).`, 'WARN');
+              addLog(`🛑 [AKIŞ VETO]: ${sym} LONG — son 12 mumda net alıcı yok.`, 'WARN');
               continue;
             }
             if (side === 'SHORT' && scoutInfo.isApprovedShort === false) {
-              addLog(`🛑 [BALİNA VETO]: ${sym} SHORT — Kurumsal para girişi (+$${scoutInfo.netFlowM}M).`, 'WARN');
+              addLog(`🛑 [AKIŞ VETO]: ${sym} SHORT — son 12 mumda net satıcı yok.`, 'WARN');
               continue;
             }
           }
@@ -1109,47 +1101,6 @@ async function scanLoop() {
             }
           } catch(e) {}
 
-          // 🎯 7. AJAN (FREQ-AI & LİKİDASYON AVCISI) KONTROLLERİ
-          // A) FONLAMA ORANI & LİKİDASYON SIKIŞMASI (SQUEEZE) KONTROLÜ
-          const fundingMap = (teamStatusCache && teamStatusCache.fundingRates && teamStatusCache.fundingRates.fundingMap) || globalFundingMap || null;
-          const fundingInfo = fundingMap ? fundingMap[sym] : null;
-          if (fundingInfo) {
-            if (side === 'LONG' && fundingInfo.isApprovedLong === false) {
-              addLog(`🛑 [FONLAMA VETO]: ${sym} LONG — Aşırı pozitif fonlama (+%${fundingInfo.fundingRatePct}).`, 'WARN');
-              continue;
-            }
-            if (side === 'SHORT' && fundingInfo.isApprovedShort === false) {
-              addLog(`🛑 [FONLAMA VETO]: ${sym} SHORT — Short squeeze fonlaması (%${fundingInfo.fundingRatePct}).`, 'WARN');
-              continue;
-            }
-          }
-
-          // B) FREQ-AI MAKİNE ÖĞRENİMİ (ML) KAZANMA OLASILIĞI DEĞERLENDİRMESİ
-          const mlFeatures = {
-            symbol: sym,
-            side: side,
-            takerBuyRatio: rInfo ? (rInfo.takerBuyRatio || 50) : 50,
-            chg15m: chg15Val,
-            chg3h: rInfo ? (rInfo.chg3h || 0) : 0,
-            chg24h: chg24Val,
-            vol3hM: rInfo ? (rInfo.vol3hM || 5.0) : 5.0,
-            btc5m: btc5mNumeric,
-            btc15m: btc15mNumeric,
-            fundingRatePct: fundingInfo ? fundingInfo.fundingRatePct : 0.01,
-            netFlowM: scoutInfo ? scoutInfo.netFlowM : 0,
-            mode: DYNAMIC.mode
-          };
-          let mlEval = { isApproved: true, winProbabilityPct: null, modelReady: false, confidence: 'EĞİTİLMEDİ', topDeterrent: '' };
-          try {
-            mlEval = predictTradeProbability(mlFeatures);
-          } catch(e) {}
-
-          if (!mlEval.isApproved) {
-            addLog(`🛑 [FREQ-AI VETO]: ${sym} ${side} — Kazanma olasılığı %${mlEval.winProbabilityPct} (${mlEval.topDeterrent || 'Düşük olasılık'}).`, 'WARN');
-            continue;
-          }
-
-          // 🏛️ 8. AJAN (ASLAN11 BAŞ YARGIÇ) ÖN YARGILAMA VE SABIKA DENETİMİ
           let judgeClearance = { approved: true, verdict: 'BERAAT', judicialScore: 85, reason: '' };
           try {
             judgeClearance = evaluatePreTradeClearance(sym, side, {
@@ -1161,68 +1112,19 @@ async function scanLoop() {
 
           if (judgeClearance && judgeClearance.approved === false) {
             coinCooldowns[sym] = now + (3 * 60 * 1000);
-            addLog(`🛡️ [YARGIÇ AĞIR CEZA VETOSU]: ${sym} ${side} engellendi — ${judgeClearance.reason}`, 'WARN');
-            try {
-              addDialogue('JUDGE', `🛑 AĞIR CEZA VETOSU! ${sym} sanığı için hüküm: ${judgeClearance.verdict}. Gerekçe: ${judgeClearance.reason}. Kronik sabıkalı işlem durduruldu!`, 'RISK');
-            } catch(e) {}
+            addLog(`🛡️ [YARGIÇ VETO]: ${sym} ${side} engellendi — ${judgeClearance.reason}`, 'WARN');
             continue;
           }
 
-          // 👑 1. SLOT DOLULUK KONTROLÜ (Maksimum slot sınırını aşma)
           if (activePositions.length >= CONFIG.maxSlots) {
             continue;
           }
 
-          // 👑 1. AJAN (PORTFÖY YÖNETİCİSİ) DİNAMİK ASİMETRİK TEMİNAT & VUR-KAÇ BOYUTLANDIRMASI
-          const currentFreeMargin = balance - activePositions.reduce((acc, p) => acc + (p.margin || 0), 0);
-          let sizing = {
-            tier: 'TIER_STANDARD',
-            tierLabel: '🏔️ MARSCOIN ROKET',
-            margin: CONFIG.marginPerTrade || 15.0,
-            slPct: CONFIG.slPct || 1.10,
-            bePct: CONFIG.bePct || 1.00,
-            tp1Pct: CONFIG.tp1Pct || 1.20,
-            moonPct: CONFIG.moonPct || 2.40,
-            convictionScore: 70,
-            rationale: '🏔️ Marscoin Roket Sinyali'
-          };
-          if (typeof calculateConvictionSizing === 'function') {
-            try {
-              sizing = calculateConvictionSizing({
-                sym: sym,
-                side: side,
-                takerBuyRatio: rInfo ? (rInfo.takerBuyRatio || 50) : 50,
-                winProbabilityPct: (mlEval && mlEval.modelReady) ? mlEval.winProbabilityPct : null,
-                modelReady: !!(mlEval && mlEval.modelReady),
-                netFlowM: scoutInfo ? scoutInfo.netFlowM : 0,
-                vol3hM: rInfo ? (rInfo.vol3hM || 5.0) : 5.0,
-                isVip: VIP_TARGETS[sym] !== undefined,
-                judicialScore: judgeClearance ? judgeClearance.judicialScore : 80,
-                balance: balance,
-                mode: DYNAMIC.mode,
-                freeMargin: currentFreeMargin,
-                marginCap: CONFIG.marginPerTrade,
-                fundingRatePct: fundingInfo ? fundingInfo.fundingRatePct : 0.01,
-                isShortSqueeze: !!(fundingInfo && (fundingInfo.bias === 'SHORT_SQUEEZE_ALERT' || fundingInfo.fundingRatePct <= -0.030))
-              });
-            } catch (e) {}
-          }
-
-          sizing.tier = isRocketSignal ? 'TIER_ROCKET_SNIPER' : (sizing.tier || 'TIER_STANDARD');
-          sizing.tierLabel = '⚡ HIZLI VUR-KAÇ';
-          sizing.slPct = CONFIG.slPct || 0.25;
-          sizing.bePct = CONFIG.bePct || 0.20;
-          sizing.tp1Pct = CONFIG.tp1Pct || 0.60;
-          sizing.moonPct = CONFIG.moonPct || 0.42;
-
-          const marginCap = Number(CONFIG.marginPerTrade) || 12;
-          let tradeMargin = Number(sizing.margin);
-          if (!Number.isFinite(tradeMargin) || tradeMargin <= 0) tradeMargin = marginCap;
-          tradeMargin = Math.min(tradeMargin, marginCap);
-          const tradeSlPct = Number(sizing.slPct) || CONFIG.slPct || 1.10;
-          const tradeBePct = Number(sizing.bePct) || CONFIG.bePct || 1.00;
-          const tradeTp1Pct = Number(sizing.tp1Pct) || CONFIG.tp1Pct || 1.20;
-          const tradeMoonPct = Number(sizing.moonPct) || CONFIG.moonPct || 2.40;
+          const tradeMargin = Number(CONFIG.marginPerTrade) || 12;
+          const tradeSlPct = Number(CONFIG.slPct) || 0.25;
+          const tradeBePct = Number(CONFIG.bePct) || 0.20;
+          const tradeTp1Pct = Number(CONFIG.tp1Pct) || 0.60;
+          const tradeMoonPct = Number(CONFIG.moonPct) || 0.42;
 
           const stopPrice = side === "LONG" 
             ? curP * (1 - tradeSlPct / 100) 
@@ -1252,9 +1154,9 @@ async function scanLoop() {
             bePct: tradeBePct,
             tp1Pct: tradeTp1Pct,
             moonPct: tradeMoonPct,
-            convictionTier: sizing.tier,
-            convictionScore: sizing.convictionScore,
-            convictionLabel: sizing.tierLabel,
+            convictionTier: 'SCALP',
+            convictionScore: 0,
+            convictionLabel: '⚡ HIZLI VUR-KAÇ',
             radarTag: radarTag,
             chg3h: rInfo ? rInfo.chg3h : null,
             vol3hM: rInfo ? rInfo.vol3hM : null,
@@ -1272,21 +1174,7 @@ async function scanLoop() {
           lastTradeOpenTime = Date.now();
           persistState();
 
-          addLog(`🚀 POZİSYON AÇILDI: [${side}] ${sym} @ $${curP.toFixed(4)} | Teminat: $${tradeMargin.toFixed(1)} (${sizing.tierLabel} Skor: %${sizing.convictionScore}) | SL: $${stopPrice.toFixed(4)} | TP1: +%${tradeTp1Pct.toFixed(2)} | Moon: +%${tradeMoonPct.toFixed(2)}`, 'TRADE');
-          try {
-            const volTxt = (rInfo && rInfo.vol3hM != null) ? `$${rInfo.vol3hM.toFixed(1)}M` : 'bilinmiyor';
-            const takerTxt = (rInfo && rInfo.takerBuyRatio != null) ? `%${rInfo.takerBuyRatio.toFixed(1)}` : 'bilinmiyor';
-            const scoutTxt = scoutInfo ? ` | 🐋 Kurumsal Akış: ${scoutInfo.netFlowM > 0 ? '+' : ''}$${scoutInfo.netFlowM}M` : '';
-            const fundTxt = fundingInfo ? ` (%${fundingInfo.fundingRatePct})` : '';
-            addDialogue('ANALYST', `🚨 ${sym} ${side} sinyali: 3s hacim ${volTxt}, alıcı oranı ${takerTxt}, 24s %${chg24Val.toFixed(1)}, rejim: ${DYNAMIC.regime}.`, 'TRADE');
-            addDialogue('WHALE_HUNTER', `🐋 ${sym} ${side} ONAYLANDI: Para akışı lehimize${scoutTxt}. Büyük oyuncularla aynı yöndeyiz!`, 'TRADE');
-            addDialogue('FREQAI', mlEval.modelReady === false || mlEval.winProbabilityPct == null
-              ? `🎯 ${sym} ${side}: FreqAI eğitilmedi, bu işlem skorla veto edilmedi.`
-              : `🎯 ${sym} ${side} ONAYLANDI: FreqAI kazanma olasılığı %${mlEval.winProbabilityPct} (${mlEval.confidence}) | Fonlama: ${fundTxt || 'veri yok'}.`, 'TRADE');
-            addDialogue('JUDGE', `🏛️ ${sym} ${side} BERAAT: Disiplin Puanı ${judgeClearance.judicialScore}/100. Giriş nizamı ve kurallar onaylandı.`, 'TRADE');
-            addDialogue('TRADER', `⚔️ ${sym} ${side} @ $${curP.toFixed(4)} | Nominal $${(tradeMargin * CONFIG.leverage).toFixed(0)} (${CONFIG.leverage}x) | Teminat $${tradeMargin.toFixed(1)} | SL $${stopPrice.toFixed(4)}.`, 'TRADE');
-            addDialogue('MANAGER', `👑 [YÖNETİCİ ASİMETRİK VUR-KAÇ]: ${sym} ${sizing.tierLabel} (Skor %${sizing.convictionScore}). Teminat $${tradeMargin.toFixed(1)} tahsis edildi! Hedef TP1: +%${tradeTp1Pct.toFixed(2)}, Moon: +%${tradeMoonPct.toFixed(2)}. Slot ${activePositions.length}/${CONFIG.maxSlots}.`, 'RISK');
-          } catch(e) {}
+          addLog(`🚀 POZİSYON AÇILDI: [${side}] ${sym} @ $${curP.toFixed(4)} | Teminat: $${tradeMargin.toFixed(1)} | SL: $${stopPrice.toFixed(4)} | TP1: +%${tradeTp1Pct.toFixed(2)} | Moon: +%${tradeMoonPct.toFixed(2)}`, 'TRADE');
           break;
         }
       }
@@ -1450,11 +1338,9 @@ async function fastRiskLoop() {
       // Tam stop loss'u (-%18 ROI) bekleyip kasayı delme! Ajanlar piyasa dönüşünü anında keser!
       if (!exitReason && pos.roi <= -5.0) {
         if (!isLong && (btc15mNumeric >= 0.65 || btc5mNumeric >= 0.70)) {
-          exitReason = `🚨 [AJAN ACİL TAHLİYE]: BTC Boğa Dalgası Başlattı (${btc15mTrend}), SHORT Pozisyonu Kurtarıldı (Erken Kesildi: %${pos.roi.toFixed(1)} ROI)`;
-          try { addDialogue('WHALE_HUNTER', `🚨 ACİL TAHLİYE! BTC sert yeşile döndü (${btc15mTrend}). ${pos.symbol} SHORT pozisyonu tam stop beklenmeden hemen tahliye edildi!`, 'RISK'); } catch(e) {}
+          exitReason = `🚨 BTC ters dönüş, SHORT erken kesildi (${btc15mTrend}, %${pos.roi.toFixed(1)} ROI)`;
         } else if (isLong && (btc15mNumeric <= -0.65 || btc5mNumeric <= -0.70)) {
-          exitReason = `🚨 [AJAN ACİL TAHLİYE]: BTC Sert Satış Dalgası Başlattı (${btc15mTrend}), LONG Pozisyonu Kurtarıldı (Erken Kesildi: %${pos.roi.toFixed(1)} ROI)`;
-          try { addDialogue('WHALE_HUNTER', `🚨 ACİL TAHLİYE! BTC sert kırmızıya çöktü (${btc15mTrend}). ${pos.symbol} LONG pozisyonu tam stop beklenmeden hemen tahliye edildi!`, 'RISK'); } catch(e) {}
+          exitReason = `🚨 BTC ters dönüş, LONG erken kesildi (${btc15mTrend}, %${pos.roi.toFixed(1)} ROI)`;
         }
       }
 
@@ -1562,11 +1448,6 @@ function closeTrade(pos, exitReason) {
   } catch (e) {}
 
   addLog(`🏁 KAPANDI: [${pos.side}] ${pos.symbol} | PnL: ${totalTradePnl >= 0 ? '+' : ''}$${totalTradePnl.toFixed(2)} (%${totalTradeRoi >= 0 ? '+' : ''}${totalTradeRoi.toFixed(1)} ROI) | ${formattedExitReason}`, totalTradePnl >= 0 ? 'WIN' : 'LOSS');
-  try {
-    addDialogue('TRADER', `🏁 [POZİSYON KAPANDI]: ${pos.symbol} [${pos.side}] işlemi tamamlandı. Çıkış: ${formattedExitReason}`, 'TRADE');
-    addDialogue('TESTER', `🧪 [ADLİ TIP ANALİZİ]: ${pos.symbol} | Net PnL: ${totalTradePnl >= 0 ? '+' : ''}$${totalTradePnl.toFixed(2)} (%${totalTradeRoi >= 0 ? '+' : ''}${totalTradeRoi.toFixed(1)} ROI) | Zirve MFE: +%${(pos.mfe || 0).toFixed(2)}.`, 'STRATEGY');
-    addDialogue('MANAGER', `👑 [KASA GÜNCELLEMESİ]: Güncel Kasa $${balance.toFixed(2)}. Sermaye korundu, yeni fırsatlar için tetikteyiz.`, 'RISK');
-  } catch(e) {}
 }
 
 // 4. HTML VE WEBSİTESİ (BİREBİR EKRAN 1 TASARIMI)
@@ -1587,7 +1468,10 @@ function getStats() {
     balance: balance.toFixed(2),
     peakBalance: peak.toFixed(2),
     drawdownPct: ddPct,
-    mode: DYNAMIC.mode || 'DEFENSIVE_SNIPER',
+    mode: DYNAMIC.mode || 'HIZLI_VUR_KAC',
+    circuit: circuitOn,
+    liveSlots: CONFIG.maxSlots,
+    liveMargin: CONFIG.marginPerTrade,
     totalPnl: totalPnl.toFixed(2),
     totalRoi: totalRoi.toFixed(2),
     totalTrades,
@@ -2305,8 +2189,7 @@ function serveDashboardHtml() {
           <button id="themeToggleBtn" onclick="toggleTheme()" class="theme-toggle-btn">☀️ Açık Mod</button>
         </h2>
 
-        <!-- TEK BİRLEŞİK KART: SİSTEM & 8 AJAN KOMUTASI -->
-        <div class="sidebar-section-title" style="margin-top:0;">🤖 OTONOM SİSTEM & 8 AJAN KOMUTASI</div>
+        <div class="sidebar-section-title" style="margin-top:0;">MOTOR</div>
         <div class="unified-agent-box">
           <div class="mini-status-bar">
             <div class="mini-status-chip">
@@ -2324,36 +2207,20 @@ function serveDashboardHtml() {
           </div>
           <div class="agent-compact-list">
             <div class="agent-row">
-              <span class="agent-name" style="color:var(--purple);">👑 1. YÖNETİCİ</span>
-              <span class="status-pill purple" id="teamManager">🚨 SAVUNMA</span>
+              <span class="agent-name">Giriş</span>
+              <span class="status-pill green" id="gateEngine">1dk bant</span>
             </div>
             <div class="agent-row">
-              <span class="agent-name" style="color:var(--blue);">🧠 2. ANALİZCİ</span>
-              <span class="status-pill blue" id="teamAnalyst">Yatay / Sakin</span>
+              <span class="agent-name">Emir defteri</span>
+              <span class="status-pill green" id="gateBook">OBI açık</span>
             </div>
             <div class="agent-row">
-              <span class="agent-name" style="color:var(--amber);">⚔️ 3. TRADER</span>
-              <span class="status-pill purple" id="teamTrader">🎯 1 Slot ($10)</span>
+              <span class="agent-name">Yargıç</span>
+              <span class="status-pill green" id="gateJudge">veto açık</span>
             </div>
             <div class="agent-row">
-              <span class="agent-name" style="color:var(--green);">🧪 4. TESTÇİ</span>
-              <span class="status-pill green" id="teamTester">Sim: Güvenli</span>
-            </div>
-            <div class="agent-row">
-              <span class="agent-name" style="color:var(--text-secondary);">💻 5. YAZILIMCI</span>
-              <span class="status-pill green" id="teamEngineer">Regex Aktif</span>
-            </div>
-            <div class="agent-row">
-              <span class="agent-name" style="color:var(--cyan);">🐋 6. BALİNA AVCISI</span>
-              <span class="status-pill cyan" id="teamWhale">⚖️ Dengeli</span>
-            </div>
-            <div class="agent-row">
-              <span class="agent-name" style="color:var(--pink);">🎯 7. FREQ-AI & LİKİT</span>
-              <span class="status-pill pink" id="teamFreqai">%57.1 WR (56)</span>
-            </div>
-            <div class="agent-row">
-              <span class="agent-name" style="color:var(--amber);">🏛️ 8. BAŞ YARGIÇ</span>
-              <span class="status-pill yellow" id="teamJudge">76 PUAN</span>
+              <span class="agent-name">Devre kesici</span>
+              <span class="status-pill" id="gateBreaker">${stats.circuit ? 'AÇIK' : 'kapalı'}</span>
             </div>
           </div>
         </div>
@@ -2524,11 +2391,10 @@ function serveDashboardHtml() {
 
         <!-- 🗣️ AJAN TELSİZİ & CANLI DİYALOG AKIŞI -->
         <h2 style="margin-top:16px; display:flex; justify-content:space-between; align-items:center;">
-          <span>🗣️ AJAN TELSİZİ & CANLI DİYALOG AKIŞI</span>
-          <span class="badge-moon" style="font-size:9.5px;">📻 8 AJAN CANLI FREKANS</span>
+          <span>CANLI KAYIT</span>
         </h2>
         <div id="dialogueBox" style="background:var(--panel2); border:1px solid var(--border); border-radius:12px; padding:12px 14px; max-height:320px; overflow-y:auto; font-family:-apple-system,Segoe UI,sans-serif; font-size:13px; line-height:1.5; display:flex; flex-direction:column; gap:8px;">
-          ${renderDialogues(teamStatusCache ? teamStatusCache.dialogues : [])}
+          ${renderLogs(logs.slice(0, 30))}
         </div>
       </div>
     </div>
@@ -2694,66 +2560,33 @@ function serveDashboardHtml() {
         document.getElementById("stWinRate").innerText = '%' + data.stats.winRate;
         document.getElementById("stWinsLosses").innerText = data.stats.wins + 'K / ' + data.stats.losses + 'Z';
         document.getElementById("stMega").innerText = data.stats.megaWins + ' Adet';
-        document.getElementById("posCount").innerText = data.stats.activeCount + ' / ' + (data.settings && data.settings.slots ? data.settings.slots : '1');
+        document.getElementById("posCount").innerText = data.stats.activeCount + ' / ' + (data.stats.liveSlots || (data.settings && data.settings.slots) || '1');
         document.getElementById("histCount").innerText = data.history.length;
 
         const btcEl = document.getElementById("btcVal");
         btcEl.innerText = data.stats.btcTrend;
         btcEl.style.color = data.stats.btcIsGreen ? 'var(--green)' : 'var(--red)';
 
-        if (data.teamStatus && data.teamStatus.team) {
-          const t = data.teamStatus.team;
-          const ei = data.teamStatus.executiveIntervention;
-          if (t.manager && document.getElementById("teamManager")) {
-            const isDef = ei && ei.mode === 'DEFENSIVE_SNIPER';
-            document.getElementById("teamManager").innerText = isDef ? '🚨 SAVUNMA' : (t.manager.status.includes('ONAY') ? 'ONAYLANDI' : 'VETO');
-            document.getElementById("teamManager").className = 'status-pill ' + (isDef ? 'purple' : 'green');
-          }
-          if (t.analyst && document.getElementById("teamAnalyst")) {
-            const ad = t.analyst.description || 'Rejim Aktif';
-            document.getElementById("teamAnalyst").innerText = ad.replace('YATAY / SAKİN PİYASA', 'YATAY / SAKİN').replace(' / ', ' · ').replace(' PİYASA', '').trim();
-          }
-          if (t.trader && document.getElementById("teamTrader")) {
-            document.getElementById("teamTrader").innerText = (ei && ei.mode === 'DEFENSIVE_SNIPER') ? '🎯 1 Slot ($10)' : (t.trader.targetVolThreshold || 'Lazer & Moon');
-          }
-          if (t.tester && document.getElementById("teamTester")) {
-            document.getElementById("teamTester").innerText = (ei && ei.mode === 'DEFENSIVE_SNIPER') ? 'Sim: Güvenli' : ('WR: ' + (t.tester.lastTestWinRate ? t.tester.lastTestWinRate.split(' ')[0] : '%100'));
-          }
-          if (t.engineer && document.getElementById("teamEngineer")) {
-            document.getElementById("teamEngineer").innerText = (ei && ei.mode === 'DEFENSIVE_SNIPER') ? 'Regex Aktif' : 'Render Canlı';
-          }
-          if (t.whale_scout && document.getElementById("teamWhale")) {
-            const wst = t.whale_scout.status || '';
-            document.getElementById("teamWhale").innerText = wst.includes('GİRİŞ') ? '🟢 Giriş' : (wst.includes('ÇIKIŞ') ? '🔴 Çıkış' : (wst.includes('DENGELİ') ? '⚖️ Dengeli' : 'Para Akışı'));
-          }
-          if (t.freqai && document.getElementById("teamFreqai")) {
-            const fst = t.freqai.status || 'Model Aktif';
-            document.getElementById("teamFreqai").innerText = fst.includes('WR') ? fst.replace(' İşlem', '').replace('İşlem', '').trim() : fst.slice(0, 14);
-            document.getElementById("teamFreqai").title = t.freqai.role || '';
-          }
-          if (t.judge && document.getElementById("teamJudge")) {
-            const jst = t.judge.status || 'Mahkeme Aktif';
-            document.getElementById("teamJudge").innerText = jst.replace('Mahkeme: ', '').replace('Mahkeme Aktif', '76 Puan').toUpperCase().trim();
-            document.getElementById("teamJudge").title = t.judge.role || '';
-          }
+        const br = document.getElementById("gateBreaker");
+        if (br) {
+          br.innerText = data.stats.circuit ? ('AÇIK · $' + data.stats.liveMargin) : 'kapalı';
+          br.className = 'status-pill ' + (data.stats.circuit ? 'purple' : '');
         }
 
-        if (data.teamStatus && data.teamStatus.dialogues) {
-          const dBox = document.getElementById("dialogueBox");
-          if (dBox) {
-            const wasAtBottom = (dBox.scrollHeight - dBox.scrollTop - dBox.clientHeight) < 60;
-            dBox.innerHTML = renderDialoguesClient(data.teamStatus.dialogues);
-            if (wasAtBottom || !window._dBoxInitialized) {
-              dBox.scrollTop = dBox.scrollHeight;
-              window._dBoxInitialized = true;
-            }
+        const dBox = document.getElementById("dialogueBox");
+        if (dBox && data.logs) {
+          const wasAtBottom = (dBox.scrollHeight - dBox.scrollTop - dBox.clientHeight) < 60;
+          dBox.innerHTML = renderLogsClient(data.logs);
+          if (wasAtBottom || !window._dBoxInitialized) {
+            dBox.scrollTop = dBox.scrollHeight;
+            window._dBoxInitialized = true;
           }
         }
 
         // Aktif Pozisyonlar Tablosu
         const tbody = document.getElementById("activeTbody");
         if (data.positions.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:35px 15px;"><div style="font-size:32px; margin-bottom:12px; filter:grayscale(0.3);">🔭</div><div style="color:var(--text); font-weight:700; font-size:14px; letter-spacing:0.5px;">TETİKTE BEKLENİYOR</div><div style="color:var(--muted); font-size:11px; margin-top:6px; max-width:320px; margin-left:auto; margin-right:auto; line-height:1.4;">8 Otonom Ajan & CVD Para Akışı Devrede. Emir derinliği, balina hareketleri ve FreqAI modelleriyle kârlı fırsatlar taranıyor...</div></td></tr>';
+          tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:35px 15px;"><div style="font-size:32px; margin-bottom:12px; filter:grayscale(0.3);">🔭</div><div style="color:var(--text); font-weight:700; font-size:14px; letter-spacing:0.5px;">TETİKTE BEKLENİYOR</div><div style="color:var(--muted); font-size:11px; margin-top:6px; max-width:320px; margin-left:auto; margin-right:auto; line-height:1.4;">1 dakikalık bant, emir defteri ve yargıç vetosu taranıyor.</div></td></tr>';
         } else {
           tbody.innerHTML = data.positions.map((p, idx) => {
             const isLong = p.side === 'LONG';
@@ -2811,7 +2644,7 @@ function serveDashboardHtml() {
         const activeCardsEl = document.getElementById("activeCardsMobile");
         if (activeCardsEl) {
           if (data.positions.length === 0) {
-            activeCardsEl.innerHTML = '<div class="empty-cards-msg">🔍 8 Ajanlı Savunma Radarı Devrede: CVD Para Akışı ve Balina Kırılımları Taranıyor...</div>';
+            activeCardsEl.innerHTML = '<div class="empty-cards-msg">🔍 1dk bant taranıyor.</div>';
           } else {
             activeCardsEl.innerHTML = data.positions.map((p, idx) => {
               const isLong = p.side === 'LONG';
@@ -2913,20 +2746,14 @@ function serveDashboardHtml() {
       } catch (e) {}
     }
 
-    function renderDialoguesClient(dlgs) {
-      if (!dlgs || dlgs.length === 0) {
-        return '<div style="color:var(--muted);text-align:center;padding:12px;">📻 Telsiz frekansı taranıyor, ilk toplantı bekleniyor...</div>';
+    function renderLogsClient(rows) {
+      if (!rows || rows.length === 0) {
+        return '<div style="color:var(--muted);text-align:center;padding:12px;">Kayıt bekleniyor.</div>';
       }
-      return dlgs.slice(0, 30).map(function(d) {
+      return rows.slice(0, 30).map(function(l) {
         return '<div style="display:flex;gap:10px;align-items:flex-start;padding:8px 10px;background:var(--panel);border-radius:8px;border:1px solid var(--border);">' +
-          '<span style="color:var(--muted);font-size:12px;white-space:nowrap;padding-top:1px;">' + d.time + '</span>' +
-          '<div style="display:flex;flex-direction:column;gap:2px;flex:1;">' +
-            '<div style="display:flex;align-items:center;gap:6px;">' +
-              '<span style="color:var(--text);font-weight:650;font-size:12.5px;">' + d.agent + '</span>' +
-              '<span style="color:var(--muted);font-size:11px;">' + d.title + '</span>' +
-            '</div>' +
-            '<div style="color:var(--text-secondary);font-size:13px;line-height:1.45;">' + d.text + '</div>' +
-          '</div>' +
+          '<span style="color:var(--muted);font-size:12px;white-space:nowrap;padding-top:1px;">' + escapeHtml(l.time) + '</span>' +
+          '<div style="color:var(--text-secondary);font-size:13px;line-height:1.45;">' + escapeHtml(l.msg) + '</div>' +
         '</div>';
       }).join('');
     }
@@ -3000,7 +2827,7 @@ function serveDashboardHtml() {
 
 function renderActiveRows(positions) {
   if (!positions || positions.length === 0) {
-    return '<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:24px;font-size:12px;">🔍 8 Ajanlı Savunma Radarı Devrede: CVD Para Akışı ve Balina Kırılımları Taranıyor...</td></tr>';
+    return '<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:24px;font-size:12px;">🔍 1dk bant taranıyor.</td></tr>';
   }
   return positions.map((p, idx) => {
     const isLong = p.side === 'LONG';
@@ -3070,7 +2897,7 @@ function renderHistoryRows(hist) {
 
 function renderActiveCards(positions) {
   if (!positions || positions.length === 0) {
-    return '<div class="empty-cards-msg">🔍 8 Ajanlı Savunma Radarı Devrede: CVD Para Akışı ve Balina Kırılımları Taranıyor...</div>';
+    return '<div class="empty-cards-msg">🔍 1dk bant taranıyor.</div>';
   }
   return positions.map((p, idx) => {
     const isLong = p.side === 'LONG';
@@ -3139,21 +2966,15 @@ function renderHistoryCards(hist) {
   }).join('');
 }
 
-function renderDialogues(dlgs) {
-  if (!dlgs || dlgs.length === 0) {
-    return '<div style="color:var(--muted);text-align:center;padding:12px;">📻 Telsiz frekansı taranıyor, ilk toplantı bekleniyor...</div>';
+function renderLogs(rows) {
+  if (!rows || rows.length === 0) {
+    return '<div style="color:var(--muted);text-align:center;padding:12px;">Kayıt bekleniyor.</div>';
   }
-  return dlgs.slice(0, 30).map(d => {
+  return rows.slice(0, 30).map(l => {
     return `
       <div style="display:flex;gap:10px;align-items:flex-start;padding:8px 10px;background:var(--panel);border-radius:8px;border:1px solid var(--border);">
-        <span style="color:var(--muted);font-size:12px;white-space:nowrap;padding-top:1px;">${d.time}</span>
-        <div style="display:flex;flex-direction:column;gap:2px;flex:1;">
-          <div style="display:flex;align-items:center;gap:6px;">
-            <span style="color:var(--text);font-weight:650;font-size:12.5px;">${d.agent}</span>
-            <span style="color:var(--muted);font-size:11px;">${d.title}</span>
-          </div>
-          <div style="color:var(--text-secondary);font-size:13px;line-height:1.45;">${d.text}</div>
-        </div>
+        <span style="color:var(--muted);font-size:12px;white-space:nowrap;padding-top:1px;">${escapeHtml(l.time)}</span>
+        <div style="color:var(--text-secondary);font-size:13px;line-height:1.45;">${escapeHtml(l.msg)}</div>
       </div>
     `;
   }).join('');
@@ -3238,7 +3059,7 @@ const server = http.createServer(async (req, res) => {
       resetEpoch: resetEpoch,
       settings: getSettingsPayload(),
       settingsCustomized: settingsCustomized,
-      teamStatus: teamStatusCache,
+      teamStatus: engineSnapshot(),
       dynamic: DYNAMIC
     }));
     return;
@@ -3246,7 +3067,7 @@ const server = http.createServer(async (req, res) => {
 
   if (pathname === '/api/team') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify(teamStatusCache || { message: "Ajan ekibi senkronize ediliyor..." }, null, 2));
+    res.end(JSON.stringify(engineSnapshot(), null, 2));
     return;
   }
 
@@ -3377,9 +3198,12 @@ const server = http.createServer(async (req, res) => {
     history = [];
     coinLossCount = {};
     coinCooldowns = {};
-    DYNAMIC.mode = 'BALANCED';
-    DYNAMIC.vol3hMin = 2.5;
-    DYNAMIC.candidateSlice = 30;
+    DYNAMIC.mode = 'HIZLI_VUR_KAC';
+    DYNAMIC.vol3hMin = 1.0;
+    DYNAMIC.candidateSlice = 35;
+    circuitOn = false;
+    CONFIG.maxSlots = userRisk.maxSlots;
+    CONFIG.marginPerTrade = userRisk.marginPerTrade;
     try {
       fs.writeFileSync(HISTORY_FILE, '[]', 'utf8');
       rewriteCsvFile();
@@ -3402,7 +3226,9 @@ const server = http.createServer(async (req, res) => {
       tp1: parsedUrl.searchParams.get('tp1')
     });
     Object.assign(CONFIG, clean);
+    rememberUserRisk();
     saveSettings();
+    applyCircuitBreaker();
     addLog(`⚙️ Ayarlar kaydedildi: Slot ${CONFIG.maxSlots} | Teminat $${CONFIG.marginPerTrade} | ${CONFIG.leverage}x | SL %${CONFIG.slPct} | BE %${CONFIG.bePct} | TP1 %${CONFIG.tp1Pct} | Moon %${CONFIG.moonPct}`, 'INFO');
 
     res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -3452,80 +3278,5 @@ server.listen(PORT, () => {
     } catch(e) {}
   }, 4 * 60 * 1000);
 
-  // 🤖 OTONOM 8-AJAN EKİBİ: Toplantı yap → Yönetici onaylarsa giriş filtrelerini CANLI uygula
-  try {
-    const { runAutonomousTeamSync } = require('./quant_lab/team_runner');
-    const clamp = (v, [lo, hi]) => Math.min(hi, Math.max(lo, v));
-
-    const runTeam = async () => {
-      try {
-        const report = await runAutonomousTeamSync({
-          balance,
-          initialBalance: CONFIG.initialBalance || 100.0,
-          peakBalance: getPeakBalance(),
-          activeCount: activePositions.length,
-          maxSlots: CONFIG.maxSlots,
-          uptimeMin: Math.floor((Date.now() - startTime) / 60000),
-          current: { ...DYNAMIC },
-          config: { slPct: CONFIG.slPct, bePct: CONFIG.bePct, tp1Pct: CONFIG.tp1Pct, moonPct: CONFIG.moonPct, marginPerTrade: CONFIG.marginPerTrade, leverage: CONFIG.leverage }
-        });
-        teamStatusCache = report;
-        if (report && report.moneyFlow && report.moneyFlow.flowMap) {
-          globalWhaleFlowMap = report.moneyFlow.flowMap;
-        }
-        if (report && report.fundingRates) {
-          globalFundingMap = report.fundingRates.live ? (report.fundingRates.fundingMap || {}) : {};
-        }
-
-        const ei = report && report.executiveIntervention;
-        const d = report && report.decision;
-
-        if (ei && (ei.active || ei.isSevereLoss || ei.isModerateLoss)) {
-          CONFIG.maxSlots = ei.maxSlots;
-          CONFIG.marginPerTrade = ei.marginPerTrade;
-          CONFIG.slPct = clamp(Number(ei.slPct) || CONFIG.slPct, [0.20, 0.35]);
-          CONFIG.bePct = clamp(Number(ei.bePct) || CONFIG.bePct, [0.15, 0.28]);
-          CONFIG.tp1Pct = clamp(Number(ei.tp1Pct) || CONFIG.tp1Pct, [0.50, 0.80]);
-          CONFIG.moonPct = clamp(Number(ei.moonPct) || CONFIG.moonPct, [0.30, 0.48]);
-          DYNAMIC.mode = ei.mode;
-          DYNAMIC.vol3hMin = ei.vol3hMin;
-          DYNAMIC.candidateSlice = ei.candidateSlice;
-          DYNAMIC.regime = (d && d.regime) || DYNAMIC.regime;
-          DYNAMIC.updatedAt = Date.now();
-          saveSettings();
-          const champInfo = (d && d.championStrategy) ? ` | 🏆 Şampiyon: ${d.championStrategy.name} (PF: ${d.championStrategy.summary?.profitFactor})` : '';
-          addLog(`🚨 AJAN MÜDAHALESİ AKTİF: [${ei.mode}] Slot: ${CONFIG.maxSlots} | Teminat: $${CONFIG.marginPerTrade} | SL: %${CONFIG.slPct} | BE: %${CONFIG.bePct} | Eşik: $${DYNAMIC.vol3hMin}M${champInfo}`, 'RISK');
-        } else if (d && d.approved && d.entryFilters) {
-          const before = { ...DYNAMIC };
-          DYNAMIC.vol3hMin = clamp(Number(d.entryFilters.vol3hMin) || before.vol3hMin, DYNAMIC_LIMITS.vol3hMin);
-          DYNAMIC.candidateSlice = Math.round(clamp(Number(d.entryFilters.candidateSlice) || before.candidateSlice, DYNAMIC_LIMITS.candidateSlice));
-          DYNAMIC.regime = d.regime || before.regime;
-          DYNAMIC.mode = (ei && ei.mode) || 'BALANCED';
-          DYNAMIC.updatedAt = Date.now();
-          if (d.exitParams) {
-            const ep = d.exitParams;
-            CONFIG.slPct = clamp(Number(ep.slPct) || CONFIG.slPct, [0.20, 0.35]);
-            CONFIG.bePct = clamp(Number(ep.bePct) || CONFIG.bePct, [0.15, 0.28]);
-            CONFIG.tp1Pct = clamp(Number(ep.tp1Pct) || CONFIG.tp1Pct, [0.50, 0.80]);
-            CONFIG.moonPct = clamp(Number(ep.moonPct) || CONFIG.moonPct, [0.30, 0.48]);
-          }
-          if (d.riskParams) {
-            CONFIG.maxSlots = d.riskParams.maxSlots || CONFIG.maxSlots;
-            CONFIG.marginPerTrade = d.riskParams.marginPerTrade || CONFIG.marginPerTrade;
-          }
-          saveSettings();
-          addLog(`🤖 Ekip kararı uygulandı: [${DYNAMIC.mode}] Slot: ${CONFIG.maxSlots} | Teminat: $${CONFIG.marginPerTrade} | Eşik $${DYNAMIC.vol3hMin}M | Aday ${DYNAMIC.candidateSlice}`, 'INFO');
-        } else {
-          addLog(`🤖 Ekip toplantısı: değişiklik onaylanmadı (${(d && d.reason) || 'bilinmiyor'})`, 'INFO');
-        }
-      } catch (e) {
-        addLog(`Ajan Ekibi Hatası: ${e.message}`, 'WARN');
-      }
-    };
-
-    setTimeout(runTeam, 2000);
-    setInterval(runTeam, 5 * 60 * 1000);
-  } catch (e) {
-    addLog(`Ajan Ekibi yüklenemedi: ${e.message}`, 'WARN');
-  }
+  applyCircuitBreaker();
 });
