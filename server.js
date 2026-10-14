@@ -578,6 +578,7 @@ setInterval(runHistoricalDeepScan, 4 * 60 * 60 * 1000);
 const symbolFeed = new Map();
 let bookFeed = 'none';
 let lastFetchWarn = 0;
+let fapiDownUntil = 0;
 function noteFeed(url, source) {
   const m = String(url).match(/symbol=([A-Z0-9]+)/);
   if (m) symbolFeed.set(m[1], source);
@@ -601,32 +602,33 @@ async function fetchBinance(url) {
     }
   }
 
-  // 1. Önce Futures API aynalarını dene (fapi1, fapi2, fapi3...)
-  for (const base of BINANCE_FAPI_MIRRORS) {
-    try {
-      const targetUrl = base + relativePath;
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 3500);
-      const res = await fetch(targetUrl, {
-        signal: controller.signal,
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36',
-          'Accept': 'application/json'
+  // Vadeli ayna cevap vermiyorsa 45 sn boyunca tekrar deneme; tarama spot yedekte hızlı kalsın.
+  if (Date.now() >= fapiDownUntil) {
+    for (const base of BINANCE_FAPI_MIRRORS) {
+      try {
+        const targetUrl = base + relativePath;
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 1200);
+        const res = await fetch(targetUrl, {
+          signal: controller.signal,
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'application/json'
+          }
+        });
+        clearTimeout(timeoutId);
+        if (res.status === 429) break;
+        if (res.status === 451) continue;
+        if (!res.ok) continue;
+        const data = await res.json();
+        if (data) {
+          fapiDownUntil = 0;
+          noteFeed(relativePath, 'futures');
+          return data;
         }
-      });
-      clearTimeout(timeoutId);
-      if (res.status === 429) {
-        // IP rate limit yedik, tüm fapi aynaları kilitlidir; hemen Vision CDN'e atla
-        break;
-      }
-      if (res.status === 451) continue;
-      if (!res.ok) continue;
-      const data = await res.json();
-      if (data) {
-        noteFeed(relativePath, 'futures');
-        return data;
-      }
-    } catch(e) {}
+      } catch(e) {}
+    }
+    fapiDownUntil = Date.now() + 45000;
   }
 
   try {
@@ -921,13 +923,6 @@ async function scanLoop() {
 
         const rInfo = radarMap[sym] || null;
         if (!rInfo) continue;
-        if (symbolFeed.get(sym) === 'spot' || bookFeed === 'spot') {
-          if (Date.now() - lastFetchWarn > 60000) {
-            lastFetchWarn = Date.now();
-            addLog('Spot fiyatla işlem açılmıyor. Vadeli fiyat gelene kadar bekleniyor.', 'WARN');
-          }
-          continue;
-        }
         const vol24 = data.volM || rInfo.vol24hM || 0;
         if (!(vol24 >= 1.5)) continue;
 
@@ -995,7 +990,7 @@ async function scanLoop() {
           ? (curV * (60 / candleElapsedSec)) / avgVol20
           : curV / avgVol20;
         const isWhaleVol = volMult >= 1.6;
-        if (candleElapsedSec > 35) continue;
+        if (candleElapsedSec > 50) continue;
 
         // Mum zaten %0.50 koşmuşsa geç kalınmış demektir
         if (Math.abs(curMovePct) > 0.50 || Math.abs(twoCandleMovePct) > 0.65) {
