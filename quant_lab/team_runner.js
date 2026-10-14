@@ -43,7 +43,7 @@ function evaluateExecutiveIntervention(ctx = {}, forensics = {}, regime = {}) {
   let targetBe = 0.55;
   let targetTp1 = 0.80;
   let targetMoon = 1.80;
-  let vol3hMin = rec.vol3hM || 1.8;
+  let vol3hMin = 0.8;
   let candidateSlice = rec.candidateSlice || 35;
   let reason = '';
 
@@ -55,7 +55,7 @@ function evaluateExecutiveIntervention(ctx = {}, forensics = {}, regime = {}) {
     targetTp1 = 1.20;         // 💰 %1.20 Spot (+%24 ROI) ile %50 kârı anında nakde çevir
     targetBe = 1.00;          // 🛡️ Başabaş kilidi: +%1.00 Spot (+%20 ROI) görünce kitle
     targetMoon = 2.40;        // 🚀 Dev Moonshot +%2.40 Spot (+%48 ROI)
-    vol3hMin = Math.max(vol3hMin, 2.5); // Gerçek likidite
+    vol3hMin = 0.8;           // Gerçek likidite
     candidateSlice = 35;
     reason = `Bakiye $${fmt(balance)}. 🏔️ MARSCOIN ROKET MODU AKTİF: Slot 2, Teminat $15, SL %1.10, TP1 %1.20, Moonshot %2.40.`;
   } else if (isModerateLoss) {
@@ -66,7 +66,7 @@ function evaluateExecutiveIntervention(ctx = {}, forensics = {}, regime = {}) {
     targetTp1 = 1.20;
     targetBe = 1.00;
     targetMoon = 2.40;
-    vol3hMin = Math.max(vol3hMin, 2.5);
+    vol3hMin = 0.8;
     candidateSlice = 35;
     reason = `Bakiye $${fmt(balance)}. 🏔️ MARSCOIN ROKET MODU AKTİF: Slot 2, Teminat $15, SL %1.10, TP1 %1.20, Moonshot %2.40.`;
   } else if (balance >= 120.0) {
@@ -77,7 +77,7 @@ function evaluateExecutiveIntervention(ctx = {}, forensics = {}, regime = {}) {
     targetTp1 = 1.30;
     targetBe = 1.00;
     targetMoon = 2.80;
-    vol3hMin = Math.max(vol3hMin, 2.5);
+    vol3hMin = 0.8;
     candidateSlice = 40;
     reason = `Bakiye $${fmt(balance)} (Büyüme). BÜYÜME MODU: 3 Slot, $20 Teminat, SL %1.10, TP1 %1.30.`;
   } else {
@@ -89,7 +89,7 @@ function evaluateExecutiveIntervention(ctx = {}, forensics = {}, regime = {}) {
     targetTp1 = 1.20;
     targetBe = 1.00;
     targetMoon = 2.40;
-    vol3hMin = Math.max(vol3hMin, 2.5);
+    vol3hMin = 0.8;
     candidateSlice = 35;
     reason = `Bakiye $${fmt(balance)}. 🏔️ MARSCOIN ROKET MODU AKTİF: 2 Slot, SL %1.10, TP1 %1.20, Moonshot +%2.40.`;
   }
@@ -267,7 +267,7 @@ function calculateConvictionSizing({
  * @param {object} ctx  Sunucudan gelen canlı bağlam (bakiye, slot, mevcut filtreler, mevcut config)
  */
 async function runAutonomousTeamSync(ctx = {}) {
-  const current = ctx.current || { vol3hMin: 2.5, candidateSlice: 35 };
+  const current = ctx.current || { vol3hMin: 0.8, candidateSlice: 35 };
   const liveCfg = ctx.config || { slPct: 1.25, bePct: 0.45, tp1Pct: 0.75, moonPct: 1.5, marginPerTrade: 20, leverage: 20 };
 
   // 1) 🧠 ANALİZCİ & 🐋 BALİNA AVCISI: Adli Tıp, Piyasa Rejimi ve Net Para Akışı
