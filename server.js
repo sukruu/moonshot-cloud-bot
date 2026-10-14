@@ -70,14 +70,14 @@ let CONFIG = {
 // 🤖 AJAN EKİBİNİN CANLI OLARAK DEĞİŞTİREBİLDİĞİ GİRİŞ FİLTRELERİ
 // (Yönetici onayı + sert sınırlar dahilinde team_runner tarafından güncellenir)
 let DYNAMIC = {
-  vol3hMin: 2.5,         // 3 saatlik minimum hacim ($M)
+  vol3hMin: 1.0,         // 3 saatlik minimum hacim ($M)
   candidateSlice: 35,    // Kline ile derin incelenen aday sayısı
   regime: 'DEFAULT',
   mode: 'BALANCED',      // 'DEFENSIVE_SNIPER', 'CAUTIOUS_RECOVERY', 'GROWTH', 'BALANCED'
   updatedAt: 0
 };
 const DYNAMIC_LIMITS = {
-  vol3hMin: [1.5, 15.0],
+  vol3hMin: [0.5, 15.0],
   candidateSlice: [15, 50]
 };
 
@@ -878,23 +878,21 @@ async function scanLoop() {
           coinLossCount[sym] = 1; // 12 saat doldu, deneme süresi
         }
 
-        const rInfo = radarMap[sym];
-        // 🛡️ BAYAT VERİ & HAYALET KOİN ENGELİ: Radarda olmayan veya 8 dakikadan eski verileri içeren coinleri ele!
-        if (!rInfo || (now - (rInfo.lastUpdate || 0) > 8 * 60 * 1000)) continue;
-
-        // 🛡️ KURUMSAL HACİM KALKANI (Eşik ajan ekibi tarafından rejime göre ayarlanır)
-        if (rInfo && rInfo.vol3hM !== null && rInfo.vol3hM !== undefined && rInfo.vol3hM < DYNAMIC.vol3hMin) continue;
+        const rInfo = radarMap[sym] || null;
+        // 🛡️ Sığ koin filtresi: 24 saatlik hacim en az $1.5M olmalıdır
+        const vol24 = data.volM || (rInfo ? rInfo.vol24hM : 0) || 0;
+        if (vol24 > 0 && vol24 < 1.5) continue;
 
         // 🧠 DEEP ANALYSIS FİLTRELERİ
         const intel = global.coinIntelligence[sym];
         let nearMax6m = false;
         if (intel) {
-           // 1. Tarihi Dirence Çok Yakınsa sadece LONG engellenir (SHORT için engel değil)
-           if (lastP >= intel.max6m * 0.97) {
+           // 1. Tarihi Dirence Yakınlık Kontrolü (Breakout kırılımlarında engelleme yapma)
+           if (lastP >= intel.max6m * 0.985 && lastP < intel.max6m * 1.005) {
              nearMax6m = true;
            }
-           // 2. Karakteri Fazla Yavaş Koinleri Ele (Günde ortalama %3'ten az hareket eden)
-           if (intel.volatilityScore < 3.0) {
+           // 2. Karakteri Fazla Yavaş Koinleri Ele (Günde ortalama %1.5'ten az hareket eden)
+           if (intel.volatilityScore < 1.5) {
              continue; // Yeterince volatil değil, Moonshot çıkmaz.
            }
         }
@@ -1025,19 +1023,22 @@ async function scanLoop() {
         const hasMomentum = (curMovePct >= 0.75 && curP > curO) || 
                             (twoCandleMovePct >= 1.05 && curP >= curO * 0.998);
 
-        // 4. Kural: Mum Dikliği (Wick Filtresi) - Zirveden %0.8'den fazla satış yememiş, mum dimdik!
-        const noWickLong = curP >= curH * 0.992;
-        const noWickShort = curP <= curL * 1.008;
+        // 4. Kural: Mum Dikliği (Wick Filtresi) - Gövde orantısı kontrolü (Zirveden aşırı satış yememiş, üst fitil gövdeden küçük)
+        const candleSpan = curH - curL;
+        const upperWick = curH - Math.max(curP, curO);
+        const lowerWick = Math.min(curP, curO) - curL;
+        const noWickLong = candleSpan > 0 ? (upperWick / candleSpan <= 0.45) : true;
+        const noWickShort = candleSpan > 0 ? (lowerWick / candleSpan <= 0.45) : true;
 
-        // 5. Kural: Likidite & Alıcı Hakimiyeti ($2.5M altı sığ çöpler elenir)
-        const hasRealLiquidity = rInfo ? ((rInfo.vol3hM || 0) >= 2.5) : true;
-        const hasBuyerDominance = rInfo ? ((rInfo.takerBuyRatio || 50) >= 50.0) : true;
+        // 5. Kural: Likidite & Alıcı Hakimiyeti
+        const hasRealLiquidity = rInfo ? ((rInfo.vol3hM || 0) >= (DYNAMIC.vol3hMin || 0.8)) : true;
+        const hasBuyerDominance = rInfo ? ((rInfo.takerBuyRatio || 50) >= 48.0) : true;
 
         // 🟢 MARSCOIN LONG ATEŞLEMESİ:
         let isLongPump = false;
         let isRocketSignal = false;
-        if (hasRealLiquidity && noWickLong && hasBuyerDominance && !nearMax6m) {
-          const isSpikeVol = (curV >= avgVol20 * 2.2 || projectedVol >= avgVol20 * 2.5) && (curMovePct >= 0.70 || twoCandleMovePct >= 1.00) && curP > curO;
+        if (hasRealLiquidity && noWickLong && hasBuyerDominance) {
+          const isSpikeVol = (curV >= avgVol20 * 2.0 || projectedVol >= avgVol20 * 2.2) && (curMovePct >= 0.65 || twoCandleMovePct >= 0.95) && curP > curO;
           if (isSpikeVol) {
             isLongPump = true;
             isRocketSignal = true;
@@ -1045,9 +1046,12 @@ async function scanLoop() {
           } else if (hasMomentum && isWhaleVol) {
             isLongPump = true;
             radarTag = `[⚡ MARSCOIN BALİNA İVMESİ | 3dk: +%${curMovePct.toFixed(2)} | Hacim: ${(curV/avgVol20).toFixed(1)}x Kat]`;
-          } else if (isDailyTrending && curMovePct >= 0.70 && isWhaleVol) {
+          } else if (isDailyTrending && curMovePct >= 0.65 && isWhaleVol) {
             isLongPump = true;
             radarTag = `[🏔️ MARSCOIN TREND ROKETİ | Günlük: +%${chg24Val.toFixed(1)} | 3dk: +%${curMovePct.toFixed(2)}]`;
+          } else if (isDirectRadarLong && freshVolumeLong && curCandleGreen) {
+            isLongPump = true;
+            radarTag = `[🎯 MARSCOIN RADAR İVMESİ | ${radarTag || sym}]`;
           }
         }
 
@@ -1064,43 +1068,35 @@ async function scanLoop() {
         if (isLongPump || isShortDump) {
           const side = isLongPump ? "LONG" : "SHORT";
 
-          // 🐋 6. AJAN (BALİNA & PARA AKIŞI AVCISI) KONTROLÜ & VETOSU
+          // 🐋 6. AJAN (BALİNA & PARA AKIŞI AVCISI) KONTROLÜ
           const scoutMap = (teamStatusCache && teamStatusCache.moneyFlow && teamStatusCache.moneyFlow.flowMap) || globalWhaleFlowMap || null;
           const scoutInfo = scoutMap ? scoutMap[sym] : null;
           if (scoutInfo) {
-            // CVD Uyumsuzluk Kontrolü (Fakeout & Squeeze Engeli)
+            // CVD Uyumsuzluk Kontrolü (Fakeout & Squeeze Bilgilendirmesi)
             if (side === 'LONG' && scoutInfo.cvdDivergence === 'BEARISH_DIVERGENCE') {
-              coinCooldowns[sym] = now + (3 * 60 * 1000);
-              addLog(`🛡️ [CVD UYUMSUZLUK VETOSU]: ${sym} LONG engellendi — Ayı Uyumsuzluğu tespit edildi (Fiyat yükselirken kümülatif alıcı hacmi negatif, Suni Pump)!`, 'WARN');
+              addLog(`⚠️ [BALİNA AVCISI UYARI]: ${sym} LONG — Ayı CVD Uyumsuzluğu tespit edildi (Fakeout riski), dikkatli izleniyor!`, 'WARN');
               try {
-                addDialogue('WHALE_HUNTER', `🛑 VETO! ${sym} üzerinde Ayı CVD Uyumsuzluğu var. Fiyat yukarı çekiliyor ancak tahtayı alıcılar değil satıcılar süpürüyor (Fakeout riski), LONG onaylamıyorum!`, 'RISK');
+                addDialogue('WHALE_HUNTER', `⚠️ DİKKAT: ${sym} üzerinde Ayı CVD Uyumsuzluğu var. Fakeout riski nedeniyle dikkatli takipteyim!`, 'RISK');
               } catch(e) {}
-              continue;
             }
             if (side === 'SHORT' && scoutInfo.cvdDivergence === 'BULLISH_DIVERGENCE') {
-              coinCooldowns[sym] = now + (3 * 60 * 1000);
-              addLog(`🛡️ [CVD UYUMSUZLUK VETOSU]: ${sym} SHORT engellendi — Boğa Uyumsuzluğu tespit edildi (Fiyat düşerken kümülatif kurumsal alıcılar absorbe ediyor)!`, 'WARN');
+              addLog(`⚠️ [BALİNA AVCISI UYARI]: ${sym} SHORT — Boğa CVD Uyumsuzluğu tespit edildi (Squeeze riski), dikkatli izleniyor!`, 'WARN');
               try {
-                addDialogue('WHALE_HUNTER', `🛑 VETO! ${sym} üzerinde Boğa CVD Uyumsuzluğu var. Fiyat aşağı basılıyor ancak agresif alıcılar dip topluyor (Squeeze riski), SHORT onaylamıyorum!`, 'RISK');
+                addDialogue('WHALE_HUNTER', `⚠️ DİKKAT: ${sym} üzerinde Boğa CVD Uyumsuzluğu var. Squeeze riski nedeniyle dikkatli takipteyim!`, 'RISK');
               } catch(e) {}
-              continue;
             }
 
             if (side === 'LONG' && scoutInfo.isApprovedLong === false) {
-              coinCooldowns[sym] = now + (3 * 60 * 1000);
-              addLog(`🛡️ [BALİNA AVCISI VETOSU]: ${sym} LONG engellendi — Net para çıkışı (-$${Math.abs(scoutInfo.netFlowM)}M, Alıcı: %${scoutInfo.takerPct}%) tespit edildi!`, 'WARN');
+              addLog(`⚠️ [BALİNA AVCISI UYARI]: ${sym} LONG — Net para çıkışı (-$${Math.abs(scoutInfo.netFlowM)}M) tespit edildi!`, 'WARN');
               try {
-                addDialogue('WHALE_HUNTER', `🛑 VETO! ${sym} üzerinde kurumsal para çıkışı var (-$${Math.abs(scoutInfo.netFlowM)}M). Suni yükseliş tuzağı, LONG onaylamıyorum!`, 'RISK');
+                addDialogue('WHALE_HUNTER', `⚠️ UYARI: ${sym} kurumsal para çıkışı var (-$${Math.abs(scoutInfo.netFlowM)}M), ivme kontrolünde pozisyona giriliyor.`, 'RISK');
               } catch(e) {}
-              continue;
             }
             if (side === 'SHORT' && scoutInfo.isApprovedShort === false) {
-              coinCooldowns[sym] = now + (3 * 60 * 1000);
-              addLog(`🛡️ [BALİNA AVCISI VETOSU]: ${sym} SHORT engellendi — Net para girişi (+$${scoutInfo.netFlowM}M, Alıcı: %${scoutInfo.takerPct}%) tespit edildi!`, 'WARN');
+              addLog(`⚠️ [BALİNA AVCISI UYARI]: ${sym} SHORT — Net para girişi (+$${scoutInfo.netFlowM}M) tespit edildi!`, 'WARN');
               try {
-                addDialogue('WHALE_HUNTER', `🛑 VETO! ${sym} üzerinde kurumsal para girişi var (+$${scoutInfo.netFlowM}M). Ayı tuzağı (short squeeze riski), SHORT onaylamıyorum!`, 'RISK');
+                addDialogue('WHALE_HUNTER', `⚠️ UYARI: ${sym} kurumsal para girişi var (+$${scoutInfo.netFlowM}M), dikkatli short açılıyor.`, 'RISK');
               } catch(e) {}
-              continue;
             }
           }
 
@@ -1113,42 +1109,34 @@ async function scanLoop() {
               const totalDepth = bidVol + askVol;
               if (totalDepth > 0) {
                 const obi = (bidVol - askVol) / totalDepth;
-                if (side === 'LONG' && obi < -0.38) {
-                  coinCooldowns[sym] = now + (2 * 60 * 1000);
-                  addLog(`🛡️ [EMİR DEFTERİ DUVAR VETOSU]: ${sym} LONG engellendi — Satış kademelerinde devasa direnç duvarı var (OBI: ${obi.toFixed(2)}, Asks: ${askVol.toFixed(0)} vs Bids: ${bidVol.toFixed(0)})!`, 'WARN');
-                  try { addDialogue('WHALE_HUNTER', `🛑 DUVAR ENGELİ! ${sym} üzerinde satış emirleri alışların 2 katından fazla (OBI: ${obi.toFixed(2)}). Direnç duvarı kırılmadan LONG onaylamıyorum!`, 'RISK'); } catch(e) {}
-                  continue;
+                if (side === 'LONG' && obi < -0.45) {
+                  addLog(`⚠️ [EMİR DEFTERİ UYARI]: ${sym} LONG — Satış kademelerinde direnç duvarı var (OBI: ${obi.toFixed(2)})!`, 'WARN');
+                  try { addDialogue('WHALE_HUNTER', `⚠️ DİKKAT: ${sym} üzerinde satış emirleri baskın (OBI: ${obi.toFixed(2)}).`, 'INFO'); } catch(e) {}
                 }
-                if (side === 'SHORT' && obi > 0.38) {
-                  coinCooldowns[sym] = now + (2 * 60 * 1000);
-                  addLog(`🛡️ [EMİR DEFTERİ DUVAR VETOSU]: ${sym} SHORT engellendi — Alış kademelerinde güçlü destek duvarı var (OBI: +${obi.toFixed(2)}, Bids: ${bidVol.toFixed(0)} vs Asks: ${askVol.toFixed(0)})!`, 'WARN');
-                  try { addDialogue('WHALE_HUNTER', `🛑 DUVAR ENGELİ! ${sym} üzerinde alış emirleri satışların 2 katından fazla (OBI: +${obi.toFixed(2)}). Destek duvarına çarpıp zıplama riski, SHORT onaylamıyorum!`, 'RISK'); } catch(e) {}
-                  continue;
+                if (side === 'SHORT' && obi > 0.45) {
+                  addLog(`⚠️ [EMİR DEFTERİ UYARI]: ${sym} SHORT — Alış kademelerinde destek duvarı var (OBI: +${obi.toFixed(2)})!`, 'WARN');
+                  try { addDialogue('WHALE_HUNTER', `⚠️ DİKKAT: ${sym} üzerinde alış emirleri baskın (OBI: +${obi.toFixed(2)}).`, 'INFO'); } catch(e) {}
                 }
               }
             }
           } catch(e) {}
 
           // 🎯 7. AJAN (FREQ-AI & LİKİDASYON AVCISI) KONTROLLERİ
-          // A) FONLAMA ORANI & LİKİDASYON SIKIŞMASI (SQUEEZE) VETOSU
+          // A) FONLAMA ORANI & LİKİDASYON SIKIŞMASI (SQUEEZE) KONTROLÜ
           const fundingMap = (teamStatusCache && teamStatusCache.fundingRates && teamStatusCache.fundingRates.fundingMap) || globalFundingMap || null;
           const fundingInfo = fundingMap ? fundingMap[sym] : null;
           if (fundingInfo) {
             if (side === 'LONG' && fundingInfo.isApprovedLong === false) {
-              coinCooldowns[sym] = now + (3 * 60 * 1000);
-              addLog(`🛡️ [FONLAMA VETOSU]: ${sym} LONG engellendi — Fonlama aşırı şişkin (+%${fundingInfo.fundingRatePct}), tepe likidasyon tuzağı!`, 'WARN');
-              try { addDialogue('FREQAI', `🛑 VETO! ${sym} fonlaması çok yüksek (+%${fundingInfo.fundingRatePct}). Küçük yatırımcı long sıkışmasında, LONG onaylamıyorum!`, 'RISK'); } catch(e) {}
-              continue;
+              addLog(`⚠️ [FONLAMA UYARISI]: ${sym} LONG — Fonlama yüksek (+%${fundingInfo.fundingRatePct}), hızlı kâr hedefi aktif!`, 'WARN');
+              try { addDialogue('FREQAI', `⚠️ UYARI: ${sym} fonlaması yüksek (+%${fundingInfo.fundingRatePct}). Hızlı kâr alma hedefleniyor.`, 'INFO'); } catch(e) {}
             }
             if (side === 'SHORT' && fundingInfo.isApprovedShort === false) {
-              coinCooldowns[sym] = now + (3 * 60 * 1000);
-              addLog(`🛡️ [FONLAMA VETOSU]: ${sym} SHORT engellendi — Fonlama ağır negatif (%${fundingInfo.fundingRatePct}), short squeeze riski!`, 'WARN');
-              try { addDialogue('FREQAI', `🛑 VETO! ${sym} fonlaması aşırı negatif (%${fundingInfo.fundingRatePct}). Short squeeze patlaması kapıda, SHORT onaylamıyorum!`, 'RISK'); } catch(e) {}
-              continue;
+              addLog(`⚠️ [FONLAMA UYARISI]: ${sym} SHORT — Fonlama negatif (%${fundingInfo.fundingRatePct}), scalp hedefi aktif!`, 'WARN');
+              try { addDialogue('FREQAI', `⚠️ UYARI: ${sym} fonlaması aşırı negatif (%${fundingInfo.fundingRatePct}). Dikkatli scalp izleniyor.`, 'INFO'); } catch(e) {}
             }
           }
 
-          // B) FREQ-AI MAKİNE ÖĞRENİMİ (ML) KAZANMA OLASILIĞI FİLTRESİ
+          // B) FREQ-AI MAKİNE ÖĞRENİMİ (ML) KAZANMA OLASILIĞI DEĞERLENDİRMESİ
           const mlFeatures = {
             symbol: sym,
             side: side,
@@ -1169,12 +1157,10 @@ async function scanLoop() {
           } catch(e) {}
 
           if (!mlEval.isApproved) {
-            coinCooldowns[sym] = now + (3 * 60 * 1000);
-            addLog(`🛡️ [FREQ-AI ML VETOSU]: ${sym} ${side} engellendi — Model kazanma olasılığı %${mlEval.winProbabilityPct} < %${mlEval.minRequiredProbability} (${mlEval.topDeterrent})`, 'WARN');
+            addLog(`ℹ️ [FREQ-AI ML BİLGİ]: ${sym} ${side} — Model kazanma tahmini: %${mlEval.winProbabilityPct} (${mlEval.topDeterrent || 'Düşük Olasılık'}). Sizing uyarlandı.`, 'INFO');
             try {
-              addDialogue('FREQAI', `🛑 VETO! ${sym} ${side} için FreqAI model kazanma olasılığı düşük (%${mlEval.winProbabilityPct} < %${mlEval.minRequiredProbability}). Riskli işlem onaylanmadı!`, 'RISK');
+              addDialogue('FREQAI', `ℹ️ ${sym} ${side} için FreqAI model olasılığı %${mlEval.winProbabilityPct}. Marscoin ivmesi doğrultusunda pozisyon açılıyor.`, 'INFO');
             } catch(e) {}
-            continue;
           }
 
           // 🏛️ 8. AJAN (ASLAN11 BAŞ YARGIÇ) ÖN YARGILAMA VE SABIKA DENETİMİ
@@ -1187,11 +1173,12 @@ async function scanLoop() {
             });
           } catch(e) {}
 
-          if (!judgeClearance.approved) {
-            coinCooldowns[sym] = now + (5 * 60 * 1000);
-            addLog(`🛡️ [YARGIÇ MAHKEME VETOSU]: ${sym} ${side} engellendi — ${judgeClearance.reason}`, 'WARN');
+          // Yargıç sadece kronik sabıkalı ağır cezalarda (-70 puan ve altı) işlemi veto eder
+          if (judgeClearance && judgeClearance.judicialScore <= -70) {
+            coinCooldowns[sym] = now + (3 * 60 * 1000);
+            addLog(`🛡️ [YARGIÇ AĞIR CEZA VETOSU]: ${sym} ${side} engellendi — ${judgeClearance.reason}`, 'WARN');
             try {
-              addDialogue('JUDGE', `🛑 MAHKEME VETOSU! ${sym} sanığı için hüküm: ${judgeClearance.verdict}. Gerekçe: ${judgeClearance.reason}. İşlem durduruldu!`, 'RISK');
+              addDialogue('JUDGE', `🛑 AĞIR CEZA VETOSU! ${sym} sanığı için hüküm: ${judgeClearance.verdict}. Gerekçe: ${judgeClearance.reason}. Kronik sabıkalı işlem durduruldu!`, 'RISK');
             } catch(e) {}
             continue;
           }
