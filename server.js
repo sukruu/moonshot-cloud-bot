@@ -575,7 +575,14 @@ setInterval(runHistoricalDeepScan, 4 * 60 * 60 * 1000);
 // ==========================================
 
 
+const symbolFeed = new Map();
+let bookFeed = 'none';
 let lastFetchWarn = 0;
+function noteFeed(url, source) {
+  const m = String(url).match(/symbol=([A-Z0-9]+)/);
+  if (m) symbolFeed.set(m[1], source);
+  else if (String(url).includes('ticker')) bookFeed = source;
+}
 function warnFetch(msg) {
   const now = Date.now();
   if (now - lastFetchWarn < 60000) return;
@@ -615,7 +622,10 @@ async function fetchBinance(url) {
       if (res.status === 451) continue;
       if (!res.ok) continue;
       const data = await res.json();
-      if (data) return data;
+      if (data) {
+        noteFeed(relativePath, 'futures');
+        return data;
+      }
     } catch(e) {}
   }
 
@@ -635,6 +645,7 @@ async function fetchBinance(url) {
     if (res.ok) {
       const data = await res.json();
       if (data) {
+        noteFeed(relativePath, 'spot');
         warnFetch('Vadeli API cevap vermedi. Fiyat spot yedekten geldi.');
         return data;
       }
@@ -692,9 +703,9 @@ async function updateRadar() {
       if (!SYMBOL_REGEX.test(t.symbol) || t.symbol.startsWith("USDC") || BANNED_SYMBOLS.has(t.symbol)) return false;
       const volM = (parseFloat(t.quoteVolume) || 0) / 1e6;
       return volM >= 1.5;
-    }).sort((a, b) => Math.abs(parseFloat(b.priceChangePercent) || 0) - Math.abs(parseFloat(a.priceChangePercent) || 0));
+    }).sort((a, b) => (parseFloat(b.quoteVolume) || 0) - (parseFloat(a.quoteVolume) || 0));
 
-    // Tarama evreniyle aynı taban: $1.5M+, 24s hareketi büyük 120 koin
+    // Likit koinler. Günlük en çok düşen/çıkan liste değil.
     const chunkSize = 15;
     const scanned = [];
     const freshRadarMap = {};
@@ -853,19 +864,11 @@ async function scanLoop() {
 
       const rInfo = radarMap[sym];
       let radarBoost = 0;
-      if (rInfo) {
-        if (rInfo.signal && rInfo.signal.includes("BALİNA")) radarBoost += 60; // 🐋 Balina tespitine devasa öncelik!
-        else if (rInfo.signal && (rInfo.signal.includes("ROKET") || rInfo.signal.includes("BOĞA") || rInfo.signal.includes("SIÇRAMA"))) radarBoost += 30;
-        else if (rInfo.signal && (rInfo.signal.includes("ŞELALE") || rInfo.signal.includes("AYI"))) radarBoost += 30;
-        if (rInfo.chg15m >= 1.0 && rInfo.takerBuyRatio >= 50) {
-          radarBoost += (rInfo.chg15m * 20) + ((rInfo.takerBuyRatio - 50) * 4.0);
-        } else if (rInfo.chg15m <= -1.0 && rInfo.takerBuyRatio <= 50) {
-          radarBoost += (Math.abs(rInfo.chg15m) * 16) + ((50 - rInfo.takerBuyRatio) * 3.5);
-        }
+      if (rInfo && Math.abs(rawChg) < 8) {
+        if (Math.abs(rInfo.chg15m) >= 0.15 && Math.abs(rInfo.chg15m) <= 0.8) radarBoost += 8;
       }
 
-      const instantScore = rollMovePct > 0 ? rollMovePct * 12 : Math.abs(rollMovePct) * 8;
-      const hotScore = instantScore + Math.abs(rawChg > 0 ? Math.min(rawChg, 25) : Math.max(rawChg, -25)) + (Math.sqrt(volM) * 1.8) + (isVip ? 20 : 0) + radarBoost;
+      const hotScore = Math.abs(rollMovePct) * 20 + radarBoost;
 
       return {
         ...t,
@@ -876,7 +879,7 @@ async function scanLoop() {
         isVip
       };
     })
-    .filter(t => t.isVip || t.volM >= 1.5)
+    .filter(t => Math.abs(t.chg) < 8 && t.volM >= 1.5)
     .sort((a, b) => b.hotScore - a.hotScore)
     .slice(0, DYNAMIC.candidateSlice);
 
@@ -918,6 +921,13 @@ async function scanLoop() {
 
         const rInfo = radarMap[sym] || null;
         if (!rInfo) continue;
+        if (symbolFeed.get(sym) === 'spot' || bookFeed === 'spot') {
+          if (Date.now() - lastFetchWarn > 60000) {
+            lastFetchWarn = Date.now();
+            addLog('Spot fiyatla işlem açılmıyor. Vadeli fiyat gelene kadar bekleniyor.', 'WARN');
+          }
+          continue;
+        }
         const vol24 = data.volM || rInfo.vol24hM || 0;
         if (!(vol24 >= 1.5)) continue;
 
@@ -965,9 +975,12 @@ async function scanLoop() {
         const chg24Val = Number.isFinite(Number(rInfo.chg24h)) ? Number(rInfo.chg24h) : chg;
         const chg15Val = Number(rInfo.chg15m);
         if (!Number.isFinite(chg15Val) || !Number.isFinite(Number(chg24Val))) continue;
+        if (Math.abs(chg24Val) >= 8) continue;
 
         const minTakerLong = DYNAMIC.mode === 'DEFENSIVE_SNIPER' ? 56.0 : 55.0;
+        const maxTakerLong = 70;
         const maxTakerShort = DYNAMIC.mode === 'DEFENSIVE_SNIPER' ? 44.0 : 45.0;
+        const minTakerShort = 20;
         let radarOkLong = chg15Val >= 0;
         let radarOkShort = chg15Val <= 0;
         if (sig.includes("ROKET") || sig.includes("BOĞA")) radarOkShort = false;
@@ -982,6 +995,7 @@ async function scanLoop() {
           ? (curV * (60 / candleElapsedSec)) / avgVol20
           : curV / avgVol20;
         const isWhaleVol = volMult >= 1.6;
+        if (candleElapsedSec > 35) continue;
 
         // Mum zaten %0.50 koşmuşsa geç kalınmış demektir
         if (Math.abs(curMovePct) > 0.50 || Math.abs(twoCandleMovePct) > 0.65) {
@@ -998,8 +1012,8 @@ async function scanLoop() {
         const noWickShort = candleSpan > 0 ? (lowerWick / candleSpan <= 0.50) : true;
 
         const hasRealLiquidity = (rInfo.vol3hM || 0) >= (DYNAMIC.vol3hMin || 0.8);
-        const hasBuyerDominance = taker1m >= minTakerLong;
-        const hasSellerDominance = taker1m <= maxTakerShort;
+        const hasBuyerDominance = taker1m >= minTakerLong && taker1m <= maxTakerLong;
+        const hasSellerDominance = taker1m <= maxTakerShort && taker1m >= minTakerShort;
 
         // 🟢 MARSCOIN LONG ATEŞLEMESİ:
         let isLongPump = false;
