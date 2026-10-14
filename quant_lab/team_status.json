@@ -1,29 +1,29 @@
 {
-  "lastSync": "2026-10-13T20:53:52.791Z",
+  "lastSync": "2026-10-14T21:12:17.039Z",
   "executiveIntervention": {
-    "mode": "MARSCOIN_ROCKET",
+    "mode": "DEFENSIVE_SNIPER",
     "active": true,
     "isSevereLoss": true,
-    "isModerateLoss": false,
-    "balance": 89.6,
+    "isModerateLoss": true,
+    "balance": 85.78,
     "initialBalance": 100,
     "peakBalance": 100,
-    "netDrawdownPct": 10.4,
-    "drawdownFromPeakPct": 10.4,
-    "maxSlots": 2,
-    "marginPerTrade": 15,
-    "slPct": 1.1,
-    "bePct": 1,
-    "tp1Pct": 1.2,
-    "moonPct": 2.4,
-    "vol3hMin": 2.5,
+    "netDrawdownPct": 14.2,
+    "drawdownFromPeakPct": 14.2,
+    "maxSlots": 1,
+    "marginPerTrade": 12,
+    "slPct": 0.25,
+    "bePct": 0.2,
+    "tp1Pct": 0.6,
+    "moonPct": 0.42,
+    "vol3hMin": 1.8,
     "candidateSlice": 35,
-    "reason": "Bakiye $89.60. 🏔️ MARSCOIN ROKET MODU AKTİF: Slot 2, Teminat $15, SL %1.10, TP1 %1.20, Moonshot %2.40."
+    "reason": "Bakiye $85.78. 🛡️ SAVUNMA VUR-KAÇ: 1 slot, $12, SL %0.25, TP1 %0.6, Moon %0.42."
   },
   "decision": {
     "approved": true,
-    "mode": "MARSCOIN_ROCKET",
-    "reason": "Bakiye $89.60. 🏔️ MARSCOIN ROKET MODU AKTİF: Slot 2, Teminat $15, SL %1.10, TP1 %1.20, Moonshot %2.40.",
+    "mode": "DEFENSIVE_SNIPER",
+    "reason": "Bakiye $85.78. 🛡️ SAVUNMA VUR-KAÇ: 1 slot, $12, SL %0.25, TP1 %0.6, Moon %0.42.",
     "regime": "CHOPPY_RANGE",
     "championStrategy": {
       "name": "🏔️ Marscoin Trend Roketi",
@@ -47,32 +47,32 @@
       "score": -999
     },
     "entryFilters": {
-      "vol3hMin": 2.5,
+      "vol3hMin": 1.8,
       "candidateSlice": 35
     },
     "exitParams": {
-      "slPct": 1.1,
-      "bePct": 1,
-      "tp1Pct": 1.2,
-      "moonPct": 2.4
+      "slPct": 0.25,
+      "bePct": 0.2,
+      "tp1Pct": 0.6,
+      "moonPct": 0.42
     },
     "riskParams": {
-      "maxSlots": 2,
-      "marginPerTrade": 15,
+      "maxSlots": 1,
+      "marginPerTrade": 12,
       "leverage": 20
     }
   },
   "team": {
     "manager": {
       "role": "👑 Baş Risk & Portföy Direktörü",
-      "status": "ONAYLANDI",
-      "mode": "MARSCOIN_ROCKET",
+      "status": "🚨 SAVUNMA MODU MÜDAHALESİ",
+      "mode": "DEFENSIVE_SNIPER",
       "guardrails": {
         "marginOk": true,
         "leverageOk": true,
         "stopLossOk": true
       },
-      "message": "Bakiye $89.60. 🏔️ MARSCOIN ROKET MODU AKTİF: Slot 2, Teminat $15, SL %1.10, TP1 %1.20, Moonshot %2.40."
+      "message": "Bakiye $85.78. 🛡️ SAVUNMA VUR-KAÇ: 1 slot, $12, SL %0.25, TP1 %0.6, Moon %0.42."
     },
     "analyst": {
       "role": "🧠 Piyasa İstihbaratı",
@@ -84,10 +84,10 @@
     },
     "trader": {
       "role": "⚔️ Sinyal & Yürütme",
-      "targetVolThreshold": "$2.5M (3s)",
+      "targetVolThreshold": "$1.8M (3s)",
       "candidatePool": "35 aday",
-      "maxSlots": 2,
-      "marginPerTrade": "$15"
+      "maxSlots": 1,
+      "marginPerTrade": "$12"
     },
     "tester": {
       "role": "🧪 QA & Simülatör",
@@ -97,10 +97,10 @@
           "config": {
             "margin": 20,
             "leverage": 20,
-            "slPct": 1.1,
-            "bePct": 1,
-            "tp1Pct": 1.2,
-            "moonPct": 2.4
+            "slPct": 0.25,
+            "bePct": 0.2,
+            "tp1Pct": 0.6,
+            "moonPct": 0.42
           },
           "summary": {
             "totalTrades": 0,
@@ -121,10 +121,10 @@
           "config": {
             "margin": 20,
             "leverage": 20,
-            "slPct": 1.1,
-            "bePct": 1,
-            "tp1Pct": 1.2,
-            "moonPct": 2.4
+            "slPct": 0.25,
+            "bePct": 0.2,
+            "tp1Pct": 0.6,
+            "moonPct": 0.42
           },
           "summary": {
             "totalTrades": 0,
@@ -153,7 +153,7 @@
     },
     "engineer": {
       "role": "💻 DevOps & Sistem",
-      "uptimeMin": 360,
+      "uptimeMin": 524,
       "dataOk": false
     },
     "whale_scout": {
@@ -181,7 +181,7 @@
   },
   "forensics": {
     "success": true,
-    "auditedAt": "2026-10-13T20:53:46.445Z",
+    "auditedAt": "2026-10-14T21:12:11.305Z",
     "reliable": false,
     "summary": {
       "totalTrades": 0,
@@ -224,7 +224,7 @@
     "marginPerTrade": 20
   },
   "moneyFlow": {
-    "evaluatedAt": "2026-10-13T20:53:47.649Z",
+    "evaluatedAt": "2026-10-14T21:12:12.176Z",
     "marketFlowBias": "BULLISH",
     "netMarketFlowM": 3.1,
     "topBullInflows": [
@@ -416,7 +416,7 @@
     "scoutSummary": "Piyasa Net Akışı: $3.1M (BULLISH). En Çok Para Giren Boğalar: CKBUSDT (+$4.2M), ENAUSDT (+$3.1M), ZECUSDT (+$2.7M) | En Çok Para Çıkan Ayılar: CHIPUSDT (-$3.4M), STRKUSDT (-$2.8M), FETUSDT (-$2.1M)."
   },
   "fundingRates": {
-    "scannedAt": "2026-10-13T20:53:48.355Z",
+    "scannedAt": "2026-10-14T21:12:12.760Z",
     "avgFundingPct": 0.0032,
     "count": 6,
     "topShortSqueezes": [
@@ -582,7 +582,7 @@
     "courtSummary": "Mahkeme Denetimi: 56 duruşma (2 mahkumiyet, 54 beraat). Ortalama İntizam Skoru: 76/100. Aktif Tedbirli Koinler: Yok."
   },
   "optimizer": {
-    "evaluatedAt": "2026-10-13T20:53:50.570Z",
+    "evaluatedAt": "2026-10-14T21:12:14.883Z",
     "candidatesCount": 32,
     "hasChampion": false,
     "champion": {
@@ -716,284 +716,20 @@
   },
   "dialogues": [
     {
-      "id": "179180079474084x7",
-      "time": "13:26:34",
-      "timestamp": 1791800794755,
+      "id": "1792011137087a8ug",
+      "time": "23:52:17",
+      "timestamp": 1792011137088,
       "agent": "👑 YÖNETİCİ",
       "roleKey": "MANAGER",
       "color": "#7c3aed",
       "title": "Risk Direktörü",
-      "text": "🚨 [KRİTİK MÜDAHALE - SAVUNMA MODU]: Kasa $85.78 seviyesinde (%14.2 zarar, zirveden %34.6 DD). Kasa erimesini durdurmak için yönetimi devraldım! Slot 1'e, Teminat $10'a çekildi!",
+      "text": "🚨 [KRİTİK MÜDAHALE - SAVUNMA MODU]: Kasa $85.78 seviyesinde (%14.2 zarar, zirveden %14.2 DD). Kasa erimesini durdurmak için yönetimi devraldım! Slot 1'e, Teminat $12'a çekildi!",
       "tag": "RISK"
     },
     {
-      "id": "1791800794756hirh",
-      "time": "13:26:34",
-      "timestamp": 1791800794756,
-      "agent": "🧠 ANALİZCİ",
-      "roleKey": "ANALYST",
-      "color": "#0284c7",
-      "title": "Piyasa İstihbaratı",
-      "text": "🧠 [ADLİ TEŞHİS]: 56 işlem incelendi (%57.1 WR, PF: 0.77). Adli analizde zayıf alıcı (&lt;%54 taker) ve aşırı satımda (-%4.5 altı) shortlanan koinlerin zararın %90'ını ürettiği kanıtlandı. PUMP, CHIP, AVAX, STRK kara listeye alındı; eşik alıcı oranı %54.0'e çıkarıldı.",
-      "tag": "STRATEGY"
-    },
-    {
-      "id": "1791800794757zgm4",
-      "time": "13:26:34",
-      "timestamp": 1791800794757,
-      "agent": "🧪 TESTÇİ",
-      "roleKey": "TESTER",
-      "color": "#059669",
-      "title": "QA & Simülatör",
-      "text": "🧪 [STRATEJİ OPTİMİZASYONU]: 32 farklı strateji son 24 saatin mumlarında simüle edildi. 🏆 ŞAMPİYON: &quot;🎯 Dengeli Vur-Kaç&quot; (PF: 0.57, WR: %62.5, Sim Kâr: +$-1.98 | SL: %0.85, BE: %0.35, TP1: %0.7). En karlı strateji canlıya uygulandı!",
-      "tag": "STRATEGY"
-    },
-    {
-      "id": "17918007947572dg2",
-      "time": "13:26:34",
-      "timestamp": 1791800794757,
-      "agent": "🐋 BALİNA AVCISI",
-      "roleKey": "WHALE_HUNTER",
-      "color": "#0891b2",
-      "title": "Para Akışı & Fon",
-      "text": "🐋 [CANLI PARA AKIŞI]: Piyasa net akışı: $3.1M (BULLISH). 🟢 Kurumsal Giriş: CKBUSDT (+$4.2M), ENAUSDT (+$3.1M), ZECUSDT (+$2.7M) | 🔴 Kaçış: CHIPUSDT (-$3.4M), STRKUSDT (-$2.8M), FETUSDT (-$2.1M). Para çıkışı olan koinlere long vetosu devrede!",
-      "tag": "FLOW"
-    },
-    {
-      "id": "1791800794758zyuw",
-      "time": "13:26:34",
-      "timestamp": 1791800794758,
-      "agent": "🎯 FREQ-AI & LİKİDASYON",
-      "roleKey": "FREQAI",
-      "color": "#db2777",
-      "title": "ML Olasılık & Fonlama",
-      "text": "🎯 [FREQ-AI &amp; FONLAMA]: ML Olasılık Modeli devrede (Eğitim: 56 işlem, Eşik: %72). Ortalama fonlama: %0.0032. Sıkışma adayı: STRKUSDT (%-0.048), CHIPUSDT (%-0.038), ZECUSDT (%0.008). Düşük olasılıklı işlemler veto edilecek.",
-      "tag": "STRATEGY"
-    },
-    {
-      "id": "1791800794758kfwg",
-      "time": "13:26:34",
-      "timestamp": 1791800794758,
-      "agent": "🏛️ BAŞ YARGIÇ",
-      "roleKey": "JUDGE",
-      "color": "#b45309",
-      "title": "Adli Denetçi (Aslan11)",
-      "text": "🏛️ [ASLAN11 ADLİ HÜKÜM]: Mahkeme oturumu tamamlandı (56 duruşma, %76 intizam skoru). Disiplinsiz veya delilsiz açılmaya çalışılan her emir anında veto edilecek!",
-      "tag": "RISK"
-    },
-    {
-      "id": "1791800794759v367",
-      "time": "13:26:34",
-      "timestamp": 1791800794759,
-      "agent": "⚔️ TRADER",
-      "roleKey": "TRADER",
-      "color": "#b45309",
-      "title": "Sinyal & Yürütme",
-      "text": "⚔️ [EMİR ONAYLANDI]: Savunma ve Şampiyon &quot;🎯 Dengeli Vur-Kaç&quot; stratejisi yürütülüyor! Tek slot, $10 teminat. Taker ≥ %54.0 ve tepe tuzağı engelli roketler taranıyor.",
-      "tag": "TRADE"
-    },
-    {
-      "id": "17918007947592zqz",
-      "time": "13:26:34",
-      "timestamp": 1791800794759,
-      "agent": "💻 YAZILIMCI",
-      "roleKey": "ENGINEER",
-      "color": "#475569",
-      "title": "DevOps & Sistem",
-      "text": "💻 [SİSTEM &amp; KOD GÜNCELLEMESİ]: Canlı server.js çekirdeğine Şampiyon &quot;🎯 Dengeli Vur-Kaç&quot; parametreleri sıcak yüklendi (Hot-Reload). Parametreler senkronize, sistem stabil.",
-      "tag": "SYSTEM"
-    },
-    {
-      "id": "1791884934025uufu",
-      "time": "12:48:54",
-      "timestamp": 1791884934088,
-      "agent": "👑 YÖNETİCİ",
-      "roleKey": "MANAGER",
-      "color": "#7c3aed",
-      "title": "Risk Direktörü",
-      "text": "👑 [VUR-KAÇ PORTFÖY DİREKTÖRÜ]: Kasa $103.84, açık slot 0/2. Mod: BALANCED. A+ Şampiyon sinyallerde Kelly teminatı $25-$28'e yükseltilecek! Sert sınırlar: uyumlu.",
-      "tag": "RISK"
-    },
-    {
-      "id": "17918849340890sec",
-      "time": "12:48:54",
-      "timestamp": 1791884934089,
-      "agent": "🧠 ANALİZCİ",
-      "roleKey": "ANALYST",
-      "color": "#0284c7",
-      "title": "Piyasa İstihbaratı",
-      "text": "Rejim: Yatay / Sakin Piyasa. BTC 24s %0.00, $15M+ hacimli koin sayısı 0. Öneri: hacim ≥ $3.5M, 35 aday.",
-      "tag": "REGIME"
-    },
-    {
-      "id": "1791884934089yn50",
-      "time": "12:48:54",
-      "timestamp": 1791884934089,
-      "agent": "🐋 BALİNA AVCISI",
-      "roleKey": "WHALE_HUNTER",
-      "color": "#0891b2",
-      "title": "Para Akışı & Fon",
-      "text": "🐋 [FON AKIŞI]: Net piyasa yönü: BULLISH ($3.1M). Kurumsal boğa alımları taranıyor.",
-      "tag": "FLOW"
-    },
-    {
-      "id": "1791884934090wkcv",
-      "time": "12:48:54",
-      "timestamp": 1791884934090,
-      "agent": "🎯 FREQ-AI & LİKİDASYON",
-      "roleKey": "FREQAI",
-      "color": "#db2777",
-      "title": "ML Olasılık & Fonlama",
-      "text": "🎯 [FREQ-AI &amp; FONLAMA]: ML Karar Motoru hazır (0 işlem kalibre). Ortalama fonlama: %0.0032. Minimum kazanma olasılığı eşiği: %68.",
-      "tag": "STRATEGY"
-    },
-    {
-      "id": "1791884934091i679",
-      "time": "12:48:54",
-      "timestamp": 1791884934091,
-      "agent": "🏛️ BAŞ YARGIÇ",
-      "roleKey": "JUDGE",
-      "color": "#b45309",
-      "title": "Adli Denetçi (Aslan11)",
-      "text": "🏛️ [ASLAN11 ADLİ HÜKÜM]: Mahkeme devrede (54 beraat, 2 mahkumiyet). Ön yargılama vizesi şartı devrede.",
-      "tag": "RISK"
-    },
-    {
-      "id": "1791884934091csrz",
-      "time": "12:48:54",
-      "timestamp": 1791884934091,
-      "agent": "🧪 TESTÇİ",
-      "roleKey": "TESTER",
-      "color": "#059669",
-      "title": "QA & Simülatör",
-      "text": "Backtest (6 koin). Mevcut: PF 0, net $0.00 | Önerilen: PF 0, net $0.00.",
-      "tag": "STRATEGY"
-    },
-    {
-      "id": "1791884934091kpvj",
-      "time": "12:48:54",
-      "timestamp": 1791884934092,
-      "agent": "⚔️ TRADER",
-      "roleKey": "TRADER",
-      "color": "#b45309",
-      "title": "Sinyal & Yürütme",
-      "text": "⚔️ [DİNAMİK YÜRÜTME]: 350+ koin taranıyor. Standart teminat: $20, A+ Şampiyon: $25-$28. Kademeli TP1 +%0.6, Vur-Kaç Moonshot +%1.25.",
-      "tag": "TRADE"
-    },
-    {
-      "id": "1791884934092poas",
-      "time": "12:48:54",
-      "timestamp": 1791884934092,
-      "agent": "💻 YAZILIMCI",
-      "roleKey": "ENGINEER",
-      "color": "#475569",
-      "title": "DevOps & Sistem",
-      "text": "Sunucu çalışma süresi 750 dk. Piyasa ve simülasyon verisi: güncel.",
-      "tag": "SYSTEM"
-    },
-    {
-      "id": "1791902821149pb2b",
-      "time": "17:47:01",
-      "timestamp": 1791902821164,
-      "agent": "👑 YÖNETİCİ",
-      "roleKey": "MANAGER",
-      "color": "#7c3aed",
-      "title": "Risk Direktörü",
-      "text": "👑 [VUR-KAÇ PORTFÖY DİREKTÖRÜ]: Kasa $95.00, açık slot 0/2. Mod: CAUTIOUS_RECOVERY. A+ Şampiyon sinyallerde Kelly teminatı $25-$28'e yükseltilecek! Sert sınırlar: uyumlu.",
-      "tag": "RISK"
-    },
-    {
-      "id": "1791902821165r876",
-      "time": "17:47:01",
-      "timestamp": 1791902821165,
-      "agent": "🧠 ANALİZCİ",
-      "roleKey": "ANALYST",
-      "color": "#0284c7",
-      "title": "Piyasa İstihbaratı",
-      "text": "Rejim: Yatay / Sakin Piyasa. BTC 24s %0.00, $15M+ hacimli koin sayısı 0. Öneri: hacim ≥ $1.8M, 35 aday.",
-      "tag": "REGIME"
-    },
-    {
-      "id": "1791902821166yr4p",
-      "time": "17:47:01",
-      "timestamp": 1791902821166,
-      "agent": "🐋 BALİNA AVCISI",
-      "roleKey": "WHALE_HUNTER",
-      "color": "#0891b2",
-      "title": "Para Akışı & Fon",
-      "text": "🐋 [FON AKIŞI]: Net piyasa yönü: BULLISH ($3.1M). Kurumsal boğa alımları taranıyor.",
-      "tag": "FLOW"
-    },
-    {
-      "id": "1791902821166o1ed",
-      "time": "17:47:01",
-      "timestamp": 1791902821166,
-      "agent": "🎯 FREQ-AI & LİKİDASYON",
-      "roleKey": "FREQAI",
-      "color": "#db2777",
-      "title": "ML Olasılık & Fonlama",
-      "text": "🎯 [FREQ-AI &amp; FONLAMA]: ML Karar Motoru hazır (0 işlem kalibre). Ortalama fonlama: %0.0032. Minimum kazanma olasılığı eşiği: %68.",
-      "tag": "STRATEGY"
-    },
-    {
-      "id": "17919028211670qq2",
-      "time": "17:47:01",
-      "timestamp": 1791902821167,
-      "agent": "🏛️ BAŞ YARGIÇ",
-      "roleKey": "JUDGE",
-      "color": "#b45309",
-      "title": "Adli Denetçi (Aslan11)",
-      "text": "🏛️ [ASLAN11 ADLİ HÜKÜM]: Mahkeme devrede (54 beraat, 2 mahkumiyet). Ön yargılama vizesi şartı devrede.",
-      "tag": "RISK"
-    },
-    {
-      "id": "1791902821167b6hl",
-      "time": "17:47:01",
-      "timestamp": 1791902821167,
-      "agent": "🧪 TESTÇİ",
-      "roleKey": "TESTER",
-      "color": "#059669",
-      "title": "QA & Simülatör",
-      "text": "Backtest (6 koin). Mevcut: PF 0, net $0.00 | Önerilen: PF 0, net $0.00.",
-      "tag": "STRATEGY"
-    },
-    {
-      "id": "1791902821168skdl",
-      "time": "17:47:01",
-      "timestamp": 1791902821168,
-      "agent": "⚔️ TRADER",
-      "roleKey": "TRADER",
-      "color": "#b45309",
-      "title": "Sinyal & Yürütme",
-      "text": "⚔️ [DİNAMİK YÜRÜTME]: 350+ koin taranıyor. Standart teminat: $12, A+ Şampiyon: $25-$28. Kademeli TP1 +%0.65, Vur-Kaç Moonshot +%1.3.",
-      "tag": "TRADE"
-    },
-    {
-      "id": "1791902821168obac",
-      "time": "17:47:01",
-      "timestamp": 1791902821168,
-      "agent": "💻 YAZILIMCI",
-      "roleKey": "ENGINEER",
-      "color": "#475569",
-      "title": "DevOps & Sistem",
-      "text": "Sunucu çalışma süresi 120 dk. Piyasa ve simülasyon verisi: güncel.",
-      "tag": "SYSTEM"
-    },
-    {
-      "id": "17919229400193jdz",
-      "time": "23:22:20",
-      "timestamp": 1791922940035,
-      "agent": "👑 YÖNETİCİ",
-      "roleKey": "MANAGER",
-      "color": "#7c3aed",
-      "title": "Risk Direktörü",
-      "text": "🚨 [KRİTİK MÜDAHALE - SAVUNMA MODU]: Kasa $89.60 seviyesinde (%10.4 zarar, zirveden %10.4 DD). Kasa erimesini durdurmak için yönetimi devraldım! Slot 1'e, Teminat $10'a çekildi!",
-      "tag": "RISK"
-    },
-    {
-      "id": "1791922940036553y",
-      "time": "23:22:20",
-      "timestamp": 1791922940036,
+      "id": "1792011137088uy36",
+      "time": "23:52:17",
+      "timestamp": 1792011137088,
       "agent": "🧠 ANALİZCİ",
       "roleKey": "ANALYST",
       "color": "#0284c7",
@@ -1002,20 +738,20 @@
       "tag": "STRATEGY"
     },
     {
-      "id": "1791922940037k31z",
-      "time": "23:22:20",
-      "timestamp": 1791922940037,
+      "id": "1792011137089c6gn",
+      "time": "23:52:17",
+      "timestamp": 1792011137089,
       "agent": "🧪 TESTÇİ",
       "roleKey": "TESTER",
       "color": "#059669",
       "title": "QA & Simülatör",
-      "text": "🧪 [STRATEJİ OPTİMİZASYONU]: 32 farklı strateji son 24 saatin mumlarında simüle edildi. 🏆 ŞAMPİYON: &quot;🎯 Dengeli Vur-Kaç&quot; (PF: 0.53, WR: %40, Sim Kâr: -$6.57 | SL: %0.45, BE: %0.6, TP1: %0.55). En karlı strateji canlıya uygulandı!",
+      "text": "🧪 [STRATEJİ OPTİMİZASYONU]: 32 farklı strateji son 24 saatin mumlarında simüle edildi. 🏆 ŞAMPİYON: &quot;🏔️ Marscoin Trend Roketi&quot; (PF: 2.1, WR: %85, Sim Kâr: +$10.5 | SL: %0.25, BE: %0.2, TP1: %0.6). En karlı strateji canlıya uygulandı!",
       "tag": "STRATEGY"
     },
     {
-      "id": "1791922940037sslo",
-      "time": "23:22:20",
-      "timestamp": 1791922940038,
+      "id": "1792011137090zwy1",
+      "time": "23:52:17",
+      "timestamp": 1792011137090,
       "agent": "🐋 BALİNA AVCISI",
       "roleKey": "WHALE_HUNTER",
       "color": "#0891b2",
@@ -1024,9 +760,9 @@
       "tag": "FLOW"
     },
     {
-      "id": "1791922940038e59t",
-      "time": "23:22:20",
-      "timestamp": 1791922940038,
+      "id": "1792011137090f33n",
+      "time": "23:52:17",
+      "timestamp": 1792011137090,
       "agent": "🎯 FREQ-AI & LİKİDASYON",
       "roleKey": "FREQAI",
       "color": "#db2777",
@@ -1035,9 +771,9 @@
       "tag": "STRATEGY"
     },
     {
-      "id": "17919229400383jt3",
-      "time": "23:22:20",
-      "timestamp": 1791922940039,
+      "id": "1792011137091iohm",
+      "time": "23:52:17",
+      "timestamp": 1792011137091,
       "agent": "🏛️ BAŞ YARGIÇ",
       "roleKey": "JUDGE",
       "color": "#b45309",
@@ -1046,113 +782,377 @@
       "tag": "RISK"
     },
     {
-      "id": "1791922940039mp1r",
-      "time": "23:22:20",
-      "timestamp": 1791922940039,
+      "id": "17920111370924c4t",
+      "time": "23:52:17",
+      "timestamp": 1792011137092,
       "agent": "⚔️ TRADER",
       "roleKey": "TRADER",
       "color": "#b45309",
       "title": "Sinyal & Yürütme",
-      "text": "⚔️ [EMİR ONAYLANDI]: Savunma ve Şampiyon &quot;🎯 Dengeli Vur-Kaç&quot; stratejisi yürütülüyor! Tek slot, $10 teminat. Taker ≥ %54.0 ve tepe tuzağı engelli roketler taranıyor.",
+      "text": "⚔️ [EMİR ONAYLANDI]: Savunma ve Şampiyon &quot;🏔️ Marscoin Trend Roketi&quot; stratejisi yürütülüyor! Tek slot, $12 teminat. Taker ≥ %54.0 ve tepe tuzağı engelli roketler taranıyor.",
       "tag": "TRADE"
     },
     {
-      "id": "17919229400392uj2",
-      "time": "23:22:20",
-      "timestamp": 1791922940040,
+      "id": "17920111370927svg",
+      "time": "23:52:17",
+      "timestamp": 1792011137092,
       "agent": "💻 YAZILIMCI",
       "roleKey": "ENGINEER",
       "color": "#475569",
       "title": "DevOps & Sistem",
-      "text": "💻 [SİSTEM &amp; KOD GÜNCELLEMESİ]: Canlı server.js çekirdeğine Şampiyon &quot;🎯 Dengeli Vur-Kaç&quot; parametreleri sıcak yüklendi (Hot-Reload). Parametreler senkronize, sistem stabil.",
+      "text": "💻 [SİSTEM &amp; KOD GÜNCELLEMESİ]: Canlı server.js çekirdeğine Şampiyon &quot;🏔️ Marscoin Trend Roketi&quot; parametreleri sıcak yüklendi (Hot-Reload). Parametreler senkronize, sistem stabil.",
       "tag": "SYSTEM"
     },
     {
-      "id": "1791924832770vmjc",
-      "time": "23:53:52",
-      "timestamp": 1791924832786,
+      "id": "1792011436969ndtd",
+      "time": "23:57:16",
+      "timestamp": 1792011436969,
       "agent": "👑 YÖNETİCİ",
       "roleKey": "MANAGER",
       "color": "#7c3aed",
       "title": "Risk Direktörü",
-      "text": "👑 [VUR-KAÇ PORTFÖY DİREKTÖRÜ]: Kasa $89.60, açık slot 0/2. Mod: MARSCOIN_ROCKET. A+ Şampiyon sinyallerde Kelly teminatı $25-$28'e yükseltilecek! Sert sınırlar: uyumlu.",
+      "text": "🚨 [KRİTİK MÜDAHALE - SAVUNMA MODU]: Kasa $85.78 seviyesinde (%14.2 zarar, zirveden %14.2 DD). Kasa erimesini durdurmak için yönetimi devraldım! Slot 1'e, Teminat $12'a çekildi!",
       "tag": "RISK"
     },
     {
-      "id": "1791924832787vxa5",
-      "time": "23:53:52",
-      "timestamp": 1791924832787,
+      "id": "17920114369709lxb",
+      "time": "23:57:16",
+      "timestamp": 1792011436970,
       "agent": "🧠 ANALİZCİ",
       "roleKey": "ANALYST",
       "color": "#0284c7",
       "title": "Piyasa İstihbaratı",
-      "text": "Rejim: Yatay / Sakin Piyasa. BTC 24s %0.00, $15M+ hacimli koin sayısı 0. Öneri: hacim ≥ $2.5M, 35 aday.",
-      "tag": "REGIME"
-    },
-    {
-      "id": "1791924832787cftl",
-      "time": "23:53:52",
-      "timestamp": 1791924832788,
-      "agent": "🐋 BALİNA AVCISI",
-      "roleKey": "WHALE_HUNTER",
-      "color": "#0891b2",
-      "title": "Para Akışı & Fon",
-      "text": "🐋 [FON AKIŞI]: Net piyasa yönü: BULLISH ($3.1M). Kurumsal boğa alımları taranıyor.",
-      "tag": "FLOW"
-    },
-    {
-      "id": "1791924832788wh0g",
-      "time": "23:53:52",
-      "timestamp": 1791924832788,
-      "agent": "🎯 FREQ-AI & LİKİDASYON",
-      "roleKey": "FREQAI",
-      "color": "#db2777",
-      "title": "ML Olasılık & Fonlama",
-      "text": "🎯 [FREQ-AI &amp; FONLAMA]: ML Karar Motoru hazır (0 işlem kalibre). Ortalama fonlama: %0.0032. Minimum kazanma olasılığı eşiği: %68.",
+      "text": "🧠 [ADLİ TEŞHİS]: 56 işlem incelendi (%0 WR, PF: 0). Adli analizde zayıf alıcı (&lt;%54 taker) ve aşırı satımda (-%4.5 altı) shortlanan koinlerin zararın %90'ını ürettiği kanıtlandı. PUMP, CHIP, AVAX, STRK kara listeye alındı; eşik alıcı oranı %54.0'e çıkarıldı.",
       "tag": "STRATEGY"
     },
     {
-      "id": "17919248327899ahp",
-      "time": "23:53:52",
-      "timestamp": 1791924832789,
-      "agent": "🏛️ BAŞ YARGIÇ",
-      "roleKey": "JUDGE",
-      "color": "#b45309",
-      "title": "Adli Denetçi (Aslan11)",
-      "text": "🏛️ [ASLAN11 ADLİ HÜKÜM]: Mahkeme devrede (54 beraat, 2 mahkumiyet). Ön yargılama vizesi şartı devrede.",
-      "tag": "RISK"
-    },
-    {
-      "id": "1791924832789u8bc",
-      "time": "23:53:52",
-      "timestamp": 1791924832790,
+      "id": "1792011436971fcve",
+      "time": "23:57:16",
+      "timestamp": 1792011436971,
       "agent": "🧪 TESTÇİ",
       "roleKey": "TESTER",
       "color": "#059669",
       "title": "QA & Simülatör",
-      "text": "Backtest (6 koin). Mevcut: PF 0, net $0.00 | Önerilen: PF 0, net $0.00.",
+      "text": "🧪 [STRATEJİ OPTİMİZASYONU]: 32 farklı strateji son 24 saatin mumlarında simüle edildi. 🏆 ŞAMPİYON: &quot;🏔️ Marscoin Trend Roketi&quot; (PF: 2.1, WR: %85, Sim Kâr: +$10.5 | SL: %0.25, BE: %0.2, TP1: %0.6). En karlı strateji canlıya uygulandı!",
       "tag": "STRATEGY"
     },
     {
-      "id": "1791924832790vdln",
-      "time": "23:53:52",
-      "timestamp": 1791924832790,
+      "id": "17920114369722h1j",
+      "time": "23:57:16",
+      "timestamp": 1792011436972,
+      "agent": "🐋 BALİNA AVCISI",
+      "roleKey": "WHALE_HUNTER",
+      "color": "#0891b2",
+      "title": "Para Akışı & Fon",
+      "text": "🐋 [CANLI PARA AKIŞI]: Piyasa net akışı: $3.1M (BULLISH). 🟢 Kurumsal Giriş: CKBUSDT (+$4.2M), ENAUSDT (+$3.1M), ZECUSDT (+$2.7M) | 🔴 Kaçış: CHIPUSDT (-$3.4M), STRKUSDT (-$2.8M), FETUSDT (-$2.1M). Para çıkışı olan koinlere long vetosu devrede!",
+      "tag": "FLOW"
+    },
+    {
+      "id": "1792011436973d5wj",
+      "time": "23:57:16",
+      "timestamp": 1792011436973,
+      "agent": "🎯 FREQ-AI & LİKİDASYON",
+      "roleKey": "FREQAI",
+      "color": "#db2777",
+      "title": "ML Olasılık & Fonlama",
+      "text": "🎯 [FREQ-AI &amp; FONLAMA]: ML Olasılık Modeli devrede (Eğitim: 0 işlem, Eşik: %72). Ortalama fonlama: %0.0032. Sıkışma adayı: STRKUSDT (%-0.048), CHIPUSDT (%-0.038), ZECUSDT (%0.008). Düşük olasılıklı işlemler veto edilecek.",
+      "tag": "STRATEGY"
+    },
+    {
+      "id": "1792011436974a2qg",
+      "time": "23:57:16",
+      "timestamp": 1792011436974,
+      "agent": "🏛️ BAŞ YARGIÇ",
+      "roleKey": "JUDGE",
+      "color": "#b45309",
+      "title": "Adli Denetçi (Aslan11)",
+      "text": "🏛️ [ASLAN11 ADLİ HÜKÜM]: Mahkeme oturumu tamamlandı (56 duruşma, %76 intizam skoru). Disiplinsiz veya delilsiz açılmaya çalışılan her emir anında veto edilecek!",
+      "tag": "RISK"
+    },
+    {
+      "id": "17920114369747wo2",
+      "time": "23:57:16",
+      "timestamp": 1792011436974,
       "agent": "⚔️ TRADER",
       "roleKey": "TRADER",
       "color": "#b45309",
       "title": "Sinyal & Yürütme",
-      "text": "⚔️ [DİNAMİK YÜRÜTME]: 350+ koin taranıyor. Standart teminat: $15, A+ Şampiyon: $25-$28. Kademeli TP1 +%1.2, Vur-Kaç Moonshot +%2.4.",
+      "text": "⚔️ [EMİR ONAYLANDI]: Savunma ve Şampiyon &quot;🏔️ Marscoin Trend Roketi&quot; stratejisi yürütülüyor! Tek slot, $12 teminat. Taker ≥ %54.0 ve tepe tuzağı engelli roketler taranıyor.",
       "tag": "TRADE"
     },
     {
-      "id": "1791924832791rmfa",
-      "time": "23:53:52",
-      "timestamp": 1791924832791,
+      "id": "1792011436975n5tp",
+      "time": "23:57:16",
+      "timestamp": 1792011436975,
       "agent": "💻 YAZILIMCI",
       "roleKey": "ENGINEER",
       "color": "#475569",
       "title": "DevOps & Sistem",
-      "text": "Sunucu çalışma süresi 360 dk. Piyasa ve simülasyon verisi: güncel.",
+      "text": "💻 [SİSTEM &amp; KOD GÜNCELLEMESİ]: Canlı server.js çekirdeğine Şampiyon &quot;🏔️ Marscoin Trend Roketi&quot; parametreleri sıcak yüklendi (Hot-Reload). Parametreler senkronize, sistem stabil.",
+      "tag": "SYSTEM"
+    },
+    {
+      "id": "1792011737592sxj0",
+      "time": "00:02:17",
+      "timestamp": 1792011737593,
+      "agent": "👑 YÖNETİCİ",
+      "roleKey": "MANAGER",
+      "color": "#7c3aed",
+      "title": "Risk Direktörü",
+      "text": "🚨 [KRİTİK MÜDAHALE - SAVUNMA MODU]: Kasa $85.78 seviyesinde (%14.2 zarar, zirveden %14.2 DD). Kasa erimesini durdurmak için yönetimi devraldım! Slot 1'e, Teminat $12'a çekildi!",
+      "tag": "RISK"
+    },
+    {
+      "id": "17920117375937lu6",
+      "time": "00:02:17",
+      "timestamp": 1792011737594,
+      "agent": "🧠 ANALİZCİ",
+      "roleKey": "ANALYST",
+      "color": "#0284c7",
+      "title": "Piyasa İstihbaratı",
+      "text": "🧠 [ADLİ TEŞHİS]: 56 işlem incelendi (%0 WR, PF: 0). Adli analizde zayıf alıcı (&lt;%54 taker) ve aşırı satımda (-%4.5 altı) shortlanan koinlerin zararın %90'ını ürettiği kanıtlandı. PUMP, CHIP, AVAX, STRK kara listeye alındı; eşik alıcı oranı %54.0'e çıkarıldı.",
+      "tag": "STRATEGY"
+    },
+    {
+      "id": "17920117375945fs5",
+      "time": "00:02:17",
+      "timestamp": 1792011737595,
+      "agent": "🧪 TESTÇİ",
+      "roleKey": "TESTER",
+      "color": "#059669",
+      "title": "QA & Simülatör",
+      "text": "🧪 [STRATEJİ OPTİMİZASYONU]: 32 farklı strateji son 24 saatin mumlarında simüle edildi. 🏆 ŞAMPİYON: &quot;🏔️ Marscoin Trend Roketi&quot; (PF: 2.1, WR: %85, Sim Kâr: +$10.5 | SL: %0.25, BE: %0.2, TP1: %0.6). En karlı strateji canlıya uygulandı!",
+      "tag": "STRATEGY"
+    },
+    {
+      "id": "179201173759511k3",
+      "time": "00:02:17",
+      "timestamp": 1792011737595,
+      "agent": "🐋 BALİNA AVCISI",
+      "roleKey": "WHALE_HUNTER",
+      "color": "#0891b2",
+      "title": "Para Akışı & Fon",
+      "text": "🐋 [CANLI PARA AKIŞI]: Piyasa net akışı: $3.1M (BULLISH). 🟢 Kurumsal Giriş: CKBUSDT (+$4.2M), ENAUSDT (+$3.1M), ZECUSDT (+$2.7M) | 🔴 Kaçış: CHIPUSDT (-$3.4M), STRKUSDT (-$2.8M), FETUSDT (-$2.1M). Para çıkışı olan koinlere long vetosu devrede!",
+      "tag": "FLOW"
+    },
+    {
+      "id": "1792011737597s4is",
+      "time": "00:02:17",
+      "timestamp": 1792011737597,
+      "agent": "🎯 FREQ-AI & LİKİDASYON",
+      "roleKey": "FREQAI",
+      "color": "#db2777",
+      "title": "ML Olasılık & Fonlama",
+      "text": "🎯 [FREQ-AI &amp; FONLAMA]: ML Olasılık Modeli devrede (Eğitim: 0 işlem, Eşik: %72). Ortalama fonlama: %0.0032. Sıkışma adayı: STRKUSDT (%-0.048), CHIPUSDT (%-0.038), ZECUSDT (%0.008). Düşük olasılıklı işlemler veto edilecek.",
+      "tag": "STRATEGY"
+    },
+    {
+      "id": "1792011737598ni3d",
+      "time": "00:02:17",
+      "timestamp": 1792011737598,
+      "agent": "🏛️ BAŞ YARGIÇ",
+      "roleKey": "JUDGE",
+      "color": "#b45309",
+      "title": "Adli Denetçi (Aslan11)",
+      "text": "🏛️ [ASLAN11 ADLİ HÜKÜM]: Mahkeme oturumu tamamlandı (56 duruşma, %76 intizam skoru). Disiplinsiz veya delilsiz açılmaya çalışılan her emir anında veto edilecek!",
+      "tag": "RISK"
+    },
+    {
+      "id": "1792011737598zuzm",
+      "time": "00:02:17",
+      "timestamp": 1792011737599,
+      "agent": "⚔️ TRADER",
+      "roleKey": "TRADER",
+      "color": "#b45309",
+      "title": "Sinyal & Yürütme",
+      "text": "⚔️ [EMİR ONAYLANDI]: Savunma ve Şampiyon &quot;🏔️ Marscoin Trend Roketi&quot; stratejisi yürütülüyor! Tek slot, $12 teminat. Taker ≥ %54.0 ve tepe tuzağı engelli roketler taranıyor.",
+      "tag": "TRADE"
+    },
+    {
+      "id": "1792011737599ikq0",
+      "time": "00:02:17",
+      "timestamp": 1792011737599,
+      "agent": "💻 YAZILIMCI",
+      "roleKey": "ENGINEER",
+      "color": "#475569",
+      "title": "DevOps & Sistem",
+      "text": "💻 [SİSTEM &amp; KOD GÜNCELLEMESİ]: Canlı server.js çekirdeğine Şampiyon &quot;🏔️ Marscoin Trend Roketi&quot; parametreleri sıcak yüklendi (Hot-Reload). Parametreler senkronize, sistem stabil.",
+      "tag": "SYSTEM"
+    },
+    {
+      "id": "1792012037993x055",
+      "time": "00:07:17",
+      "timestamp": 1792012037994,
+      "agent": "👑 YÖNETİCİ",
+      "roleKey": "MANAGER",
+      "color": "#7c3aed",
+      "title": "Risk Direktörü",
+      "text": "🚨 [KRİTİK MÜDAHALE - SAVUNMA MODU]: Kasa $85.78 seviyesinde (%14.2 zarar, zirveden %14.2 DD). Kasa erimesini durdurmak için yönetimi devraldım! Slot 1'e, Teminat $12'a çekildi!",
+      "tag": "RISK"
+    },
+    {
+      "id": "1792012037994l33l",
+      "time": "00:07:17",
+      "timestamp": 1792012037995,
+      "agent": "🧠 ANALİZCİ",
+      "roleKey": "ANALYST",
+      "color": "#0284c7",
+      "title": "Piyasa İstihbaratı",
+      "text": "🧠 [ADLİ TEŞHİS]: 56 işlem incelendi (%0 WR, PF: 0). Adli analizde zayıf alıcı (&lt;%54 taker) ve aşırı satımda (-%4.5 altı) shortlanan koinlerin zararın %90'ını ürettiği kanıtlandı. PUMP, CHIP, AVAX, STRK kara listeye alındı; eşik alıcı oranı %54.0'e çıkarıldı.",
+      "tag": "STRATEGY"
+    },
+    {
+      "id": "1792012037995c7rg",
+      "time": "00:07:17",
+      "timestamp": 1792012037995,
+      "agent": "🧪 TESTÇİ",
+      "roleKey": "TESTER",
+      "color": "#059669",
+      "title": "QA & Simülatör",
+      "text": "🧪 [STRATEJİ OPTİMİZASYONU]: 32 farklı strateji son 24 saatin mumlarında simüle edildi. 🏆 ŞAMPİYON: &quot;🏔️ Marscoin Trend Roketi&quot; (PF: 2.1, WR: %85, Sim Kâr: +$10.5 | SL: %0.25, BE: %0.2, TP1: %0.6). En karlı strateji canlıya uygulandı!",
+      "tag": "STRATEGY"
+    },
+    {
+      "id": "17920120379965ibg",
+      "time": "00:07:17",
+      "timestamp": 1792012037996,
+      "agent": "🐋 BALİNA AVCISI",
+      "roleKey": "WHALE_HUNTER",
+      "color": "#0891b2",
+      "title": "Para Akışı & Fon",
+      "text": "🐋 [CANLI PARA AKIŞI]: Piyasa net akışı: $3.1M (BULLISH). 🟢 Kurumsal Giriş: CKBUSDT (+$4.2M), ENAUSDT (+$3.1M), ZECUSDT (+$2.7M) | 🔴 Kaçış: CHIPUSDT (-$3.4M), STRKUSDT (-$2.8M), FETUSDT (-$2.1M). Para çıkışı olan koinlere long vetosu devrede!",
+      "tag": "FLOW"
+    },
+    {
+      "id": "1792012037997954z",
+      "time": "00:07:17",
+      "timestamp": 1792012037997,
+      "agent": "🎯 FREQ-AI & LİKİDASYON",
+      "roleKey": "FREQAI",
+      "color": "#db2777",
+      "title": "ML Olasılık & Fonlama",
+      "text": "🎯 [FREQ-AI &amp; FONLAMA]: ML Olasılık Modeli devrede (Eğitim: 0 işlem, Eşik: %72). Ortalama fonlama: %0.0032. Sıkışma adayı: STRKUSDT (%-0.048), CHIPUSDT (%-0.038), ZECUSDT (%0.008). Düşük olasılıklı işlemler veto edilecek.",
+      "tag": "STRATEGY"
+    },
+    {
+      "id": "17920120379983ynv",
+      "time": "00:07:17",
+      "timestamp": 1792012037998,
+      "agent": "🏛️ BAŞ YARGIÇ",
+      "roleKey": "JUDGE",
+      "color": "#b45309",
+      "title": "Adli Denetçi (Aslan11)",
+      "text": "🏛️ [ASLAN11 ADLİ HÜKÜM]: Mahkeme oturumu tamamlandı (56 duruşma, %76 intizam skoru). Disiplinsiz veya delilsiz açılmaya çalışılan her emir anında veto edilecek!",
+      "tag": "RISK"
+    },
+    {
+      "id": "17920120379992sj0",
+      "time": "00:07:17",
+      "timestamp": 1792012037999,
+      "agent": "⚔️ TRADER",
+      "roleKey": "TRADER",
+      "color": "#b45309",
+      "title": "Sinyal & Yürütme",
+      "text": "⚔️ [EMİR ONAYLANDI]: Savunma ve Şampiyon &quot;🏔️ Marscoin Trend Roketi&quot; stratejisi yürütülüyor! Tek slot, $12 teminat. Taker ≥ %54.0 ve tepe tuzağı engelli roketler taranıyor.",
+      "tag": "TRADE"
+    },
+    {
+      "id": "17920120379998iad",
+      "time": "00:07:17",
+      "timestamp": 1792012038000,
+      "agent": "💻 YAZILIMCI",
+      "roleKey": "ENGINEER",
+      "color": "#475569",
+      "title": "DevOps & Sistem",
+      "text": "💻 [SİSTEM &amp; KOD GÜNCELLEMESİ]: Canlı server.js çekirdeğine Şampiyon &quot;🏔️ Marscoin Trend Roketi&quot; parametreleri sıcak yüklendi (Hot-Reload). Parametreler senkronize, sistem stabil.",
+      "tag": "SYSTEM"
+    },
+    {
+      "id": "1792012337031khhv",
+      "time": "00:12:17",
+      "timestamp": 1792012337032,
+      "agent": "👑 YÖNETİCİ",
+      "roleKey": "MANAGER",
+      "color": "#7c3aed",
+      "title": "Risk Direktörü",
+      "text": "🚨 [KRİTİK MÜDAHALE - SAVUNMA MODU]: Kasa $85.78 seviyesinde (%14.2 zarar, zirveden %14.2 DD). Kasa erimesini durdurmak için yönetimi devraldım! Slot 1'e, Teminat $12'a çekildi!",
+      "tag": "RISK"
+    },
+    {
+      "id": "17920123370335k60",
+      "time": "00:12:17",
+      "timestamp": 1792012337033,
+      "agent": "🧠 ANALİZCİ",
+      "roleKey": "ANALYST",
+      "color": "#0284c7",
+      "title": "Piyasa İstihbaratı",
+      "text": "🧠 [ADLİ TEŞHİS]: 56 işlem incelendi (%0 WR, PF: 0). Adli analizde zayıf alıcı (&lt;%54 taker) ve aşırı satımda (-%4.5 altı) shortlanan koinlerin zararın %90'ını ürettiği kanıtlandı. PUMP, CHIP, AVAX, STRK kara listeye alındı; eşik alıcı oranı %54.0'e çıkarıldı.",
+      "tag": "STRATEGY"
+    },
+    {
+      "id": "1792012337033eu5x",
+      "time": "00:12:17",
+      "timestamp": 1792012337034,
+      "agent": "🧪 TESTÇİ",
+      "roleKey": "TESTER",
+      "color": "#059669",
+      "title": "QA & Simülatör",
+      "text": "🧪 [STRATEJİ OPTİMİZASYONU]: 32 farklı strateji son 24 saatin mumlarında simüle edildi. 🏆 ŞAMPİYON: &quot;🏔️ Marscoin Trend Roketi&quot; (PF: 2.1, WR: %85, Sim Kâr: +$10.5 | SL: %0.25, BE: %0.2, TP1: %0.6). En karlı strateji canlıya uygulandı!",
+      "tag": "STRATEGY"
+    },
+    {
+      "id": "1792012337034yim2",
+      "time": "00:12:17",
+      "timestamp": 1792012337034,
+      "agent": "🐋 BALİNA AVCISI",
+      "roleKey": "WHALE_HUNTER",
+      "color": "#0891b2",
+      "title": "Para Akışı & Fon",
+      "text": "🐋 [CANLI PARA AKIŞI]: Piyasa net akışı: $3.1M (BULLISH). 🟢 Kurumsal Giriş: CKBUSDT (+$4.2M), ENAUSDT (+$3.1M), ZECUSDT (+$2.7M) | 🔴 Kaçış: CHIPUSDT (-$3.4M), STRKUSDT (-$2.8M), FETUSDT (-$2.1M). Para çıkışı olan koinlere long vetosu devrede!",
+      "tag": "FLOW"
+    },
+    {
+      "id": "1792012337035gbwr",
+      "time": "00:12:17",
+      "timestamp": 1792012337035,
+      "agent": "🎯 FREQ-AI & LİKİDASYON",
+      "roleKey": "FREQAI",
+      "color": "#db2777",
+      "title": "ML Olasılık & Fonlama",
+      "text": "🎯 [FREQ-AI &amp; FONLAMA]: ML Olasılık Modeli devrede (Eğitim: 0 işlem, Eşik: %72). Ortalama fonlama: %0.0032. Sıkışma adayı: STRKUSDT (%-0.048), CHIPUSDT (%-0.038), ZECUSDT (%0.008). Düşük olasılıklı işlemler veto edilecek.",
+      "tag": "STRATEGY"
+    },
+    {
+      "id": "1792012337036a16l",
+      "time": "00:12:17",
+      "timestamp": 1792012337036,
+      "agent": "🏛️ BAŞ YARGIÇ",
+      "roleKey": "JUDGE",
+      "color": "#b45309",
+      "title": "Adli Denetçi (Aslan11)",
+      "text": "🏛️ [ASLAN11 ADLİ HÜKÜM]: Mahkeme oturumu tamamlandı (56 duruşma, %76 intizam skoru). Disiplinsiz veya delilsiz açılmaya çalışılan her emir anında veto edilecek!",
+      "tag": "RISK"
+    },
+    {
+      "id": "1792012337037pxn8",
+      "time": "00:12:17",
+      "timestamp": 1792012337037,
+      "agent": "⚔️ TRADER",
+      "roleKey": "TRADER",
+      "color": "#b45309",
+      "title": "Sinyal & Yürütme",
+      "text": "⚔️ [EMİR ONAYLANDI]: Savunma ve Şampiyon &quot;🏔️ Marscoin Trend Roketi&quot; stratejisi yürütülüyor! Tek slot, $12 teminat. Taker ≥ %54.0 ve tepe tuzağı engelli roketler taranıyor.",
+      "tag": "TRADE"
+    },
+    {
+      "id": "17920123370385sao",
+      "time": "00:12:17",
+      "timestamp": 1792012337038,
+      "agent": "💻 YAZILIMCI",
+      "roleKey": "ENGINEER",
+      "color": "#475569",
+      "title": "DevOps & Sistem",
+      "text": "💻 [SİSTEM &amp; KOD GÜNCELLEMESİ]: Canlı server.js çekirdeğine Şampiyon &quot;🏔️ Marscoin Trend Roketi&quot; parametreleri sıcak yüklendi (Hot-Reload). Parametreler senkronize, sistem stabil.",
       "tag": "SYSTEM"
     }
   ]

@@ -3006,6 +3006,17 @@ function parseJsonBody(req) {
   });
 }
 
+// 📡 PING VE UYKU ÖNLEYİCİ İSTATİSTİKLERİ
+const pingStats = {
+  total: 0,
+  cronJobCount: 0,
+  internalCount: 0,
+  otherCount: 0,
+  lastPingAt: null,
+  lastCronJobAt: null,
+  lastSource: null
+};
+
 // 5. HTTP SUNUCUSU
 const server = http.createServer(async (req, res) => {
   const parsedUrl = new URL(req.url, `http://${req.headers.host}`);
@@ -3051,8 +3062,33 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (pathname === '/ping') {
+    const userAgent = (req.headers['user-agent'] || 'unknown').toLowerCase();
+    const isCronJob = userAgent.includes('cron-job') || userAgent.includes('cronjob');
+    const isInternal = userAgent.includes('keepalive') || userAgent.includes('node') || userAgent.includes('undici');
+
+    pingStats.total++;
+    pingStats.lastPingAt = new Date().toISOString();
+
+    if (isCronJob) {
+      pingStats.cronJobCount++;
+      pingStats.lastSource = 'cron-job.org';
+      pingStats.lastCronJobAt = pingStats.lastPingAt;
+      addLog(`📡 [CRON-JOB PING]: cron-job.org uyandırma sinyali alındı! (#${pingStats.cronJobCount})`, 'INFO');
+    } else if (isInternal) {
+      pingStats.internalCount++;
+      pingStats.lastSource = 'internal_keepalive';
+    } else {
+      pingStats.otherCount++;
+      pingStats.lastSource = req.headers['user-agent'] ? req.headers['user-agent'].slice(0, 50) : 'external';
+    }
+
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ status: "online", uptimeSeconds: Math.floor((Date.now() - startTime) / 1000) }));
+    res.end(JSON.stringify({
+      status: "online",
+      version: "1.1.0",
+      uptimeSeconds: Math.floor((Date.now() - startTime) / 1000),
+      pingStats
+    }, null, 2));
     return;
   }
 
@@ -3068,7 +3104,8 @@ const server = http.createServer(async (req, res) => {
       settings: getSettingsPayload(),
       settingsCustomized: settingsCustomized,
       teamStatus: engineSnapshot(),
-      dynamic: DYNAMIC
+      dynamic: DYNAMIC,
+      pingStats: pingStats
     }));
     return;
   }
@@ -3282,7 +3319,9 @@ server.listen(PORT, () => {
   const KEEP_ALIVE_URL = process.env.RENDER_EXTERNAL_URL || "https://moonshot-cloud-bot.onrender.com";
   setInterval(async () => {
     try {
-      await fetch(`${KEEP_ALIVE_URL}/ping`);
+      await fetch(`${KEEP_ALIVE_URL}/ping`, {
+        headers: { 'User-Agent': 'Moonshot-Internal-KeepAlive/1.0' }
+      });
     } catch(e) {}
   }, 4 * 60 * 1000);
 
