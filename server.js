@@ -866,7 +866,7 @@ async function scanLoop() {
 
       const rInfo = radarMap[sym];
       let radarBoost = 0;
-      if (rInfo && Math.abs(rawChg) < 8) {
+      if (rInfo && Math.abs(rawChg) < 7) {
         if (Math.abs(rInfo.chg15m) >= 0.15 && Math.abs(rInfo.chg15m) <= 0.8) radarBoost += 8;
       }
 
@@ -881,7 +881,7 @@ async function scanLoop() {
         isVip
       };
     })
-    .filter(t => Math.abs(t.chg) < 8 && t.volM >= 1.5)
+    .filter(t => Math.abs(t.chg) < 7 && t.volM >= 1.5)
     .sort((a, b) => b.hotScore - a.hotScore)
     .slice(0, DYNAMIC.candidateSlice);
 
@@ -958,7 +958,7 @@ async function scanLoop() {
 
         const curMovePct = ((curP - curO) / curO) * 100;
         const twoCandleMovePct = ((curP - prevO) / prevO) * 100;
-        const minJump = 0.15;
+        const minJump = 0.23;
         const maxChaseMove = 0.35;
 
         const quote1m = parseFloat(k3m[lastIdx][7]) || 0;
@@ -970,14 +970,14 @@ async function scanLoop() {
         const chg24Val = Number.isFinite(Number(rInfo.chg24h)) ? Number(rInfo.chg24h) : chg;
         const chg15Val = Number(rInfo.chg15m);
         if (!Number.isFinite(chg15Val) || !Number.isFinite(Number(chg24Val))) continue;
-        if (Math.abs(chg24Val) >= 8) continue;
+        if (Math.abs(chg24Val) >= 7) continue;
 
         const minTakerLong = DYNAMIC.mode === 'DEFENSIVE_SNIPER' ? 56.0 : 55.0;
         const maxTakerLong = 70;
         const maxTakerShort = DYNAMIC.mode === 'DEFENSIVE_SNIPER' ? 44.0 : 45.0;
         const minTakerShort = 20;
-        let radarOkLong = chg15Val >= 0;
-        let radarOkShort = chg15Val <= 0;
+        let radarOkLong = chg15Val >= 0 && chg24Val > 0;
+        let radarOkShort = chg15Val <= 0 && chg24Val < 0;
         if (sig.includes("ROKET") || sig.includes("BOĞA")) radarOkShort = false;
         if (sig.includes("ŞELALE") || sig.includes("AYI")) radarOkLong = false;
         let radarTag = "";
@@ -1346,6 +1346,14 @@ async function fastRiskLoop() {
 
       // 7. STOP LOSS VEYA KİLİTLİ STOP TETİKLENMESİ
       if (!exitReason && ((isLong && curP <= pos.stopPrice) || (!isLong && curP >= pos.stopPrice))) {
+        const fill = pos.stopPrice;
+        const fillMove = isLong
+          ? ((fill - pos.entryPrice) / pos.entryPrice) * 100
+          : ((pos.entryPrice - fill) / pos.entryPrice) * 100;
+        const nominal = pos.margin * pos.leverage;
+        pos.currentPrice = fill;
+        pos.pnl = (nominal * (fillMove / 100)) - (nominal * CONFIG.feeRate * 2);
+        pos.roi = pos.margin > 0 ? (pos.pnl / pos.margin) * 100 : 0;
         if ((isLong && pos.stopPrice > pos.entryPrice * 1.0025) || (!isLong && pos.stopPrice < pos.entryPrice * 0.9975)) {
           exitReason = `🔒 Garanti Kilitli Kâr Çıkışı (+%${pos.roi.toFixed(1)} ROI / Stop Tetiklendi)`;
         } else if (pos.beLocked) {
