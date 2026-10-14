@@ -1122,7 +1122,7 @@ async function scanLoop() {
             symbol: sym,
             side: side,
             takerBuyRatio: rInfo ? (rInfo.takerBuyRatio || 50) : 50,
-            chg15m: cur15m,
+            chg15m: chg15Val,
             chg3h: rInfo ? (rInfo.chg3h || 0) : 0,
             chg24h: chg24Val,
             vol3hM: rInfo ? (rInfo.vol3hM || 5.0) : 5.0,
@@ -1149,7 +1149,7 @@ async function scanLoop() {
           try {
             judgeClearance = evaluatePreTradeClearance(sym, side, {
               takerBuyRatio: rInfo ? (rInfo.takerBuyRatio || 50) : 50,
-              chg15m: cur15m,
+              chg15m: chg15Val,
               chg24h: chg24Val
             });
           } catch(e) {}
@@ -1283,6 +1283,8 @@ async function scanLoop() {
       }
     }
   } catch (err) {
+    console.error("❌ scanLoop Hatası:", err);
+    addLog(`❌ scanLoop Hatası: ${err.message}`, 'WARN');
   } finally {
     isScanRunning = false;
   }
