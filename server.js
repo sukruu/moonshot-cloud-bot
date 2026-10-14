@@ -1699,15 +1699,15 @@ function serveDashboardHtml() {
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700;800;900&display=swap" rel="stylesheet">
   <style>
     :root {
-      --bg: #f8fafc;
-      --panel: #ffffff;
-      --panel2: #f1f5f9;
-      --panel-hover: #e2e8f0;
-      --border: #e2e8f0;
-      --border-accent: #cbd5e1;
-      --text: #0f172a;
-      --text-secondary: #334155;
-      --muted: #64748b;
+      --bg: #f4f2ee;
+      --panel: #fffcf8;
+      --panel2: #f7f4ef;
+      --panel-hover: #efeae3;
+      --border: #e6e1d8;
+      --border-accent: #d4cdc2;
+      --text: #2c2926;
+      --text-secondary: #5c564e;
+      --muted: #8a8378;
       --green: #059669;
       --green-bg: #ecfdf5;
       --green-border: #a7f3d0;
@@ -1770,10 +1770,10 @@ function serveDashboardHtml() {
     body {
       background: var(--bg);
       color: var(--text);
-      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Segoe UI", Roboto, sans-serif;
-      padding: max(6px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
-      font-size: 11px;
-      zoom: 0.88;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      padding: 16px 18px 24px;
+      font-size: 13.5px;
+      line-height: 1.45;
       min-height: 100vh;
       -webkit-font-smoothing: antialiased;
       transition: background 0.2s ease, color 0.2s ease;
@@ -1834,8 +1834,8 @@ function serveDashboardHtml() {
     /* GRID */
     .dashboard {
       display: grid;
-      grid-template-columns: 285px 1fr;
-      gap: 8px;
+      grid-template-columns: 320px 1fr;
+      gap: 14px;
       align-items: start;
     }
     @media (max-width: 960px) {
@@ -1845,17 +1845,17 @@ function serveDashboardHtml() {
     .panel {
       background: var(--panel);
       border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 8px 10px;
-      box-shadow: var(--shadow-md);
+      border-radius: 14px;
+      padding: 16px 16px 14px;
+      box-shadow: var(--shadow-sm);
     }
     .panel h2 {
-      font-size: 11px;
-      font-weight: 800;
-      text-transform: uppercase;
-      letter-spacing: 0.4px;
+      font-size: 13px;
+      font-weight: 650;
+      text-transform: none;
+      letter-spacing: 0;
       color: var(--text);
-      margin-bottom: 6px;
+      margin-bottom: 12px;
       display: flex;
       justify-content: space-between;
       align-items: center;
@@ -1901,42 +1901,43 @@ function serveDashboardHtml() {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      font-size: 9.5px;
-      padding: 1.5px 3px;
-      border-radius: 4px;
+      font-size: 12.5px;
+      padding: 5px 2px;
+      border-radius: 6px;
     }
     .agent-row:hover { background: var(--panel2); }
     .agent-name {
-      font-weight: 700;
+      font-weight: 600;
       white-space: nowrap;
-      font-size: 9.5px;
+      font-size: 12.5px;
+      color: var(--text-secondary) !important;
     }
     .agent-row .status-pill {
-      font-size: 8px;
-      padding: 1px 5px;
-      max-width: 175px;
+      font-size: 11px;
+      padding: 2px 7px;
+      max-width: 168px;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
     }
     .status-pill {
-      font-family: 'JetBrains Mono', monospace;
-      font-weight: 800;
-      font-size: 8.5px;
-      padding: 1.5px 5px;
-      border-radius: 4px;
+      font-family: -apple-system, "Segoe UI", sans-serif;
+      font-weight: 600;
+      font-size: 11px;
+      padding: 2px 7px;
+      border-radius: 999px;
       background: var(--panel2);
-      color: var(--text);
-      text-transform: uppercase;
-      letter-spacing: 0.2px;
+      color: var(--text-secondary);
+      text-transform: none;
+      letter-spacing: 0;
       border: 1px solid var(--border);
     }
     .status-pill.green { background: var(--green-bg); color: var(--green); border-color: var(--green-border); }
-    .status-pill.purple { background: var(--purple-bg); color: var(--purple); border-color: var(--purple-border); }
-    .status-pill.blue { background: var(--blue-bg); color: var(--blue); border-color: var(--blue-border); }
-    .status-pill.cyan { background: var(--cyan-bg); color: var(--cyan); border-color: var(--cyan-border); }
-    .status-pill.pink { background: var(--pink-bg); color: var(--pink); border-color: var(--pink-border); }
-    .status-pill.yellow { background: var(--amber-bg); color: var(--amber); border-color: var(--amber-border); }
+    .status-pill.purple,
+    .status-pill.blue,
+    .status-pill.cyan,
+    .status-pill.pink,
+    .status-pill.yellow { background: var(--panel2); color: var(--text-secondary); border-color: var(--border); }
 
     /* STRATEGY BANNER */
     .strategy-banner-card {
@@ -1952,14 +1953,14 @@ function serveDashboardHtml() {
     .strat-card-sub { font-size: 9px; color: var(--muted); margin-top: 1px; }
 
     /* PARAMETERS */
-    .sidebar-section-title { font-size: 9px; font-weight: 800; color: var(--muted); text-transform: uppercase; margin-bottom: 4px; margin-top: 6px; letter-spacing: 0.8px; display:flex; align-items:center; gap:5px; }
+    .sidebar-section-title { font-size: 11px; font-weight: 650; color: var(--muted); text-transform: none; margin-bottom: 8px; margin-top: 14px; letter-spacing: 0; display:flex; align-items:center; gap:8px; }
     .sidebar-section-title::after { content: ''; flex-grow: 1; height: 1px; background: var(--border); }
     .param-grid-2x2 { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-bottom: 5px; }
     .param-card { background: var(--panel2); border: 1px solid var(--border); border-radius: 5px; padding: 5px 7px; transition: 0.15s ease; }
     .param-card:hover { border-color: var(--border-accent); }
-    .param-header { display: flex; justify-content: space-between; font-size: 8.5px; color: var(--muted); font-weight: 700; margin-bottom: 2px; }
+    .param-header { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); font-weight: 600; margin-bottom: 4px; }
     .param-input-wrap { display: flex; align-items: baseline; justify-content: space-between; }
-    .param-input-wrap input { width: 50px; background: var(--panel); border: 1px solid var(--border); border-radius: 4px; padding: 1px 4px; color: var(--text); font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 800; outline: none; }
+    .param-input-wrap input { width: 58px; background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 4px 6px; color: var(--text); font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 650; outline: none; }
     .param-unit { font-size: 9px; color: var(--muted); }
 
     /* HERO PERF */
@@ -2029,21 +2030,22 @@ function serveDashboardHtml() {
     }
     .table-container::-webkit-scrollbar { height: 3px; }
     .table-container::-webkit-scrollbar-thumb { background: var(--border-accent); border-radius: 2px; }
-    table { width: 100%; border-collapse: collapse; font-size: 10px; white-space: nowrap; }
+    table { width: 100%; border-collapse: collapse; font-size: 12.5px; white-space: nowrap; }
     th {
       position: sticky;
       top: 0;
       background: var(--panel2);
       text-align: left;
-      padding: 5px 6px;
+      padding: 8px 8px;
       color: var(--muted);
-      font-weight: 800;
-      font-size: 8.5px;
-      text-transform: uppercase;
+      font-weight: 650;
+      font-size: 11px;
+      text-transform: none;
+      letter-spacing: 0;
       border-bottom: 1px solid var(--border);
       z-index: 2;
     }
-    td { padding: 4px 6px; border-bottom: 1px solid var(--border); font-family: 'JetBrains Mono', monospace; color: var(--text); }
+    td { padding: 8px 8px; border-bottom: 1px solid var(--border); font-family: inherit; color: var(--text); }
     tr:hover td { background: var(--panel2); }
 
     /* BADGES */
@@ -2404,7 +2406,7 @@ function serveDashboardHtml() {
             <div style="font-size:8.5px;color:var(--muted);margin-top:1px;">Kâr yakalanınca $0 Riske çekilir</div>
           </div>
           <div style="display:flex;align-items:baseline;gap:2px;background:var(--panel2);padding:2px 6px;border-radius:4px;border:1px solid var(--green-border);">
-            <input type="number" id="inpBe" value="${CONFIG.bePct.toFixed(2)}" step="0.1" style="width:36px;background:none;border:none;color:var(--green);font-family:'JetBrains Mono';font-size:12px;font-weight:800;text-align:right;outline:none;">
+            <input type="number" id="inpBe" value="${CONFIG.bePct.toFixed(2)}" step="0.1" style="width:52px;background:none;border:none;color:var(--green);font-family:'JetBrains Mono';font-size:13px;font-weight:650;text-align:right;outline:none;">
             <span style="font-size:10px;color:var(--green);opacity:0.7;">%</span>
           </div>
         </div>
@@ -2415,7 +2417,7 @@ function serveDashboardHtml() {
             <div style="font-size:8.5px;color:var(--muted);margin-top:1px;">%50 Kâr Cebe, Kalan Başabaşa</div>
           </div>
           <div style="display:flex;align-items:baseline;gap:2px;background:var(--panel2);padding:2px 6px;border-radius:4px;border:1px solid var(--blue-border);">
-            <input type="number" id="inpTp1" value="${(CONFIG.tp1Pct || 1.00).toFixed(2)}" step="0.1" style="width:36px;background:none;border:none;color:var(--blue);font-family:'JetBrains Mono';font-size:12px;font-weight:800;text-align:right;outline:none;">
+            <input type="number" id="inpTp1" value="${(CONFIG.tp1Pct || 1.00).toFixed(2)}" step="0.1" style="width:52px;background:none;border:none;color:var(--blue);font-family:'JetBrains Mono';font-size:13px;font-weight:650;text-align:right;outline:none;">
             <span style="font-size:10px;color:var(--blue);opacity:0.7;">%</span>
           </div>
         </div>
@@ -2426,7 +2428,7 @@ function serveDashboardHtml() {
             <div style="font-size:8.5px;color:var(--muted);margin-top:1px;">Kâr hedefinde tamamen çıkılır</div>
           </div>
           <div style="display:flex;align-items:baseline;gap:2px;background:var(--panel2);padding:2px 6px;border-radius:4px;border:1px solid var(--amber-border);">
-            <input type="number" id="inpMoon" value="${CONFIG.moonPct.toFixed(2)}" step="0.1" style="width:36px;background:none;border:none;color:var(--amber);font-family:'JetBrains Mono';font-size:12px;font-weight:800;text-align:right;outline:none;">
+            <input type="number" id="inpMoon" value="${CONFIG.moonPct.toFixed(2)}" step="0.1" style="width:52px;background:none;border:none;color:var(--amber);font-family:'JetBrains Mono';font-size:13px;font-weight:650;text-align:right;outline:none;">
             <span style="font-size:10px;color:var(--amber);opacity:0.7;">%</span>
           </div>
         </div>
@@ -2518,7 +2520,7 @@ function serveDashboardHtml() {
           <span>🗣️ AJAN TELSİZİ & CANLI DİYALOG AKIŞI</span>
           <span class="badge-moon" style="font-size:9.5px;">📻 8 AJAN CANLI FREKANS</span>
         </h2>
-        <div id="dialogueBox" style="background:var(--panel2); border:1px solid var(--border); border-radius:7px; padding:7px 9px; max-height:160px; overflow-y:auto; font-family:'JetBrains Mono',monospace; font-size:10px; display:flex; flex-direction:column; gap:5px; box-shadow:inset 0 1px 3px rgba(0,0,0,0.03);">
+        <div id="dialogueBox" style="background:var(--panel2); border:1px solid var(--border); border-radius:12px; padding:12px 14px; max-height:320px; overflow-y:auto; font-family:-apple-system,Segoe UI,sans-serif; font-size:13px; line-height:1.5; display:flex; flex-direction:column; gap:8px;">
           ${renderDialogues(teamStatusCache ? teamStatusCache.dialogues : [])}
         </div>
       </div>
@@ -2909,14 +2911,14 @@ function serveDashboardHtml() {
         return '<div style="color:var(--muted);text-align:center;padding:12px;">📻 Telsiz frekansı taranıyor, ilk toplantı bekleniyor...</div>';
       }
       return dlgs.slice(0, 30).map(function(d) {
-        return '<div style="display:flex;gap:6px;align-items:flex-start;padding:4px 6px;background:var(--panel);border-radius:5px;border:1px solid var(--border);border-left:3px solid ' + d.color + ';box-shadow:var(--shadow-sm);">' +
-          '<span style="color:var(--muted);font-size:9px;white-space:nowrap;padding-top:1px;">' + d.time + '</span>' +
-          '<div style="display:flex;flex-direction:column;gap:1px;flex:1;">' +
-            '<div style="display:flex;align-items:center;gap:4px;">' +
-              '<span style="color:' + d.color + ';font-weight:800;font-size:10px;">' + d.agent + '</span>' +
-              '<span style="color:var(--muted);font-size:8.5px;opacity:0.85;">' + d.title + '</span>' +
+        return '<div style="display:flex;gap:10px;align-items:flex-start;padding:8px 10px;background:var(--panel);border-radius:8px;border:1px solid var(--border);">' +
+          '<span style="color:var(--muted);font-size:12px;white-space:nowrap;padding-top:1px;">' + d.time + '</span>' +
+          '<div style="display:flex;flex-direction:column;gap:2px;flex:1;">' +
+            '<div style="display:flex;align-items:center;gap:6px;">' +
+              '<span style="color:var(--text);font-weight:650;font-size:12.5px;">' + d.agent + '</span>' +
+              '<span style="color:var(--muted);font-size:11px;">' + d.title + '</span>' +
             '</div>' +
-            '<div style="color:var(--text);font-size:10px;line-height:1.35;">' + d.text + '</div>' +
+            '<div style="color:var(--text-secondary);font-size:13px;line-height:1.45;">' + d.text + '</div>' +
           '</div>' +
         '</div>';
       }).join('');
@@ -3136,14 +3138,14 @@ function renderDialogues(dlgs) {
   }
   return dlgs.slice(0, 30).map(d => {
     return `
-      <div style="display:flex;gap:6px;align-items:flex-start;padding:4px 6px;background:var(--panel);border-radius:5px;border:1px solid var(--border);border-left:3px solid ${d.color};box-shadow:var(--shadow-sm);">
-        <span style="color:var(--muted);font-size:9px;white-space:nowrap;padding-top:1px;">${d.time}</span>
-        <div style="display:flex;flex-direction:column;gap:1px;flex:1;">
-          <div style="display:flex;align-items:center;gap:4px;">
-            <span style="color:${d.color};font-weight:800;font-size:10px;">${d.agent}</span>
-            <span style="color:var(--muted);font-size:8.5px;opacity:0.85;">${d.title}</span>
+      <div style="display:flex;gap:10px;align-items:flex-start;padding:8px 10px;background:var(--panel);border-radius:8px;border:1px solid var(--border);">
+        <span style="color:var(--muted);font-size:12px;white-space:nowrap;padding-top:1px;">${d.time}</span>
+        <div style="display:flex;flex-direction:column;gap:2px;flex:1;">
+          <div style="display:flex;align-items:center;gap:6px;">
+            <span style="color:var(--text);font-weight:650;font-size:12.5px;">${d.agent}</span>
+            <span style="color:var(--muted);font-size:11px;">${d.title}</span>
           </div>
-          <div style="color:var(--text);font-size:10px;line-height:1.35;">${d.text}</div>
+          <div style="color:var(--text-secondary);font-size:13px;line-height:1.45;">${d.text}</div>
         </div>
       </div>
     `;
