@@ -109,7 +109,8 @@ function calculateConvictionSizing({
   sym = '',
   side = 'LONG',
   takerBuyRatio = 50,
-  winProbabilityPct = 70,
+  winProbabilityPct = null,
+  modelReady = false,
   netFlowM = 0,
   vol3hM = 5,
   isVip = false,
@@ -117,23 +118,29 @@ function calculateConvictionSizing({
   balance = 100,
   mode = 'BALANCED',
   freeMargin = null,
+  marginCap = null,
   fundingRatePct = 0.01,
   isShortSqueeze = false
 } = {}) {
   const free = (freeMargin !== null && !isNaN(freeMargin)) ? Number(freeMargin) : balance;
+  const cap = (Number.isFinite(Number(marginCap)) && Number(marginCap) > 0) ? Number(marginCap) : 12;
+  const room = Number.isFinite(free) && free > 0 ? free : cap;
+  // Skor etiketi değiştirir. Teminat ayar tavanını geçemez.
+  const sizedMargin = Math.min(cap, room);
 
   // 1) Savunma modunda sermaye koruması mutlak önceliklidir
   if (mode === 'DEFENSIVE_SNIPER') {
+    const defensiveMargin = Math.min(sizedMargin, 10);
     return {
       tier: 'TIER_DEFENSIVE',
       tierLabel: '🛡️ SAVUNMA NİŞANCISI',
-      margin: Math.min(10.0, Math.max(8.0, free)),
+      margin: defensiveMargin,
       slPct: 0.25,
       bePct: 0.20,
       tp1Pct: 0.60,
       moonPct: 0.42,
       convictionScore: 50,
-      rationale: 'Kasa savunma modunda: Sermaye korunuyor, teminat $10 ile sınırlandı.'
+      rationale: `Kasa savunma modunda. Teminat $${defensiveMargin}, tavan $${cap}.`
     };
   }
 
@@ -147,12 +154,15 @@ function calculateConvictionSizing({
   else if (effectiveTaker >= 55) score += 12;
   else if (effectiveTaker >= 52) score += 5;
 
-  // B) FreqAI Makine Öğrenimi Başarı Olasılığı (Max +20 puan)
-  const winProb = Number(winProbabilityPct || 70);
-  if (winProb >= 82) score += 20;
-  else if (winProb >= 76) score += 15;
-  else if (winProb >= 72) score += 10;
-  else if (winProb >= 68) score += 5;
+  // B) FreqAI yalnızca eğitildiyse puan yazar. Boş model %70 sayılmaz.
+  const winProb = Number(winProbabilityPct);
+  const freqReady = modelReady === true && Number.isFinite(winProb);
+  if (freqReady) {
+    if (winProb >= 82) score += 20;
+    else if (winProb >= 76) score += 15;
+    else if (winProb >= 72) score += 10;
+    else if (winProb >= 68) score += 5;
+  }
 
   // C) Net Kurumsal Para Akışı (Max +15 puan)
   const flow = Number(netFlowM || 0);
@@ -172,78 +182,58 @@ function calculateConvictionSizing({
   if (jud >= 90) score += 10;
   else if (jud >= 80) score += 5;
 
-  // F) 🎯 Negatif Fonlama & Likidasyon Sıkışması (Short Squeeze Hunter - Max +18 puan)
-  const fundRate = Number(fundingRatePct || 0.01);
-  const isSqueeze = (side === 'LONG') && (isShortSqueeze || fundRate <= -0.030);
-  if (isSqueeze) {
+  // F) Negatif fonlama yalnızca canlı veri varsa puan yazar
+  const fundRate = Number(fundingRatePct);
+  const isSqueeze = (side === 'LONG') && (isShortSqueeze || (Number.isFinite(fundRate) && fundRate <= -0.030));
+  if (isSqueeze && Number.isFinite(fundRate)) {
     if (fundRate <= -0.050) score += 18;
     else if (fundRate <= -0.035) score += 14;
     else score += 10;
   }
 
   score = Math.min(100, Math.max(0, score));
+  const margin = sizedMargin;
+  const freqTxt = freqReady ? `%${winProb.toFixed(0)}` : 'eğitilmedi';
 
-  // 3) Kasa Büyüklüğüne Göre Dinamik Kelly Tavanı (Maksimum %28 teminat)
-  const maxSafeMargin = Math.min(30.0, Math.max(12.0, balance * 0.28));
-
-  // 4) Kategori Sınıflandırması & Parametre Belirleme
   if (score >= 78) {
-    // 👑 A+ ŞAMPİYON VUR-KAÇ KURULUMU (Asimetrik Kâr Fırsatı)
-    // Hedef Teminat: $25 - $28 (Kasa $103 ise ~$26.0)
-    let margin = Math.min(maxSafeMargin, Math.max(24.0, Number((balance * 0.25).toFixed(1))));
-    if (free < margin) margin = Math.max(10.0, Number(free.toFixed(1)));
-
     const customLabel = isSqueeze ? '👑 A+ SHORT SQUEEZE ROKETİ' : '👑 A+ ŞAMPİYON VUR-KAÇ';
-    const moonTarget = isSqueeze ? 1.20 : 1.00;
-    const tp1Target = isSqueeze ? 0.75 : 0.70;
-
     return {
       tier: 'TIER_A_PLUS',
       tierLabel: customLabel,
       isShortSqueeze: isSqueeze,
-      margin: margin,
+      margin,
       slPct: 0.25,
       bePct: 0.20,
       tp1Pct: 0.60,
       moonPct: 0.42,
       convictionScore: score,
-      rationale: isSqueeze 
-        ? `🔥 SHORT SQUEEZE TESPİT EDİLDİ! Fonlama %${fundRate.toFixed(3)} (Ağır Negatif). Balinalar shortçuları patlatıyor! Teminat $${margin}, Moonshot +%${moonTarget.toFixed(2)}.`
-        : `Skor %${score} (Taker: %${effectiveTaker.toFixed(1)}, FreqAI: %${winProb}, Akış: $${flow}M). A+ Şampiyon kurulumu! Teminat $${margin}'a yükseltildi, Moonshot +%2.40.`
+      rationale: `Skor %${score} (Taker %${effectiveTaker.toFixed(1)}, FreqAI ${freqTxt}). Teminat $${margin}, tavan $${cap}.`
     };
-  } else if (score >= 65) {
-    // 💎 TIER-1 GÜÇLÜ KURULUM
-    let margin = Math.min(maxSafeMargin, Math.max(18.0, Number((balance * 0.18).toFixed(1))));
-    if (free < margin) margin = Math.max(12.0, Number(free.toFixed(1)));
-
+  }
+  if (score >= 65) {
     return {
       tier: 'TIER_HIGH',
       tierLabel: '💎 TIER-1 GÜÇLÜ SİNYAL',
-      margin: margin,
+      margin,
       slPct: 0.25,
       bePct: 0.20,
       tp1Pct: 0.60,
       moonPct: 0.42,
       convictionScore: score,
-      rationale: `Skor %${score}. Güçlü sinyal! Teminat $${margin}, TP1 %0.70, Moon %1.00.`
-    };
-  } else {
-    // 🛡️ TIER-2 STANDART MARSCOIN KURULUM
-    let margin = Math.min(15.0, Math.max(12.0, Number((balance * 0.15).toFixed(1))));
-    if (free < margin) margin = Math.max(10.0, Number(free.toFixed(1)));
-
-    return {
-      tier: 'TIER_STANDARD',
-      tierLabel: '🏔️ STANDART MARSCOIN ROKET',
-      margin: margin,
-      slPct: 0.25,
-      bePct: 0.20,
-      tp1Pct: 0.60,
-      moonPct: 0.42,
-      convictionScore: score,
-      rationale: `Skor %${score}. Vur-kaç ($${margin}, TP1 %0.70, Moon %1.00).`
+      rationale: `Skor %${score}. Teminat $${margin}, tavan $${cap}.`
     };
   }
+  return {
+    tier: 'TIER_STANDARD',
+    tierLabel: '🏔️ STANDART MARSCOIN ROKET',
+    margin,
+    slPct: 0.25,
+    bePct: 0.20,
+    tp1Pct: 0.60,
+    moonPct: 0.42,
+    convictionScore: score,
+    rationale: `Skor %${score}. Teminat $${margin}, tavan $${cap}.`
+  };
 }
 
 /**
@@ -359,10 +349,11 @@ async function runAutonomousTeamSync(ctx = {}) {
 
   const meetingLines = [];
 
-  const champName = (champion && champion.name) || "🔒 Erken Kilit";
-  const champPf = (champion && champion.summary && champion.summary.profitFactor) || 2.1;
-  const champWr = (champion && champion.summary && champion.summary.winRatePct) || 85;
-  const champPnl = (champion && champion.summary && champion.summary.totalPnl) || 10.5;
+  const champApplied = !!(intervention.championStrategy);
+  const champName = (champion && champion.name) || 'yok';
+  const champPf = (champion && champion.summary) ? champion.summary.profitFactor : null;
+  const champWr = (champion && champion.summary) ? champion.summary.winRatePct : null;
+  const champPnl = (champion && champion.summary) ? champion.summary.totalPnl : null;
 
   if (isDefensive) {
     meetingLines.push([
@@ -377,10 +368,13 @@ async function runAutonomousTeamSync(ctx = {}) {
       `🧠 [ADLİ TEŞHİS]: ${fs_.totalTrades || 0} işlem incelendi (%${winRate} WR, PF: ${pf}).`,
       'STRATEGY'
     ]);
-    const pnlSignStr = Number(champPnl) >= 0 ? `+$${champPnl}` : `-$${Math.abs(champPnl)}`;
+    const pnlSignStr = champPnl == null ? '-' : (Number(champPnl) >= 0 ? `+$${champPnl}` : `-$${Math.abs(champPnl)}`);
+    const champVerdict = champApplied
+      ? `PF ${fmt(champPf)} eşiği geçti, çıkış bandına uygulandı.`
+      : `PF ${fmt(champPf)}, eşik 1.25 altında, uygulanmadı.`;
     meetingLines.push([
       'TESTER',
-      `🧪 [STRATEJİ OPTİMİZASYONU]: 32 farklı strateji son 24 saatin mumlarında simüle edildi. 🏆 ŞAMPİYON: "${champName}" (PF: ${champPf}, WR: %${champWr}, Sim Kâr: ${pnlSignStr} | SL: %${proposedExit.slPct}, BE: %${proposedExit.bePct}, TP1: %${proposedExit.tp1Pct}). En karlı strateji canlıya uygulandı!`,
+      `🧪 [STRATEJİ OPTİMİZASYONU]: 32 strateji tarandı. Aday "${champName}" (PF: ${fmt(champPf)}, WR: %${fmt(champWr, 1)}, Sim: ${pnlSignStr}). ${champVerdict}`,
       'STRATEGY'
     ]);
     const topBullStr = (moneyFlow.topBullInflows || []).map(b => `${b.symbol} (+$${b.netFlowM}M)`).join(', ');
@@ -403,18 +397,18 @@ async function runAutonomousTeamSync(ctx = {}) {
     ]);
     meetingLines.push([
       'TRADER',
-      `⚔️ [EMİR ONAYLANDI]: Savunma ve Şampiyon "${champName}" stratejisi yürütülüyor! Tek slot, $${intervention.marginPerTrade} teminat. Taker ≥ %54.0 ve tepe tuzağı engelli roketler taranıyor.`,
+      `⚔️ [EMİR ONAYLANDI]: Savunma modu. Tek slot, teminat $${intervention.marginPerTrade}. ${champVerdict}`,
       'TRADE'
     ]);
     meetingLines.push([
       'ENGINEER',
-      `💻 [SİSTEM & KOD GÜNCELLEMESİ]: Canlı server.js çekirdeğine Şampiyon "${champName}" parametreleri sıcak yüklendi (Hot-Reload). Parametreler senkronize, sistem stabil.`,
+      `💻 [SİSTEM]: Çıkışlar scalp bandında (SL %${proposedExit.slPct}, BE %${proposedExit.bePct}, Moon %${proposedExit.moonPct}). ${champApplied ? `Şampiyon "${champName}" yüklendi.` : 'Şampiyon yüklenmedi.'}`,
       'SYSTEM'
     ]);
   } else {
     meetingLines.push([
       'MANAGER',
-      `👑 [VUR-KAÇ PORTFÖY DİREKTÖRÜ]: Kasa $${fmt(ctx.balance)}, açık slot ${ctx.activeCount ?? '-'}/${intervention.maxSlots}. Mod: ${intervention.mode}. A+ Şampiyon sinyallerde Kelly teminatı $25-$28'e yükseltilecek! Sert sınırlar: ${guardrailsOk ? 'uyumlu' : 'İHLAL VAR'}.`,
+      `👑 [VUR-KAÇ PORTFÖY DİREKTÖRÜ]: Kasa $${fmt(ctx.balance)}, açık slot ${ctx.activeCount ?? '-'}/${intervention.maxSlots}. Mod: ${intervention.mode}. Teminat tavanı $${intervention.marginPerTrade}. Skor bu tavanı büyütmez. Sert sınırlar: ${guardrailsOk ? 'uyumlu' : 'İHLAL VAR'}.`,
       'RISK'
     ]);
     meetingLines.push([
@@ -444,7 +438,7 @@ async function runAutonomousTeamSync(ctx = {}) {
     ]);
     meetingLines.push([
       'TRADER',
-      `⚔️ [DİNAMİK YÜRÜTME]: 350+ koin taranıyor. Standart teminat: $${intervention.marginPerTrade}, A+ Şampiyon: $25-$28. Kademeli TP1 +%${intervention.tp1Pct}, Vur-Kaç Moonshot +%${intervention.moonPct}.`,
+      `⚔️ [DİNAMİK YÜRÜTME]: 350+ koin taranıyor. Teminat tavanı $${intervention.marginPerTrade}. TP1 +%${intervention.tp1Pct}, Moon +%${intervention.moonPct}.`,
       'TRADE'
     ]);
     meetingLines.push([

@@ -33,7 +33,7 @@ try {
 
 let globalWhaleFlowMap = (teamStatusCache && teamStatusCache.moneyFlow && teamStatusCache.moneyFlow.flowMap) || {};
 let globalFundingMap = (teamStatusCache && teamStatusCache.fundingRates && teamStatusCache.fundingRates.fundingMap) || {};
-let predictTradeProbability = () => ({ isApproved: true, winProbabilityPct: 75, confidence: 'ORTA' });
+let predictTradeProbability = () => ({ isApproved: true, winProbabilityPct: null, modelReady: false, confidence: 'EĞİTİLMEDİ' });
 try {
   const mlMod = require('./quant_lab/freqai_ml_engine');
   predictTradeProbability = mlMod.predictTradeProbability;
@@ -1139,7 +1139,7 @@ async function scanLoop() {
             netFlowM: scoutInfo ? scoutInfo.netFlowM : 0,
             mode: DYNAMIC.mode
           };
-          let mlEval = { isApproved: true, winProbabilityPct: 75, confidence: 'YÜKSEK', topDeterrent: '' };
+          let mlEval = { isApproved: true, winProbabilityPct: null, modelReady: false, confidence: 'EĞİTİLMEDİ', topDeterrent: '' };
           try {
             mlEval = predictTradeProbability(mlFeatures);
           } catch(e) {}
@@ -1192,7 +1192,8 @@ async function scanLoop() {
                 sym: sym,
                 side: side,
                 takerBuyRatio: rInfo ? (rInfo.takerBuyRatio || 50) : 50,
-                winProbabilityPct: mlEval ? mlEval.winProbabilityPct : 70,
+                winProbabilityPct: (mlEval && mlEval.modelReady) ? mlEval.winProbabilityPct : null,
+                modelReady: !!(mlEval && mlEval.modelReady),
                 netFlowM: scoutInfo ? scoutInfo.netFlowM : 0,
                 vol3hM: rInfo ? (rInfo.vol3hM || 5.0) : 5.0,
                 isVip: VIP_TARGETS[sym] !== undefined,
@@ -1200,6 +1201,7 @@ async function scanLoop() {
                 balance: balance,
                 mode: DYNAMIC.mode,
                 freeMargin: currentFreeMargin,
+                marginCap: CONFIG.marginPerTrade,
                 fundingRatePct: fundingInfo ? fundingInfo.fundingRatePct : 0.01,
                 isShortSqueeze: !!(fundingInfo && (fundingInfo.bias === 'SHORT_SQUEEZE_ALERT' || fundingInfo.fundingRatePct <= -0.030))
               });
@@ -1213,7 +1215,10 @@ async function scanLoop() {
           sizing.tp1Pct = CONFIG.tp1Pct || 0.60;
           sizing.moonPct = CONFIG.moonPct || 0.42;
 
-          const tradeMargin = Number(sizing.margin) || CONFIG.marginPerTrade || 15.0;
+          const marginCap = Number(CONFIG.marginPerTrade) || 12;
+          let tradeMargin = Number(sizing.margin);
+          if (!Number.isFinite(tradeMargin) || tradeMargin <= 0) tradeMargin = marginCap;
+          tradeMargin = Math.min(tradeMargin, marginCap);
           const tradeSlPct = Number(sizing.slPct) || CONFIG.slPct || 1.10;
           const tradeBePct = Number(sizing.bePct) || CONFIG.bePct || 1.00;
           const tradeTp1Pct = Number(sizing.tp1Pct) || CONFIG.tp1Pct || 1.20;
