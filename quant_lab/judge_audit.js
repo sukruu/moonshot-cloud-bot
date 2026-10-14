@@ -63,10 +63,29 @@ class JudicialAuditCourt {
    * ⚖️ Mahkeme Oturumu: Geçmiş İşlemleri Denetle ve Sabıka Kaydı Oluştur
    */
   runCourtSession() {
+    const emptyStats = {
+      totalTrials: 0,
+      convictions: 0,
+      acquittals: 0,
+      averageJudicialScore: null,
+      lastAuditAt: new Date().toISOString()
+    };
     try {
-      if (!fs.existsSync(HISTORY_FILE)) return;
+      if (!fs.existsSync(HISTORY_FILE)) {
+        this.auditTrail = [];
+        this.probationList = {};
+        this.stats = emptyStats;
+        this.saveAuditTrail();
+        return;
+      }
       const history = JSON.parse(fs.readFileSync(HISTORY_FILE, 'utf8'));
-      if (!Array.isArray(history) || history.length === 0) return;
+      if (!Array.isArray(history) || history.length === 0) {
+        this.auditTrail = [];
+        this.probationList = {};
+        this.stats = emptyStats;
+        this.saveAuditTrail();
+        return;
+      }
 
       const coinOffenses = {};
       let totalScores = 0;
@@ -237,7 +256,9 @@ class JudicialAuditCourt {
       stats: this.stats,
       activeBannedCount: activeBans.length,
       bannedSymbols: activeBans,
-      courtSummary: `Mahkeme Denetimi: ${this.stats.totalTrials} duruşma (${this.stats.convictions} mahkumiyet, ${this.stats.acquittals} beraat). Ortalama İntizam Skoru: ${this.stats.averageJudicialScore}/100. Aktif Tedbirli Koinler: ${activeBans.join(', ') || 'Yok'}.`
+      courtSummary: this.stats.totalTrials
+        ? `Mahkeme Denetimi: ${this.stats.totalTrials} duruşma (${this.stats.convictions} mahkumiyet, ${this.stats.acquittals} beraat). Ortalama İntizam Skoru: ${this.stats.averageJudicialScore}/100. Aktif Tedbirli Koinler: ${activeBans.join(', ') || 'Yok'}.`
+        : 'Mahkeme: bu seans henüz duruşma yok. Eski kayıt kullanılmıyor.'
     };
   }
 }

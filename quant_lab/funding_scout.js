@@ -15,7 +15,7 @@ const BANNED_SET = new Set([
 async function fetchBinanceJson(paths) {
   for (const url of paths) {
     try {
-      const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(5000) });
+      const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(12000) });
       if (res.ok) return await res.json();
     } catch (e) {}
   }
@@ -87,46 +87,19 @@ async function scanFundingRates() {
     }
   }
 
-  // Fallback: Eğer ISP engeli varsa gerçekçi örnek veri üret
-  if (list.length === 0) {
-    const sample = [
-      { sym: 'STRKUSDT', rate: -0.048, bias: 'SHORT_SQUEEZE_ALERT', appL: true, appS: false, desc: '🚨 Short Sıkışması Riski (%-0.048)' },
-      { sym: 'PUMPUSDT', rate: 0.075, bias: 'LONG_LIQUIDATION_ALERT', appL: false, appS: true, desc: '⚠️ Long Likidasyon Riski (+%0.075)' },
-      { sym: 'CHIPUSDT', rate: -0.038, bias: 'SHORT_SQUEEZE_ALERT', appL: true, appS: false, desc: '🚨 Short Sıkışması Riski (%-0.038)' },
-      { sym: 'CKBUSDT', rate: 0.010, bias: 'NEUTRAL', appL: true, appS: true, desc: 'Normal Fonlama (+%0.010)' },
-      { sym: 'ENAUSDT', rate: 0.012, bias: 'NEUTRAL', appL: true, appS: true, desc: 'Normal Fonlama (+%0.012)' },
-      { sym: 'ZECUSDT', rate: 0.008, bias: 'NEUTRAL', appL: true, appS: true, desc: 'Normal Fonlama (+%0.008)' }
-    ];
-
-    for (const s of sample) {
-      const record = {
-        symbol: s.sym,
-        fundingRatePct: s.rate,
-        markPrice: 1.0,
-        indexPrice: 1.0,
-        basisPct: 0,
-        bias: s.bias,
-        isApprovedLong: s.appL,
-        isApprovedShort: s.appS,
-        statusDesc: s.desc
-      };
-      fundingMap[s.sym] = record;
-      list.push(record);
-      totalFunding += s.rate;
-    }
-  }
-
-  const topShortSqueezes = [...list].sort((a, b) => a.fundingRatePct - b.fundingRatePct).slice(0, 3);
-  const topOverheatedLongs = [...list].sort((a, b) => b.fundingRatePct - a.fundingRatePct).slice(0, 3);
-  const avgFundingPct = list.length > 0 ? Number((totalFunding / list.length).toFixed(4)) : 0.01;
+  const live = list.length > 0;
+  const topShortSqueezes = live ? [...list].sort((a, b) => a.fundingRatePct - b.fundingRatePct).slice(0, 3) : [];
+  const topOverheatedLongs = live ? [...list].sort((a, b) => b.fundingRatePct - a.fundingRatePct).slice(0, 3) : [];
+  const avgFundingPct = live ? Number((totalFunding / list.length).toFixed(4)) : null;
 
   return {
     scannedAt: new Date().toISOString(),
+    live,
     avgFundingPct,
     count: list.length,
     topShortSqueezes,
     topOverheatedLongs,
-    fundingMap
+    fundingMap: live ? fundingMap : {}
   };
 }
 

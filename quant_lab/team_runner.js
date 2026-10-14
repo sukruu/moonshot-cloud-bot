@@ -374,7 +374,7 @@ async function runAutonomousTeamSync(ctx = {}) {
     const pf = fs_.profitFactor || 0;
     meetingLines.push([
       'ANALYST',
-      `🧠 [ADLİ TEŞHİS]: ${fs_.totalTrades || 56} işlem incelendi (%${winRate} WR, PF: ${pf}). Adli analizde zayıf alıcı (<%54 taker) ve aşırı satımda (-%4.5 altı) shortlanan koinlerin zararın %90'ını ürettiği kanıtlandı. PUMP, CHIP, AVAX, STRK kara listeye alındı; eşik alıcı oranı %54.0'e çıkarıldı.`,
+      `🧠 [ADLİ TEŞHİS]: ${fs_.totalTrades || 0} işlem incelendi (%${winRate} WR, PF: ${pf}).`,
       'STRATEGY'
     ]);
     const pnlSignStr = Number(champPnl) >= 0 ? `+$${champPnl}` : `-$${Math.abs(champPnl)}`;
@@ -393,7 +393,7 @@ async function runAutonomousTeamSync(ctx = {}) {
     const sqzStr = (fundingRates.topShortSqueezes || []).map(s => `${s.symbol} (%${s.fundingRatePct})`).join(', ');
     meetingLines.push([
       'FREQAI',
-      `🎯 [FREQ-AI & FONLAMA]: ML Olasılık Modeli devrede (Eğitim: ${freqAiStats.trainingSamples} işlem, Eşik: %72). Ortalama fonlama: %${fundingRates.avgFundingPct}. Sıkışma adayı: ${sqzStr || 'Yok'}. Düşük olasılıklı işlemler veto edilecek.`,
+      `🎯 [FREQ-AI & FONLAMA]: ${freqAiStats.modelReady ? `Model ${freqAiStats.trainingSamples} işlemle hazır.` : `Model eğitilmedi (${freqAiStats.trainingSamples} işlem). Veto kapalı.`} Fonlama: ${fundingRates.live ? `%${fundingRates.avgFundingPct}` : 'canlı veri yok'}. Sıkışma: ${sqzStr || 'yok'}.`,
       'STRATEGY'
     ]);
     meetingLines.push([
@@ -429,7 +429,7 @@ async function runAutonomousTeamSync(ctx = {}) {
     ]);
     meetingLines.push([
       'FREQAI',
-      `🎯 [FREQ-AI & FONLAMA]: ML Karar Motoru hazır (${freqAiStats.trainingSamples} işlem kalibre). Ortalama fonlama: %${fundingRates.avgFundingPct}. Minimum kazanma olasılığı eşiği: %68.`,
+      `🎯 [FREQ-AI & FONLAMA]: ${freqAiStats.modelReady ? `Model hazır (${freqAiStats.trainingSamples} işlem).` : `Model eğitilmedi (${freqAiStats.trainingSamples} işlem), veto kapalı.`} Fonlama: ${fundingRates.live ? `%${fundingRates.avgFundingPct}` : 'canlı veri yok'}.`,
       'STRATEGY'
     ]);
     meetingLines.push([
@@ -504,13 +504,17 @@ async function runAutonomousTeamSync(ctx = {}) {
       },
       freqai: {
         role: '🎯 FreqAI & Likidasyon Dedektifi',
-        status: `%${freqAiStats.historicalWinRate} WR (${freqAiStats.trainingSamples} İşlem)`,
-        avgFunding: `%${fundingRates.avgFundingPct}`,
-        topSqueeze: (fundingRates.topShortSqueezes && fundingRates.topShortSqueezes[0]) ? `${fundingRates.topShortSqueezes[0].symbol} (%${fundingRates.topShortSqueezes[0].fundingRatePct})` : '-'
+        status: freqAiStats.modelReady
+          ? `%${freqAiStats.historicalWinRate} WR (${freqAiStats.trainingSamples} işlem)`
+          : `Eğitilmedi (${freqAiStats.trainingSamples} işlem)`,
+        avgFunding: fundingRates.live ? `%${fundingRates.avgFundingPct}` : 'veri yok',
+        topSqueeze: (fundingRates.live && fundingRates.topShortSqueezes && fundingRates.topShortSqueezes[0]) ? `${fundingRates.topShortSqueezes[0].symbol} (%${fundingRates.topShortSqueezes[0].fundingRatePct})` : '-'
       },
       judge: {
         role: '🏛️ Aslan11 Baş Adli Yargıç',
-        status: `Mahkeme: ${judgeDossier.stats.averageJudicialScore} Puan`,
+        status: judgeDossier.stats.totalTrials
+          ? `Mahkeme: ${judgeDossier.stats.averageJudicialScore} puan (${judgeDossier.stats.totalTrials})`
+          : 'Bu seans duruşma yok',
         trials: judgeDossier.stats.totalTrials,
         convictions: judgeDossier.stats.convictions,
         acquittals: judgeDossier.stats.acquittals,

@@ -1275,7 +1275,9 @@ async function scanLoop() {
             const fundTxt = fundingInfo ? ` (%${fundingInfo.fundingRatePct})` : '';
             addDialogue('ANALYST', `🚨 ${sym} ${side} sinyali: 3s hacim ${volTxt}, alıcı oranı ${takerTxt}, 24s %${chg24Val.toFixed(1)}, rejim: ${DYNAMIC.regime}.`, 'TRADE');
             addDialogue('WHALE_HUNTER', `🐋 ${sym} ${side} ONAYLANDI: Para akışı lehimize${scoutTxt}. Büyük oyuncularla aynı yöndeyiz!`, 'TRADE');
-            addDialogue('FREQAI', `🎯 ${sym} ${side} ONAYLANDI: FreqAI ML Kazanma Olasılığı %${mlEval.winProbabilityPct} (${mlEval.confidence}) | Fonlama: ${fundTxt || '%0.010'}.`, 'TRADE');
+            addDialogue('FREQAI', mlEval.modelReady === false || mlEval.winProbabilityPct == null
+              ? `🎯 ${sym} ${side}: FreqAI eğitilmedi, bu işlem skorla veto edilmedi.`
+              : `🎯 ${sym} ${side} ONAYLANDI: FreqAI kazanma olasılığı %${mlEval.winProbabilityPct} (${mlEval.confidence}) | Fonlama: ${fundTxt || 'veri yok'}.`, 'TRADE');
             addDialogue('JUDGE', `🏛️ ${sym} ${side} BERAAT: Disiplin Puanı ${judgeClearance.judicialScore}/100. Giriş nizamı ve kurallar onaylandı.`, 'TRADE');
             addDialogue('TRADER', `⚔️ ${sym} ${side} @ $${curP.toFixed(4)} | Nominal $${(tradeMargin * CONFIG.leverage).toFixed(0)} (${CONFIG.leverage}x) | Teminat $${tradeMargin.toFixed(1)} | SL $${stopPrice.toFixed(4)}.`, 'TRADE');
             addDialogue('MANAGER', `👑 [YÖNETİCİ ASİMETRİK VUR-KAÇ]: ${sym} ${sizing.tierLabel} (Skor %${sizing.convictionScore}). Teminat $${tradeMargin.toFixed(1)} tahsis edildi! Hedef TP1: +%${tradeTp1Pct.toFixed(2)}, Moon: +%${tradeMoonPct.toFixed(2)}. Slot ${activePositions.length}/${CONFIG.maxSlots}.`, 'RISK');
@@ -3466,8 +3468,8 @@ server.listen(PORT, () => {
         if (report && report.moneyFlow && report.moneyFlow.flowMap) {
           globalWhaleFlowMap = report.moneyFlow.flowMap;
         }
-        if (report && report.fundingRates && report.fundingRates.fundingMap) {
-          globalFundingMap = report.fundingRates.fundingMap;
+        if (report && report.fundingRates) {
+          globalFundingMap = report.fundingRates.live ? (report.fundingRates.fundingMap || {}) : {};
         }
 
         const ei = report && report.executiveIntervention;

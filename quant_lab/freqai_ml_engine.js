@@ -191,8 +191,9 @@ class FreqAiMasterEngine {
     this.stats = {
       modelTrainedAt: null,
       trainingSamples: 0,
-      historicalWinRate: 50,
-      activeModels: ['LightGBM', 'XGBoost', 'CatBoost', 'PyTorch-MLP']
+      historicalWinRate: null,
+      modelReady: false,
+      activeModels: []
     };
 
     this.retrain();
@@ -217,8 +218,9 @@ class FreqAiMasterEngine {
       }
 
       this.stats.trainingSamples = total;
-      this.stats.historicalWinRate = total > 0 ? Number(((wins / total) * 100).toFixed(1)) : 50;
-      this.stats.modelTrainedAt = new Date().toISOString();
+      this.stats.historicalWinRate = total > 0 ? Number(((wins / total) * 100).toFixed(1)) : null;
+      this.stats.modelReady = total >= 30;
+      this.stats.modelTrainedAt = total >= 30 ? new Date().toISOString() : null;
     } catch (e) {
       console.error("[FreqAI] Eğitim hatası:", e.message);
     }
@@ -239,6 +241,18 @@ class FreqAiMasterEngine {
       netFlowM = 0,
       mode = 'BALANCED'
     } = candidate;
+
+    if ((this.stats.trainingSamples || 0) < 30) {
+      return {
+        symbol,
+        side,
+        winProbabilityPct: null,
+        isApproved: true,
+        modelReady: false,
+        confidence: 'EĞİTİLMEDİ',
+        topDeterrent: '30 işlemden az, skor veto etmiyor'
+      };
+    }
 
     // 1. CatBoost Puanı (Kategorik Tarihsel Hafıza)
     const catboostScore = this.catboost.transform(symbol, side);
