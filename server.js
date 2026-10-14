@@ -838,7 +838,7 @@ async function scanLoop() {
         isVip
       };
     })
-    .filter(t => t.isVip || t.volM >= 6.0)
+    .filter(t => t.isVip || t.volM >= 1.5)
     .sort((a, b) => b.hotScore - a.hotScore)
     .slice(0, DYNAMIC.candidateSlice);
 
@@ -931,18 +931,17 @@ async function scanLoop() {
           const chg15Val = (rInfo.chg15m !== undefined && rInfo.chg15m !== null) ? rInfo.chg15m : 0;
           const sig = rInfo.signal || "";
 
-          // 1. YÜKSELİRKEN VUR-KAÇ (LONG): 15m kesinlikle pozitif olmalı (≥ +0.10%) + Taker >= 51.0% (Savunmada 52.5%) + 24s >= -2.0%
-          // 1. YÜKSELİRKEN VUR-KAÇ (LONG): 15m kesinlikle pozitif olmalı (≥ +0.10%) + Taker >= 51.0% + 24s >= -9.0% (Dipten dönüşlere izin ver!)
-          const minTakerLong = DYNAMIC.mode === 'DEFENSIVE_SNIPER' ? 52.5 : 51.0;
-          const isEarlyLongMove = chg15Val >= 0.10 && (chg3 >= 1.0 || chg15Val >= 0.8) && chg3 <= 14.0 && chg24Val >= -9.0 && chg24Val < 32.0 && taker >= minTakerLong;
+          // 1. YÜKSELİRKEN VUR-KAÇ (LONG): 15m pozitif + Taker >= 50.0% + Radar Boğa/Roket/Balina/Sıçrama
+          const minTakerLong = DYNAMIC.mode === 'DEFENSIVE_SNIPER' ? 51.5 : 50.0;
+          const isEarlyLongMove = chg15Val >= 0.05 && (chg3 >= 0.3 || chg15Val >= 0.3) && chg24Val >= -15.0 && taker >= minTakerLong;
           if (isEarlyLongMove && (sig.includes("BOĞA") || sig.includes("ROKET") || sig.includes("SIÇRAMA") || sig.includes("BALİNA"))) {
             isDirectRadarLong = true;
             radarTag = `[${sig} | 3s: +%${chg3.toFixed(1)} / 15m: +%${chg15Val.toFixed(1)} / %${taker.toFixed(0)} Alıcı]`;
           }
 
-          // 2. DÜŞERKEN VUR-KAÇ (SHORT): 15m kesinlikle negatif olmalı (≤ -0.10%) + Taker <= 49.0% + 3s >= -6.5% (Aşırı satım engeli)
-          const maxTakerShort = DYNAMIC.mode === 'DEFENSIVE_SNIPER' ? 47.5 : 49.0;
-          const isEarlyShortMove = chg15Val <= -0.10 && (chg3 <= -1.0 || chg15Val <= -0.8) && chg3 >= -6.5 && chg24Val <= 8.0 && chg24Val > -20.0 && taker <= maxTakerShort;
+          // 2. DÜŞERKEN VUR-KAÇ (SHORT): 15m negatif + Taker <= 50.0% + Radar Ayı/Şelale/Balina
+          const maxTakerShort = DYNAMIC.mode === 'DEFENSIVE_SNIPER' ? 48.5 : 50.0;
+          const isEarlyShortMove = chg15Val <= -0.05 && (chg3 <= -0.3 || chg15Val <= -0.3) && chg24Val <= 15.0 && taker <= maxTakerShort;
           if (isEarlyShortMove && (sig.includes("AYI") || sig.includes("ŞELALE") || sig.includes("BALİNA"))) {
             isDirectRadarShort = true;
             radarTag = `[${sig} | 3s: %${chg3.toFixed(1)} / 15m: %${chg15Val.toFixed(1)} / %${(100 - taker).toFixed(0)} Satıcı]`;
@@ -951,84 +950,60 @@ async function scanLoop() {
           // 3. NEGATİF FONLAMA SHORT SQUEEZE TETİĞİ (KURUMSAL LİKİDASYON ROKETİ)
           const fItemLive = fundMap[sym];
           const isSqueezeAlert = !!(fItemLive && (fItemLive.bias === 'SHORT_SQUEEZE_ALERT' || fItemLive.fundingRatePct <= -0.030));
-          if (isSqueezeAlert && chg15Val >= 0.05 && taker >= 50.8 && chg24Val >= -6.0 && chg24Val < 30.0) {
+          if (isSqueezeAlert && chg15Val >= 0.05 && taker >= 50.0) {
             isDirectRadarLong = true;
             radarTag = `[🔥 SHORT SQUEEZE | Fonlama: %${fItemLive.fundingRatePct} / %${taker.toFixed(0)} Alıcı]`;
           }
 
-          // 🛡️ DÜŞEN BIÇAK (FALLING KNIFE) ENGELİ: 15m mumu negatif olan koine LONG, pozitif olan koine SHORT KESİNLİKLE YASAK!
-          if (chg15Val < 0.10) {
+          // 🛡️ DÜŞEN BIÇAK ENGELİ: Sadece aşırı zıt yönlerde engelle
+          if (chg15Val < -0.40) {
             isDirectRadarLong = false;
             radarOkLong = false;
           }
-          if (chg15Val > -0.10) {
+          if (chg15Val > 0.40) {
             isDirectRadarShort = false;
             radarOkShort = false;
-          }
-
-          // 🛡️ AŞIRI SATIM & DİP TUZAĞI ENGELİ: Koin zaten 3 saatte -%6.5 veya 24 saatte -%20 çöktüyse SHORT YASAK!
-          if (chg3 <= -6.5 || chg24Val <= -20.0) {
-            radarOkShort = false;
-            isDirectRadarShort = false;
-          }
-          // 🛡️ AŞIRI ALIM & TEPE TUZAĞI ENGELİ: Koin zaten 3 saatte +%14 veya 24 saatte +%35 fırladıysa LONG YASAK!
-          if (chg3 >= 14.0 || chg24Val >= 35.0) {
-            radarOkLong = false;
-            isDirectRadarLong = false;
           }
 
           // 🛡️ SİNYAL TERSİNE İŞLEM AÇMA YASAĞI
-          if (chg3 >= 1.5 || sig.includes("ROKET") || sig.includes("BOĞA") || sig.includes("SIÇRAMA")) {
+          if (sig.includes("ROKET") || sig.includes("BOĞA")) {
             radarOkShort = false;
             isDirectRadarShort = false;
           }
-          if (chg3 <= -1.5 || sig.includes("ŞELALE") || sig.includes("AYI")) {
+          if (sig.includes("ŞELALE") || sig.includes("AYI")) {
             radarOkLong = false;
             isDirectRadarLong = false;
-          }
-
-          if (taker < 50.5 && chg3 < 0.0) radarOkLong = false;
-          if (taker > 49.5 && chg3 > 0.0) radarOkShort = false;
-
-          // 🚫 24s-3s YÖN UYUMSUZLUĞU FİLTRESİ: Günlük trend aşırı zıt değilse dipten dönüşe izin ver!
-          if (isDirectRadarLong && chg24Val < -9.0) {
-            isDirectRadarLong = false;
-            radarOkLong = false;
-          }
-          if (isDirectRadarShort && chg24Val > 8.0) {
-            isDirectRadarShort = false;
-            radarOkShort = false;
           }
         }
 
-        // 🕐 1. ANLIK MUM TEYİDİ & FRESH MOMENTUM (Bayatlamış Pompaları Ele!)
+        // 🕐 1. ANLIK MUM TEYİDİ & FRESH MOMENTUM
         const candleStart = (k3m[lastIdx] && k3m[lastIdx][0]) ? k3m[lastIdx][0] : (Date.now() - 60000);
         const candleElapsedSec = Math.max(15, Math.min(180, (Date.now() - candleStart) / 1000));
         const projectedVol = curV * (180 / candleElapsedSec);
 
-        const curCandleGreen = (curP > curO && curMovePct >= 0.25) || (twoCandleMovePct >= 0.40 && curP >= curO * 0.998);
-        const curCandleRed = (curP < curO && curMovePct <= -0.25) || (twoCandleMovePct <= -0.40 && curP <= curO * 1.002);
+        const curCandleGreen = (curP > curO && curMovePct >= 0.15) || (twoCandleMovePct >= 0.25 && curP >= curO * 0.998);
+        const curCandleRed = (curP < curO && curMovePct <= -0.15) || (twoCandleMovePct <= -0.25 && curP <= curO * 1.002);
         
-        const freshVolumeLong = projectedVol >= avgVol20 * 1.2 || curV >= avgVol20 * 1.05 || prevV >= avgVol20 * 1.2 || (curV + prevV) >= avgVol20 * 1.6;
-        const freshVolumeShort = projectedVol >= avgVol20 * 1.2 || curV >= avgVol20 * 1.05 || prevV >= avgVol20 * 1.2 || (curV + prevV) >= avgVol20 * 1.6;
+        const freshVolumeLong = projectedVol >= avgVol20 * 1.1 || curV >= avgVol20 * 0.9 || prevV >= avgVol20 * 1.1 || (curV + prevV) >= avgVol20 * 1.4;
+        const freshVolumeShort = projectedVol >= avgVol20 * 1.1 || curV >= avgVol20 * 0.9 || prevV >= avgVol20 * 1.1 || (curV + prevV) >= avgVol20 * 1.4;
 
         // 🏔️ MARSCOIN EFSANEVİ ROKET MOTORU (GERÇEK KAR MAKİNESİ)
-        // 1. Kural: Hacim Şartı (Gerçek Balina = En az 2.0x hacim patlaması)
-        const isWhaleVol = curV >= avgVol20 * 2.0 || (curV + prevV) >= avgVol20 * 3.0 || prevV >= avgVol20 * 2.0;
+        // 1. Kural: Hacim Şartı (1.4x hacim patlaması veya projeksiyon)
+        const isWhaleVol = projectedVol >= avgVol20 * 1.4 || curV >= avgVol20 * 1.3 || (curV + prevV) >= avgVol20 * 2.0 || prevV >= avgVol20 * 1.4;
 
-        // 2. Kural: Günlük Trend Takibi (%2 - %80 arası roketler)
-        const isDailyTrending = chg24Val >= 2.0 && chg24Val <= 80.0;
+        // 2. Kural: Günlük Trend Takibi (%1.5+ roketler)
+        const isDailyTrending = chg24Val >= 1.5;
 
-        // 3. Kural: Sıfır Bekleme Dikey İvme (En az %0.75 zıplama)
-        const hasMomentum = (curMovePct >= 0.75 && curP > curO) || 
-                            (twoCandleMovePct >= 1.05 && curP >= curO * 0.998);
+        // 3. Kural: Sıfır Bekleme Dikey İvme (En az %0.40 zıplama)
+        const hasMomentum = (curMovePct >= 0.40 && curP > curO) || 
+                            (twoCandleMovePct >= 0.65 && curP >= curO * 0.998);
 
-        // 4. Kural: Mum Dikliği (Wick Filtresi) - Gövde orantısı kontrolü (Zirveden aşırı satış yememiş, üst fitil gövdeden küçük)
+        // 4. Kural: Mum Dikliği (Wick Filtresi) - Zirveden fitil payı
         const candleSpan = curH - curL;
         const upperWick = curH - Math.max(curP, curO);
         const lowerWick = Math.min(curP, curO) - curL;
-        const noWickLong = candleSpan > 0 ? (upperWick / candleSpan <= 0.45) : true;
-        const noWickShort = candleSpan > 0 ? (lowerWick / candleSpan <= 0.45) : true;
+        const noWickLong = candleSpan > 0 ? (upperWick / candleSpan <= 0.50) : true;
+        const noWickShort = candleSpan > 0 ? (lowerWick / candleSpan <= 0.50) : true;
 
         // 5. Kural: Likidite & Alıcı Hakimiyeti
         const hasRealLiquidity = rInfo ? ((rInfo.vol3hM || 0) >= (DYNAMIC.vol3hMin || 0.8)) : true;
@@ -1038,7 +1013,7 @@ async function scanLoop() {
         let isLongPump = false;
         let isRocketSignal = false;
         if (hasRealLiquidity && noWickLong && hasBuyerDominance) {
-          const isSpikeVol = (curV >= avgVol20 * 2.0 || projectedVol >= avgVol20 * 2.2) && (curMovePct >= 0.65 || twoCandleMovePct >= 0.95) && curP > curO;
+          const isSpikeVol = (curV >= avgVol20 * 1.5 || projectedVol >= avgVol20 * 1.6) && (curMovePct >= 0.45 || twoCandleMovePct >= 0.70) && curP > curO;
           if (isSpikeVol) {
             isLongPump = true;
             isRocketSignal = true;
@@ -1046,7 +1021,7 @@ async function scanLoop() {
           } else if (hasMomentum && isWhaleVol) {
             isLongPump = true;
             radarTag = `[⚡ MARSCOIN BALİNA İVMESİ | 3dk: +%${curMovePct.toFixed(2)} | Hacim: ${(curV/avgVol20).toFixed(1)}x Kat]`;
-          } else if (isDailyTrending && curMovePct >= 0.65 && isWhaleVol) {
+          } else if (isDailyTrending && curMovePct >= 0.35 && isWhaleVol) {
             isLongPump = true;
             radarTag = `[🏔️ MARSCOIN TREND ROKETİ | Günlük: +%${chg24Val.toFixed(1)} | 3dk: +%${curMovePct.toFixed(2)}]`;
           } else if (isDirectRadarLong && freshVolumeLong && curCandleGreen) {
@@ -1056,13 +1031,19 @@ async function scanLoop() {
         }
 
         // 🔴 MARSCOIN SHORT ATEŞLEMESİ:
-        // Sadece ve sadece aşırı şişmiş (%12+ günlük) ve 2x hacimle şelale başlatan koinler shortlanır! Dipte asla short yok!
         let isShortDump = false;
-        const isDailyOverbought = chg24Val >= 12.0;
-        const hasDownWaterfall = (curMovePct <= -0.90 && curP < curO) && isWhaleVol;
-        if (hasRealLiquidity && isDailyOverbought && hasDownWaterfall && noWickShort) {
-          isShortDump = true;
-          radarTag = `[🌊 MARSCOIN ŞELALE SHORT | Günlük: +%${chg24Val.toFixed(1)} | 3dk: %${curMovePct.toFixed(2)}]`;
+        if (hasRealLiquidity && noWickShort) {
+          const hasDownWaterfall = (curMovePct <= -0.45 && curP < curO) && isWhaleVol;
+          if (chg24Val >= 8.0 && hasDownWaterfall) {
+            isShortDump = true;
+            radarTag = `[🌊 MARSCOIN ŞELALE SHORT | Günlük: +%${chg24Val.toFixed(1)} | 3dk: %${curMovePct.toFixed(2)}]`;
+          } else if (chg24Val <= -2.0 && (curMovePct <= -0.40 && curP < curO) && isWhaleVol) {
+            isShortDump = true;
+            radarTag = `[🩸 MARSCOIN DÜŞÜŞ SHORT | Günlük: %${chg24Val.toFixed(1)} | 3dk: %${curMovePct.toFixed(2)}]`;
+          } else if (isDirectRadarShort && freshVolumeShort && curCandleRed) {
+            isShortDump = true;
+            radarTag = `[🎯 MARSCOIN RADAR SHORT | ${radarTag || sym}]`;
+          }
         }
 
         if (isLongPump || isShortDump) {
