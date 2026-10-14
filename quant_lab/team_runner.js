@@ -17,6 +17,43 @@ const HARD = { maxMargin: 30, maxLeverage: 20, slMin: 0.35, slMax: 1.50 };
 
 const fmt = (n, d = 2) => (Number.isFinite(n) ? n.toFixed(d) : '-');
 
+/** Rejime göre vur-kaç çıkış parametreleri (geniş roket hedefleri yatay piyasada kâr yemez) */
+function scalpParamsFromRegime(regime = {}, defensive = false) {
+  const rec = regime.recommendedConfig || {};
+  const r = regime.regime || 'CHOPPY_RANGE';
+  if (r === 'AGGRESSIVE_BULL_RALLY') {
+    return {
+      mode: defensive ? 'DEFENSIVE_SNIPER' : 'MOMENTUM_ROCKET',
+      slPct: defensive ? 0.42 : 0.55,
+      bePct: 0.50,
+      tp1Pct: 0.90,
+      moonPct: 1.80,
+      vol3hMin: Math.max(rec.vol3hM || 8, 6),
+      candidateSlice: rec.candidateSlice || 25
+    };
+  }
+  if (r === 'BEAR_DUMP_PRESSURE') {
+    return {
+      mode: defensive ? 'DEFENSIVE_SNIPER' : 'VUR_KAC_SCALP',
+      slPct: defensive ? 0.40 : 0.45,
+      bePct: 0.35,
+      tp1Pct: 0.65,
+      moonPct: 1.10,
+      vol3hMin: Math.max(rec.vol3hM || 5, 4),
+      candidateSlice: rec.candidateSlice || 20
+    };
+  }
+  return {
+    mode: defensive ? 'DEFENSIVE_SNIPER' : 'VUR_KAC_SCALP',
+    slPct: defensive ? 0.42 : 0.48,
+    bePct: Math.min(rec.bePct ?? 0.40, 0.45),
+    tp1Pct: Math.min(rec.tp1Pct ?? 0.70, 0.75),
+    moonPct: Math.min(rec.moonPct ?? 1.00, 1.20),
+    vol3hMin: Math.max(rec.vol3hM ?? 1.8, 1.5),
+    candidateSlice: rec.candidateSlice ?? 35
+  };
+}
+
 /**
  * 👑 Yönetici Risk Müdahale Karar Motoru (Circuit Breaker & Sizing Engine)
  * Kasa durumuna ve adli tıp verilerine göre otonom risk seviyesi belirler.
@@ -36,62 +73,38 @@ function evaluateExecutiveIntervention(ctx = {}, forensics = {}, regime = {}) {
   const isSevereLoss = balance < 95.0 || drawdownFromPeak >= 0.20 || (recent.totalTrades >= 8 && recent.profitFactor < 0.75);
   const isModerateLoss = (balance >= 95.0 && balance < 99.0) || drawdownFromPeak >= 0.12;
 
-  let mode = 'BALANCED';
+  const scalp = scalpParamsFromRegime(regime, isSevereLoss || isModerateLoss);
+  let mode = scalp.mode;
   let targetSlots = 2;
-  let targetMargin = 20.0;
-  let targetSl = 0.48;
-  let targetBe = 0.55;
-  let targetTp1 = 0.80;
-  let targetMoon = 1.80;
-  let vol3hMin = 0.8;
-  let candidateSlice = rec.candidateSlice || 35;
+  let targetMargin = 15.0;
+  let targetSl = scalp.slPct;
+  let targetBe = scalp.bePct;
+  let targetTp1 = scalp.tp1Pct;
+  let targetMoon = scalp.moonPct;
+  let vol3hMin = scalp.vol3hMin;
+  let candidateSlice = scalp.candidateSlice;
   let reason = '';
 
   if (isSevereLoss) {
-    mode = 'MARSCOIN_ROCKET';
-    targetSlots = 2;          // 2 slot bağımsız roket yakalama
-    targetMargin = 15.0;      // 🏔️ $15 teminat
-    targetSl = 1.10;          // 🏔️ Marscoin Sağlıklı Stop Loss %1.10 Spot (Nefes alanı tam)
-    targetTp1 = 1.20;         // 💰 %1.20 Spot (+%24 ROI) ile %50 kârı anında nakde çevir
-    targetBe = 1.00;          // 🛡️ Başabaş kilidi: +%1.00 Spot (+%20 ROI) görünce kitle
-    targetMoon = 2.40;        // 🚀 Dev Moonshot +%2.40 Spot (+%48 ROI)
-    vol3hMin = 0.8;           // Gerçek likidite
-    candidateSlice = 35;
-    reason = `Bakiye $${fmt(balance)}. 🏔️ MARSCOIN ROKET MODU AKTİF: Slot 2, Teminat $15, SL %1.10, TP1 %1.20, Moonshot %2.40.`;
+    targetMargin = 12.0;
+    targetSlots = 1;
+    reason = `Bakiye $${fmt(balance)}. 🛡️ SAVUNMA VUR-KAÇ: 1 slot, $12, SL %${targetSl}, TP1 %${targetTp1}, Moon %${targetMoon}.`;
   } else if (isModerateLoss) {
-    mode = 'MARSCOIN_ROCKET';
-    targetSlots = 2;
-    targetMargin = 15.0;
-    targetSl = 1.10;
-    targetTp1 = 1.20;
-    targetBe = 1.00;
-    targetMoon = 2.40;
-    vol3hMin = 0.8;
-    candidateSlice = 35;
-    reason = `Bakiye $${fmt(balance)}. 🏔️ MARSCOIN ROKET MODU AKTİF: Slot 2, Teminat $15, SL %1.10, TP1 %1.20, Moonshot %2.40.`;
+    targetMargin = 13.0;
+    reason = `Bakiye $${fmt(balance)}. 🎯 DİKKATLİ VUR-KAÇ: SL %${targetSl}, TP1 %${targetTp1}, Moon %${targetMoon}.`;
   } else if (balance >= 120.0) {
     mode = 'GROWTH';
     targetSlots = 3;
-    targetMargin = 20.0;
-    targetSl = 1.10;
-    targetTp1 = 1.30;
-    targetBe = 1.00;
-    targetMoon = 2.80;
-    vol3hMin = 0.8;
+    targetMargin = 18.0;
+    targetSl = 0.52;
+    targetTp1 = 0.85;
+    targetBe = 0.45;
+    targetMoon = 1.35;
+    vol3hMin = Math.max(vol3hMin, 2.0);
     candidateSlice = 40;
-    reason = `Bakiye $${fmt(balance)} (Büyüme). BÜYÜME MODU: 3 Slot, $20 Teminat, SL %1.10, TP1 %1.30.`;
+    reason = `Bakiye $${fmt(balance)} (Büyüme). 3 slot vur-kaç: SL %${targetSl}, Moon %${targetMoon}.`;
   } else {
-    // Mevcut bakiye ~$100-$119 aralığı (Dengeli Vur-Kaç)
-    mode = 'MARSCOIN_ROCKET';
-    targetSlots = 2;
-    targetMargin = 15.0;
-    targetSl = 1.10;
-    targetTp1 = 1.20;
-    targetBe = 1.00;
-    targetMoon = 2.40;
-    vol3hMin = 0.8;
-    candidateSlice = 35;
-    reason = `Bakiye $${fmt(balance)}. 🏔️ MARSCOIN ROKET MODU AKTİF: 2 Slot, SL %1.10, TP1 %1.20, Moonshot +%2.40.`;
+    reason = `Bakiye $${fmt(balance)}. 🎯 VUR-KAÇ (${regime.regime || 'CHOPPY'}): SL %${targetSl}, TP1 %${targetTp1}, Moon %${targetMoon}.`;
   }
 
   return {
@@ -210,18 +223,18 @@ function calculateConvictionSizing({
     if (free < margin) margin = Math.max(10.0, Number(free.toFixed(1)));
 
     const customLabel = isSqueeze ? '👑 A+ SHORT SQUEEZE ROKETİ' : '👑 A+ ŞAMPİYON VUR-KAÇ';
-    const moonTarget = isSqueeze ? 2.40 : 2.20;
-    const tp1Target = isSqueeze ? 1.05 : 1.00;
+    const moonTarget = isSqueeze ? 1.20 : 1.00;
+    const tp1Target = isSqueeze ? 0.75 : 0.70;
 
     return {
       tier: 'TIER_A_PLUS',
       tierLabel: customLabel,
       isShortSqueeze: isSqueeze,
       margin: margin,
-      slPct: 1.10,       // 🏔️ Marscoin Sağlıklı Stop Loss
-      bePct: 1.00,       // 🛡️ +%1.00 Spot görünce $0 riske kitle
-      tp1Pct: 1.20,      // 💰 TP1 kârı %1.20 Spot (+%24 ROI)
-      moonPct: 2.40,     // 🚀 Dev Marscoin Moonshot +%2.40 Spot (+%48 ROI)
+      slPct: 0.48,
+      bePct: 0.40,
+      tp1Pct: 0.70,
+      moonPct: 1.00,
       convictionScore: score,
       rationale: isSqueeze 
         ? `🔥 SHORT SQUEEZE TESPİT EDİLDİ! Fonlama %${fundRate.toFixed(3)} (Ağır Negatif). Balinalar shortçuları patlatıyor! Teminat $${margin}, Moonshot +%${moonTarget.toFixed(2)}.`
@@ -236,12 +249,12 @@ function calculateConvictionSizing({
       tier: 'TIER_HIGH',
       tierLabel: '💎 TIER-1 GÜÇLÜ SİNYAL',
       margin: margin,
-      slPct: 1.10,
-      bePct: 1.00,
-      tp1Pct: 1.20,
-      moonPct: 2.40,
+      slPct: 0.48,
+      bePct: 0.40,
+      tp1Pct: 0.70,
+      moonPct: 1.00,
       convictionScore: score,
-      rationale: `Skor %${score}. Güçlü kurumsal sinyal! Teminat $${margin}, TP1 %1.20, Moonshot +%2.40.`
+      rationale: `Skor %${score}. Güçlü sinyal! Teminat $${margin}, TP1 %0.70, Moon %1.00.`
     };
   } else {
     // 🛡️ TIER-2 STANDART MARSCOIN KURULUM
@@ -252,12 +265,12 @@ function calculateConvictionSizing({
       tier: 'TIER_STANDARD',
       tierLabel: '🏔️ STANDART MARSCOIN ROKET',
       margin: margin,
-      slPct: 1.10,
-      bePct: 1.00,
-      tp1Pct: 1.20,
-      moonPct: 2.40,
+      slPct: 0.48,
+      bePct: 0.40,
+      tp1Pct: 0.70,
+      moonPct: 1.00,
       convictionScore: score,
-      rationale: `Skor %${score}. Marscoin kurulumu ($${margin} teminat, TP1 %1.20, Moonshot +%2.40).`
+      rationale: `Skor %${score}. Vur-kaç ($${margin}, TP1 %0.70, Moon %1.00).`
     };
   }
 }
@@ -311,18 +324,27 @@ async function runAutonomousTeamSync(ctx = {}) {
     console.error("Optimizer hatası:", e.message);
   }
 
-  // Eğer Şampiyon strateji bulunduysa çıkış parametrelerini şampiyona göre adapte et!
+  const choppy = regime.regime === 'CHOPPY_RANGE' || regime.regime === 'WEEKEND_LOW_LIQUIDITY';
+  const capScalpExit = (p) => ({
+    slPct: Math.min(Number(p.slPct) || 0.48, choppy ? 0.55 : 0.65),
+    bePct: Math.min(Number(p.bePct) || 0.40, choppy ? 0.45 : 0.55),
+    tp1Pct: Math.min(Number(p.tp1Pct) || 0.70, choppy ? 0.75 : 0.95),
+    moonPct: Math.min(Number(p.moonPct) || 1.00, choppy ? 1.20 : 1.80)
+  });
+
+  // Şampiyon yalnızca anlamlı PF ile ve yatay piyasada sıkı tavanla uygulanır
   if (optimizer && optimizer.hasChampion && champion && champion.params) {
-    proposedExit.slPct = champion.params.slPct;
-    proposedExit.bePct = champion.params.bePct;
-    proposedExit.tp1Pct = champion.params.tp1Pct;
-    proposedExit.moonPct = champion.params.moonPct;
-    intervention.slPct = champion.params.slPct;
-    intervention.bePct = champion.params.bePct;
-    intervention.tp1Pct = champion.params.tp1Pct;
-    intervention.moonPct = champion.params.moonPct;
-    intervention.championStrategy = champion;
+    const pf = champion.summary && champion.summary.profitFactor;
+    if (pf >= 1.15) {
+      const capped = capScalpExit(champion.params);
+      Object.assign(proposedExit, capped);
+      Object.assign(intervention, capped);
+      intervention.championStrategy = champion;
+    }
   }
+
+  Object.assign(proposedExit, capScalpExit(proposedExit));
+  Object.assign(intervention, capScalpExit(intervention));
 
   const currentExit = {
     slPct: liveCfg.slPct,
