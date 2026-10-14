@@ -570,10 +570,18 @@ async function runHistoricalDeepScan() {
   }
 }
 
-setTimeout(runHistoricalDeepScan, 5000);
+setTimeout(runHistoricalDeepScan, 3 * 60 * 1000);
 setInterval(runHistoricalDeepScan, 4 * 60 * 60 * 1000);
 // ==========================================
 
+
+let lastFetchWarn = 0;
+function warnFetch(msg) {
+  const now = Date.now();
+  if (now - lastFetchWarn < 60000) return;
+  lastFetchWarn = now;
+  addLog(msg, 'WARN');
+}
 
 async function fetchBinance(url) {
   let relativePath = url;
@@ -611,6 +619,29 @@ async function fetchBinance(url) {
     } catch(e) {}
   }
 
+  try {
+    const spotPath = relativePath.replace(/^\/fapi\/v1\//, '/api/v3/');
+    const visionUrl = 'https://data-api.binance.vision' + spotPath;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+    const res = await fetch(visionUrl, {
+      signal: controller.signal,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'application/json'
+      }
+    });
+    clearTimeout(timeoutId);
+    if (res.ok) {
+      const data = await res.json();
+      if (data) {
+        warnFetch('Vadeli API cevap vermedi. Fiyat spot yedekten geldi.');
+        return data;
+      }
+    }
+  } catch (e) {}
+
+  warnFetch('Binance fiyatı alınamadı. Tarama durdu, işlem açılmıyor.');
   return null;
 }
 
@@ -776,7 +807,13 @@ async function scanLoop() {
     }
 
     const tickers = await fetchBinance("https://fapi.binance.com/fapi/v1/ticker/24hr");
-    if (!tickers || !Array.isArray(tickers)) return;
+    if (!tickers || !Array.isArray(tickers)) {
+      if (Date.now() - lastScanHeartbeat > 60000) {
+        lastScanHeartbeat = Date.now();
+        addLog('Fiyat listesi boş. Yeni işlem açılmıyor.', 'WARN');
+      }
+      return;
+    }
 
     const now = Date.now();
     const vipSyms = Object.keys(VIP_TARGETS).filter(s => !BANNED_SYMBOLS.has(s));
