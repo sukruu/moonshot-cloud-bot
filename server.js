@@ -611,26 +611,6 @@ async function fetchBinance(url) {
     } catch(e) {}
   }
 
-  // 2. 🛡️ KESİNTİSİZ ÇALIŞMA KALKANI: FAPI 429/451 engeline takılırsa Binance Vision Global CDN ile anında kurtar!
-  try {
-    const spotPath = relativePath.replace(/^\/fapi\/v1\//, '/api/v3/');
-    const visionUrl = "https://data-api.binance.vision" + spotPath;
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 5000);
-    const res = await fetch(visionUrl, {
-      signal: controller.signal,
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'application/json'
-      }
-    });
-    clearTimeout(timeoutId);
-    if (res.ok) {
-      const data = await res.json();
-      if (data) return data;
-    }
-  } catch(e) {}
-
   return null;
 }
 
@@ -680,14 +660,14 @@ async function updateRadar() {
     const valid = tickers.filter(t => {
       if (!SYMBOL_REGEX.test(t.symbol) || t.symbol.startsWith("USDC") || BANNED_SYMBOLS.has(t.symbol)) return false;
       const volM = (parseFloat(t.quoteVolume) || 0) / 1e6;
-      return volM >= 3.0;
+      return volM >= 1.5;
     }).sort((a, b) => Math.abs(parseFloat(b.priceChangePercent) || 0) - Math.abs(parseFloat(a.priceChangePercent) || 0));
 
-    // Top 80 koinin 3 saatlik (12x 15m) kline ve alıcı baskısını çek
+    // Tarama evreniyle aynı taban: $1.5M+, 24s hareketi büyük 120 koin
     const chunkSize = 15;
     const scanned = [];
     const freshRadarMap = {};
-    for (let i = 0; i < Math.min(valid.length, 75); i += chunkSize) {
+    for (let i = 0; i < Math.min(valid.length, 120); i += chunkSize) {
       const chunk = valid.slice(i, i + chunkSize);
       await Promise.all(chunk.map(async item => {
         const sym = item.symbol;
@@ -884,7 +864,7 @@ async function scanLoop() {
         const lastP = parseFloat(item.lastPrice);
         if (lastP < 0.0001) return null;
         const k3m = await fetchBinance(`/fapi/v1/klines?symbol=${sym}&interval=1m&limit=30`);
-        return { sym, lastP, k3m, chg: parseFloat(item.priceChangePercent) || 0, isVip: item.isVip };
+        return { sym, lastP, k3m, chg: parseFloat(item.priceChangePercent) || 0, isVip: item.isVip, volM: item.volM };
       }));
 
       for (const data of chunkData) {
@@ -900,9 +880,9 @@ async function scanLoop() {
         }
 
         const rInfo = radarMap[sym] || null;
-        // 🛡️ Sığ koin filtresi: 24 saatlik hacim en az $1.5M olmalıdır
-        const vol24 = data.volM || (rInfo ? rInfo.vol24hM : 0) || 0;
-        if (vol24 > 0 && vol24 < 1.5) continue;
+        if (!rInfo) continue;
+        const vol24 = data.volM || rInfo.vol24hM || 0;
+        if (!(vol24 >= 1.5)) continue;
 
         // 🧠 DEEP ANALYSIS FİLTRELERİ
         const intel = global.coinIntelligence[sym];
@@ -939,55 +919,23 @@ async function scanLoop() {
         const minJump = 0.15;
         const maxChaseMove = 0.35;
 
-        let radarOkLong = true;
-        let radarOkShort = true;
-        let isDirectRadarLong = false;
-        let isDirectRadarShort = false;
+        const quote1m = parseFloat(k3m[lastIdx][7]) || 0;
+        const takerBuy1m = parseFloat(k3m[lastIdx][10]) || 0;
+        const taker1m = quote1m > 0 ? (takerBuy1m / quote1m) * 100 : null;
+        if (taker1m == null) continue;
+
+        const sig = rInfo.signal || "";
+        const chg24Val = Number.isFinite(Number(rInfo.chg24h)) ? Number(rInfo.chg24h) : chg;
+        const chg15Val = Number(rInfo.chg15m);
+        if (!Number.isFinite(chg15Val) || !Number.isFinite(Number(chg24Val))) continue;
+
+        const minTakerLong = DYNAMIC.mode === 'DEFENSIVE_SNIPER' ? 56.0 : 55.0;
+        const maxTakerShort = DYNAMIC.mode === 'DEFENSIVE_SNIPER' ? 44.0 : 45.0;
+        let radarOkLong = chg15Val >= 0;
+        let radarOkShort = chg15Val <= 0;
+        if (sig.includes("ROKET") || sig.includes("BOĞA")) radarOkShort = false;
+        if (sig.includes("ŞELALE") || sig.includes("AYI")) radarOkLong = false;
         let radarTag = "";
-        const chg24Val = rInfo ? (rInfo.chg24h !== undefined ? rInfo.chg24h : chg) : chg;
-        const chg15Val = (rInfo && rInfo.chg15m !== undefined && rInfo.chg15m !== null) ? rInfo.chg15m : 0;
-        const chg3Val = (rInfo && rInfo.chg3h !== undefined && rInfo.chg3h !== null) ? rInfo.chg3h : 0;
-        const takerRatio = (rInfo && rInfo.takerBuyRatio !== undefined && rInfo.takerBuyRatio !== null) ? rInfo.takerBuyRatio : 50;
-
-        if (rInfo) {
-          // 🎯 RADAR DOĞRUDAN VUR-KAÇ TETİĞİ (GECİKMELİ GİRİŞ ENGELLİ)
-          const taker = takerRatio;
-          const chg3 = chg3Val;
-          const sig = rInfo.signal || "";
-
-          // 1. YÜKSELİRKEN VUR-KAÇ (LONG): 15m pozitif + Taker >= 50.0% + Radar Boğa/Roket/Balina/Sıçrama
-          const minTakerLong = DYNAMIC.mode === 'DEFENSIVE_SNIPER' ? 56.0 : 55.0;
-          const isEarlyLongMove = chg15Val >= 0.05 && (chg3 >= 0.3 || chg15Val >= 0.3) && chg24Val >= -15.0 && taker >= minTakerLong;
-          if (isEarlyLongMove && (sig.includes("BOĞA") || sig.includes("ROKET") || sig.includes("SIÇRAMA") || sig.includes("BALİNA"))) {
-            isDirectRadarLong = true;
-            radarTag = `[${sig} | 3s: +%${chg3.toFixed(1)} / 15m: +%${chg15Val.toFixed(1)} / %${taker.toFixed(0)} Alıcı]`;
-          }
-
-          // 2. DÜŞERKEN VUR-KAÇ (SHORT): 15m negatif + Taker <= 50.0% + Radar Ayı/Şelale/Balina
-          const maxTakerShort = DYNAMIC.mode === 'DEFENSIVE_SNIPER' ? 44.0 : 45.0;
-          const isEarlyShortMove = chg15Val <= -0.05 && (chg3 <= -0.3 || chg15Val <= -0.3) && chg24Val <= 15.0 && taker <= maxTakerShort;
-          if (isEarlyShortMove && (sig.includes("AYI") || sig.includes("ŞELALE") || sig.includes("BALİNA"))) {
-            isDirectRadarShort = true;
-            radarTag = `[${sig} | 3s: %${chg3.toFixed(1)} / 15m: %${chg15Val.toFixed(1)} / %${(100 - taker).toFixed(0)} Satıcı]`;
-          }
-
-          if (chg15Val < -0.40) {
-            isDirectRadarLong = false;
-            radarOkLong = false;
-          }
-          if (chg15Val > 0.40) {
-            isDirectRadarShort = false;
-            radarOkShort = false;
-          }
-          if (sig.includes("ROKET") || sig.includes("BOĞA")) {
-            radarOkShort = false;
-            isDirectRadarShort = false;
-          }
-          if (sig.includes("ŞELALE") || sig.includes("AYI")) {
-            radarOkLong = false;
-            isDirectRadarLong = false;
-          }
-        }
 
         // 🕐 1. ANLIK MUM TEYİDİ & FRESH MOMENTUM
         const candleStart = (k3m[lastIdx] && k3m[lastIdx][0]) ? k3m[lastIdx][0] : (Date.now() - 60000);
@@ -1012,10 +960,9 @@ async function scanLoop() {
         const noWickLong = candleSpan > 0 ? (upperWick / candleSpan <= 0.50) : true;
         const noWickShort = candleSpan > 0 ? (lowerWick / candleSpan <= 0.50) : true;
 
-        // 5. Kural: Likidite & Alıcı Hakimiyeti
-        const hasRealLiquidity = rInfo ? ((rInfo.vol3hM || 0) >= (DYNAMIC.vol3hMin || 0.8)) : true;
-        const hasBuyerDominance = rInfo ? ((rInfo.takerBuyRatio || 50) >= 52.0) : true;
-        const hasSellerDominance = rInfo ? ((rInfo.takerBuyRatio || 50) <= 48.0) : true;
+        const hasRealLiquidity = (rInfo.vol3hM || 0) >= (DYNAMIC.vol3hMin || 0.8);
+        const hasBuyerDominance = taker1m >= minTakerLong;
+        const hasSellerDominance = taker1m <= maxTakerShort;
 
         // 🟢 MARSCOIN LONG ATEŞLEMESİ:
         let isLongPump = false;
@@ -1080,39 +1027,43 @@ async function scanLoop() {
             }
           }
 
-          // 🛡️ HUMMINGBOT ORDER BOOK IMBALANCE (OBI - DERİNLİK DENGESİZLİĞİ & DUVAR KORUMASI)
+          let depthData = null;
           try {
-            const depthData = await fetchBinance(`/fapi/v1/depth?symbol=${sym}&limit=10`);
-            if (depthData && Array.isArray(depthData.bids) && Array.isArray(depthData.asks)) {
-              const bidVol = depthData.bids.reduce((acc, b) => acc + ((parseFloat(b[0]) || 0) * (parseFloat(b[1]) || 0)), 0);
-              const askVol = depthData.asks.reduce((acc, a) => acc + ((parseFloat(a[0]) || 0) * (parseFloat(a[1]) || 0)), 0);
-              const totalDepth = bidVol + askVol;
-              if (totalDepth > 0) {
-                const obi = (bidVol - askVol) / totalDepth;
-                if (side === 'LONG' && obi < -0.35) {
-                  addLog(`🛑 [OBI VETO]: ${sym} LONG — Satış duvarı (OBI: ${obi.toFixed(2)}).`, 'WARN');
-                  continue;
-                }
-                if (side === 'SHORT' && obi > 0.35) {
-                  addLog(`🛑 [OBI VETO]: ${sym} SHORT — Alış duvarı (OBI: +${obi.toFixed(2)}).`, 'WARN');
-                  continue;
-                }
-              }
-            }
+            depthData = await fetchBinance(`/fapi/v1/depth?symbol=${sym}&limit=10`);
           } catch(e) {}
+          if (!depthData || !Array.isArray(depthData.bids) || !Array.isArray(depthData.asks)) {
+            addLog(`🛑 [OBI YOK]: ${sym} emir defteri gelmedi, işlem açılmadı.`, 'WARN');
+            continue;
+          }
+          const bidVol = depthData.bids.reduce((acc, b) => acc + ((parseFloat(b[0]) || 0) * (parseFloat(b[1]) || 0)), 0);
+          const askVol = depthData.asks.reduce((acc, a) => acc + ((parseFloat(a[0]) || 0) * (parseFloat(a[1]) || 0)), 0);
+          const totalDepth = bidVol + askVol;
+          if (!(totalDepth > 0)) {
+            addLog(`🛑 [OBI YOK]: ${sym} derinlik boş, işlem açılmadı.`, 'WARN');
+            continue;
+          }
+          const obi = (bidVol - askVol) / totalDepth;
+          if (side === 'LONG' && obi < -0.35) {
+            addLog(`🛑 [OBI VETO]: ${sym} LONG — Satış duvarı (OBI: ${obi.toFixed(2)}).`, 'WARN');
+            continue;
+          }
+          if (side === 'SHORT' && obi > 0.35) {
+            addLog(`🛑 [OBI VETO]: ${sym} SHORT — Alış duvarı (OBI: +${obi.toFixed(2)}).`, 'WARN');
+            continue;
+          }
 
-          let judgeClearance = { approved: true, verdict: 'BERAAT', judicialScore: 85, reason: '' };
+          let judgeClearance = null;
           try {
             judgeClearance = evaluatePreTradeClearance(sym, side, {
-              takerBuyRatio: rInfo ? (rInfo.takerBuyRatio || 50) : 50,
+              takerBuyRatio: taker1m,
               chg15m: chg15Val,
               chg24h: chg24Val
             });
           } catch(e) {}
 
-          if (judgeClearance && judgeClearance.approved === false) {
+          if (!judgeClearance || judgeClearance.approved !== true) {
             coinCooldowns[sym] = now + (3 * 60 * 1000);
-            addLog(`🛡️ [YARGIÇ VETO]: ${sym} ${side} engellendi — ${judgeClearance.reason}`, 'WARN');
+            addLog(`🛡️ [YARGIÇ VETO]: ${sym} ${side} engellendi — ${(judgeClearance && judgeClearance.reason) || 'yargıç cevap vermedi'}`, 'WARN');
             continue;
           }
 
@@ -1162,7 +1113,7 @@ async function scanLoop() {
             vol3hM: rInfo ? rInfo.vol3hM : null,
             chg24h: rInfo ? rInfo.chg24h : chg,
             range3h: rInfo ? rInfo.range3h : "",
-            takerBuyRatio: rInfo ? rInfo.takerBuyRatio : null,
+            takerBuyRatio: taker1m,
             signal: (rInfo && rInfo.signal) ? rInfo.signal : (side === "LONG" ? "🟢 BOĞA MOMENTUM" : "🔴 AYI MOMENTUM"),
             btc5mEntry: btc5mNumeric,
             btc15mEntry: btc15mNumeric
@@ -1196,7 +1147,7 @@ function checkSlotRotation() {
   activePositions.forEach((pos, idx) => {
     const durMin = (now - pos.entryTime) / 60000;
     // 🛡️ DÜZELTME: Derin zarardaki koinler rotasyonla KESİLMEZ! Zarar yazmayı engeller.
-    // Rotasyon SADECE başabaş seviyesinde bayatlamış (ROI -%5 ile +%4 arasında, MFE < %0.45) ve 30 dk hareketsiz kalan koinleri temizler.
+    // Rotasyon, MFE %0.12 altında 3 dakikadır bekleyen işlemi kapatır. 90 sn kuralı bundan önce çalışır.
     if (durMin >= 3 && (pos.mfe || 0) < 0.12 && Math.abs(pos.roi || 0) <= 8.0) {
       if (durMin > maxDuration) {
         maxDuration = durMin;
@@ -1291,7 +1242,10 @@ async function fastRiskLoop() {
       } else if (mfe >= 1.50) {
         targetStop = isLong ? pos.entryPrice * (1 + (mfe - 0.35) / 100) : pos.entryPrice * (1 - (mfe - 0.35) / 100);
       } else if (mfe >= beGoal) {
-        targetStop = isLong ? pos.entryPrice * 1.0012 : pos.entryPrice * 0.9988;
+        const lockPct = Math.max((CONFIG.feeRate * 2 * 100) + 0.02, 0.12);
+        targetStop = isLong
+          ? pos.entryPrice * (1 + lockPct / 100)
+          : pos.entryPrice * (1 - lockPct / 100);
       }
 
       const durSecLive = (now - pos.entryTime) / 1000;
@@ -1299,7 +1253,7 @@ async function fastRiskLoop() {
       if (targetStop) {
         if (!pos.beLocked && mfe >= beGoal) {
           pos.beLocked = true;
-          addLog(`🛡️ [BAŞABAŞ KİLİDİ] ${pos.symbol} +%${mfe.toFixed(2)} Gördü, Stop Girişe Çekildi ($0.00 Risk).`, 'TRADE');
+          addLog(`🛡️ [BAŞABAŞ KİLİDİ] ${pos.symbol} +%${mfe.toFixed(2)} gördü. Stop ücret payının üstüne, giriş+%0.12 çekildi.`, 'TRADE');
         }
         if (!pos.stopPrice || (isLong && targetStop > pos.stopPrice) || (!isLong && targetStop < pos.stopPrice)) {
           pos.stopPrice = targetStop;
@@ -1351,9 +1305,9 @@ async function fastRiskLoop() {
         } else if (pos.beLocked) {
           exitReason = pos.tp1Taken
             ? `🛡️ TP1 KÂRI CEPTE + Kalan Başabaş Kapandı`
-            : `🛡️ Başabaş Koruma Çıkışı ($0.00 Risk / Zirve: +%${mfe.toFixed(2)})`;
+            : `🛡️ Başabaş (ücret payı +%0.12 / Zirve: +%${mfe.toFixed(2)})`;
         } else {
-          exitReason = `🛑 Moonshot Stop Loss (-%${CONFIG.slPct.toFixed(2)})`;
+          exitReason = `🛑 Moonshot Stop Loss (-%${(pos.slPct || CONFIG.slPct).toFixed(2)})`;
         }
       }
 

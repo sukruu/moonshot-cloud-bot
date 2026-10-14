@@ -202,9 +202,21 @@ class JudicialAuditCourt {
     let judicialScore = 85;
     const accusations = [];
 
-    const taker = candidateInfo.takerBuyRatio ?? 50;
-    const chg24 = candidateInfo.chg24h ?? 0;
-    const chg15 = candidateInfo.chg15m ?? 0;
+    const takerRaw = Number(candidateInfo.takerBuyRatio);
+    const chg15raw = Number(candidateInfo.chg15m);
+    const chg24raw = Number(candidateInfo.chg24h);
+    if (!Number.isFinite(takerRaw) || !Number.isFinite(chg15raw) || !Number.isFinite(chg24raw)) {
+      return {
+        approved: false,
+        judicialScore: 0,
+        verdict: 'DELİL YOK',
+        probationActive: false,
+        reason: 'Taker, 15m veya 24s verisi yok. Eksik veriyle işlem açılmaz.'
+      };
+    }
+    const taker = takerRaw;
+    const chg24 = chg24raw;
+    const chg15 = chg15raw;
 
     if (side === 'LONG') {
       if (taker < 51.5) {
@@ -235,7 +247,7 @@ class JudicialAuditCourt {
       }
     }
 
-    const approved = judicialScore >= 60;
+    const approved = judicialScore >= 70;
     const verdict = approved ? 'BERAAT (İntizamlı Giriş İzni)' : 'MAHKEME VETOSU (Kural İhlali)';
     const reason = approved
       ? `Disiplin Puanı: ${judicialScore}/100 — Kurallara uygun`
