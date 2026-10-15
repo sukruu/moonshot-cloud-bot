@@ -96,7 +96,7 @@ function engineSnapshot() {
     userSlots: userRisk.maxSlots,
     userMargin: userRisk.marginPerTrade,
     gates: {
-      entry: '1dk %0.15-%0.35, hacim 1.6x',
+      entry: '1dk %0.23-%0.35, devam skoru, hacim 1.6x',
       book: 'OBI veto',
       judge: 'açık',
       flow: 'son 12 mum',
@@ -971,11 +971,12 @@ async function scanLoop() {
         const chg15Val = Number(rInfo.chg15m);
         if (!Number.isFinite(chg15Val) || !Number.isFinite(Number(chg24Val))) continue;
         if (Math.abs(chg24Val) >= 7) continue;
+        if (chg24Val >= 6) continue;
 
         const minTakerLong = DYNAMIC.mode === 'DEFENSIVE_SNIPER' ? 56.0 : 55.0;
         const maxTakerLong = 70;
         const maxTakerShort = DYNAMIC.mode === 'DEFENSIVE_SNIPER' ? 44.0 : 45.0;
-        const minTakerShort = 20;
+        const minTakerShort = 22;
         let radarOkLong = chg15Val >= 0 && chg24Val > 0;
         let radarOkShort = chg15Val <= 0 && chg24Val < 0;
         if (sig.includes("ROKET") || sig.includes("BOĞA")) radarOkShort = false;
@@ -1010,20 +1011,33 @@ async function scanLoop() {
         const hasBuyerDominance = taker1m >= minTakerLong && taker1m <= maxTakerLong;
         const hasSellerDominance = taker1m <= maxTakerShort && taker1m >= minTakerShort;
 
+        const prevMovePct = prevO > 0 ? ((prevC - prevO) / prevO) * 100 : 0;
+        const tickHist = rollingTickerPrices[sym] || [];
+        let microMovePct = 0;
+        for (let hi = tickHist.length - 1; hi >= 0; hi--) {
+          if (now - tickHist[hi].t >= 12000) {
+            const pOld = tickHist[hi].p;
+            if (pOld > 0) microMovePct = ((curP - pOld) / pOld) * 100;
+            break;
+          }
+        }
+        const continuationLong = prevMovePct >= 0.06 && microMovePct >= 0.04 && curP >= prevC;
+        const continuationShort = prevMovePct <= -0.06 && microMovePct <= -0.04 && curP <= prevC;
+
         // 🟢 MARSCOIN LONG ATEŞLEMESİ:
         let isLongPump = false;
         let isRocketSignal = false;
-        if (hasRealLiquidity && noWickLong && hasBuyerDominance && inLongBand && isWhaleVol && radarOkLong) {
+        if (hasRealLiquidity && noWickLong && hasBuyerDominance && inLongBand && isWhaleVol && radarOkLong && continuationLong) {
           isLongPump = true;
           isRocketSignal = true;
-          radarTag = `[⚡ HIZLI VUR-KAÇ LONG | 1dk: +%${curMovePct.toFixed(2)} | Hacim: ${volMult.toFixed(1)}x]`;
+          radarTag = `[⚡ HIZLI VUR-KAÇ LONG | 1dk: +%${curMovePct.toFixed(2)} | Hacim: ${volMult.toFixed(1)}x | Devam: +%${microMovePct.toFixed(2)}/12sn]`;
         }
 
         // 🔴 MARSCOIN SHORT ATEŞLEMESİ:
         let isShortDump = false;
-        if (hasRealLiquidity && noWickShort && hasSellerDominance && inShortBand && isWhaleVol && radarOkShort) {
+        if (hasRealLiquidity && noWickShort && hasSellerDominance && inShortBand && isWhaleVol && radarOkShort && continuationShort) {
           isShortDump = true;
-          radarTag = `[⚡ HIZLI VUR-KAÇ SHORT | 1dk: %${curMovePct.toFixed(2)} | Hacim: ${volMult.toFixed(1)}x]`;
+          radarTag = `[⚡ HIZLI VUR-KAÇ SHORT | 1dk: %${curMovePct.toFixed(2)} | Hacim: ${volMult.toFixed(1)}x | Devam: %${microMovePct.toFixed(2)}/12sn]`;
         }
 
         if (isLongPump || isShortDump) {
@@ -1327,9 +1341,9 @@ async function fastRiskLoop() {
           : `🏆 Lazer Vur-Kaç Kâr Kilidi (+%${pos.roi.toFixed(1)} ROI / Zirve: +%${mfe.toFixed(2)} Spot)`;
       }
 
-      // 90 sn içinde lehe %0.10 yoksa çizikten çık
-      if (!exitReason && durSecLive >= 90 && (pos.mfe || 0) < 0.10) {
-        exitReason = `⏱️ 90sn İvme Yok (MFE: +%${(pos.mfe || 0).toFixed(2)} / Hızlı Çıkış)`;
+      // 45 sn içinde lehe %0.12 yoksa çizikten çık (vur-kaç oturmadı)
+      if (!exitReason && durSecLive >= 45 && (pos.mfe || 0) < 0.12) {
+        exitReason = `⏱️ 45sn İvme Yok (MFE: +%${(pos.mfe || 0).toFixed(2)} / Hızlı Çıkış)`;
       }
 
       // 🚨 6. AJAN ACİL DURUM TAHLİYESİ (MAKRO PİYASA TERS DÖNÜŞ FRENİ)
