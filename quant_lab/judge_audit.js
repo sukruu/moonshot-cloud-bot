@@ -231,10 +231,6 @@ class JudicialAuditCourt {
         judicialScore -= 25;
         accusations.push(`Günlük çöküşe karşı long suçu (24s: %${chg24})`);
       }
-      if (chg24 >= 6.0) {
-        judicialScore -= 35;
-        accusations.push(`Gün zaten koşmuş long suçu (24s: +%${chg24})`);
-      }
     } else { // SHORT
       const sellTaker = 100 - taker;
       if (sellTaker < 51.5) {

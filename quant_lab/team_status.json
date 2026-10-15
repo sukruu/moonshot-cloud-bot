@@ -1,5 +1,5 @@
 {
-  "lastSync": "2026-10-14T21:12:17.039Z",
+  "lastSync": "2026-10-14T22:07:17.969Z",
   "executiveIntervention": {
     "mode": "DEFENSIVE_SNIPER",
     "active": true,
@@ -153,7 +153,7 @@
     },
     "engineer": {
       "role": "💻 DevOps & Sistem",
-      "uptimeMin": 524,
+      "uptimeMin": 579,
       "dataOk": false
     },
     "whale_scout": {
@@ -181,7 +181,7 @@
   },
   "forensics": {
     "success": true,
-    "auditedAt": "2026-10-14T21:12:11.305Z",
+    "auditedAt": "2026-10-14T22:07:11.366Z",
     "reliable": false,
     "summary": {
       "totalTrades": 0,
@@ -224,7 +224,7 @@
     "marginPerTrade": 20
   },
   "moneyFlow": {
-    "evaluatedAt": "2026-10-14T21:12:12.176Z",
+    "evaluatedAt": "2026-10-14T22:07:12.239Z",
     "marketFlowBias": "BULLISH",
     "netMarketFlowM": 3.1,
     "topBullInflows": [
@@ -416,7 +416,7 @@
     "scoutSummary": "Piyasa Net Akışı: $3.1M (BULLISH). En Çok Para Giren Boğalar: CKBUSDT (+$4.2M), ENAUSDT (+$3.1M), ZECUSDT (+$2.7M) | En Çok Para Çıkan Ayılar: CHIPUSDT (-$3.4M), STRKUSDT (-$2.8M), FETUSDT (-$2.1M)."
   },
   "fundingRates": {
-    "scannedAt": "2026-10-14T21:12:12.760Z",
+    "scannedAt": "2026-10-14T22:07:12.954Z",
     "avgFundingPct": 0.0032,
     "count": 6,
     "topShortSqueezes": [
@@ -582,7 +582,7 @@
     "courtSummary": "Mahkeme Denetimi: 56 duruşma (2 mahkumiyet, 54 beraat). Ortalama İntizam Skoru: 76/100. Aktif Tedbirli Koinler: Yok."
   },
   "optimizer": {
-    "evaluatedAt": "2026-10-14T21:12:14.883Z",
+    "evaluatedAt": "2026-10-14T22:07:15.559Z",
     "candidatesCount": 32,
     "hasChampion": false,
     "champion": {
@@ -716,9 +716,9 @@
   },
   "dialogues": [
     {
-      "id": "1792011137087a8ug",
-      "time": "23:52:17",
-      "timestamp": 1792011137088,
+      "id": "1792014437835rnrf",
+      "time": "00:47:17",
+      "timestamp": 1792014437835,
       "agent": "👑 YÖNETİCİ",
       "roleKey": "MANAGER",
       "color": "#7c3aed",
@@ -727,9 +727,9 @@
       "tag": "RISK"
     },
     {
-      "id": "1792011137088uy36",
-      "time": "23:52:17",
-      "timestamp": 1792011137088,
+      "id": "17920144378365sfj",
+      "time": "00:47:17",
+      "timestamp": 1792014437837,
       "agent": "🧠 ANALİZCİ",
       "roleKey": "ANALYST",
       "color": "#0284c7",
@@ -738,9 +738,9 @@
       "tag": "STRATEGY"
     },
     {
-      "id": "1792011137089c6gn",
-      "time": "23:52:17",
-      "timestamp": 1792011137089,
+      "id": "1792014437838fk8q",
+      "time": "00:47:17",
+      "timestamp": 1792014437838,
       "agent": "🧪 TESTÇİ",
       "roleKey": "TESTER",
       "color": "#059669",
@@ -749,9 +749,9 @@
       "tag": "STRATEGY"
     },
     {
-      "id": "1792011137090zwy1",
-      "time": "23:52:17",
-      "timestamp": 1792011137090,
+      "id": "179201443784024iy",
+      "time": "00:47:17",
+      "timestamp": 1792014437840,
       "agent": "🐋 BALİNA AVCISI",
       "roleKey": "WHALE_HUNTER",
       "color": "#0891b2",
@@ -760,9 +760,9 @@
       "tag": "FLOW"
     },
     {
-      "id": "1792011137090f33n",
-      "time": "23:52:17",
-      "timestamp": 1792011137090,
+      "id": "1792014437841ry49",
+      "time": "00:47:17",
+      "timestamp": 1792014437841,
       "agent": "🎯 FREQ-AI & LİKİDASYON",
       "roleKey": "FREQAI",
       "color": "#db2777",
@@ -771,9 +771,9 @@
       "tag": "STRATEGY"
     },
     {
-      "id": "1792011137091iohm",
-      "time": "23:52:17",
-      "timestamp": 1792011137091,
+      "id": "1792014437842fjb1",
+      "time": "00:47:17",
+      "timestamp": 1792014437842,
       "agent": "🏛️ BAŞ YARGIÇ",
       "roleKey": "JUDGE",
       "color": "#b45309",
@@ -782,9 +782,9 @@
       "tag": "RISK"
     },
     {
-      "id": "17920111370924c4t",
-      "time": "23:52:17",
-      "timestamp": 1792011137092,
+      "id": "1792014437843sx25",
+      "time": "00:47:17",
+      "timestamp": 1792014437843,
       "agent": "⚔️ TRADER",
       "roleKey": "TRADER",
       "color": "#b45309",
@@ -793,9 +793,9 @@
       "tag": "TRADE"
     },
     {
-      "id": "17920111370927svg",
-      "time": "23:52:17",
-      "timestamp": 1792011137092,
+      "id": "1792014437845fcdj",
+      "time": "00:47:17",
+      "timestamp": 1792014437846,
       "agent": "💻 YAZILIMCI",
       "roleKey": "ENGINEER",
       "color": "#475569",
@@ -804,9 +804,9 @@
       "tag": "SYSTEM"
     },
     {
-      "id": "1792011436969ndtd",
-      "time": "23:57:16",
-      "timestamp": 1792011436969,
+      "id": "1792014739254var3",
+      "time": "00:52:19",
+      "timestamp": 1792014739254,
       "agent": "👑 YÖNETİCİ",
       "roleKey": "MANAGER",
       "color": "#7c3aed",
@@ -815,9 +815,9 @@
       "tag": "RISK"
     },
     {
-      "id": "17920114369709lxb",
-      "time": "23:57:16",
-      "timestamp": 1792011436970,
+      "id": "1792014739256u9ii",
+      "time": "00:52:19",
+      "timestamp": 1792014739256,
       "agent": "🧠 ANALİZCİ",
       "roleKey": "ANALYST",
       "color": "#0284c7",
@@ -826,9 +826,9 @@
       "tag": "STRATEGY"
     },
     {
-      "id": "1792011436971fcve",
-      "time": "23:57:16",
-      "timestamp": 1792011436971,
+      "id": "1792014739257fldj",
+      "time": "00:52:19",
+      "timestamp": 1792014739257,
       "agent": "🧪 TESTÇİ",
       "roleKey": "TESTER",
       "color": "#059669",
@@ -837,9 +837,9 @@
       "tag": "STRATEGY"
     },
     {
-      "id": "17920114369722h1j",
-      "time": "23:57:16",
-      "timestamp": 1792011436972,
+      "id": "1792014739258strc",
+      "time": "00:52:19",
+      "timestamp": 1792014739258,
       "agent": "🐋 BALİNA AVCISI",
       "roleKey": "WHALE_HUNTER",
       "color": "#0891b2",
@@ -848,9 +848,9 @@
       "tag": "FLOW"
     },
     {
-      "id": "1792011436973d5wj",
-      "time": "23:57:16",
-      "timestamp": 1792011436973,
+      "id": "1792014739260gd58",
+      "time": "00:52:19",
+      "timestamp": 1792014739260,
       "agent": "🎯 FREQ-AI & LİKİDASYON",
       "roleKey": "FREQAI",
       "color": "#db2777",
@@ -859,9 +859,9 @@
       "tag": "STRATEGY"
     },
     {
-      "id": "1792011436974a2qg",
-      "time": "23:57:16",
-      "timestamp": 1792011436974,
+      "id": "1792014739262qfig",
+      "time": "00:52:19",
+      "timestamp": 1792014739262,
       "agent": "🏛️ BAŞ YARGIÇ",
       "roleKey": "JUDGE",
       "color": "#b45309",
@@ -870,9 +870,9 @@
       "tag": "RISK"
     },
     {
-      "id": "17920114369747wo2",
-      "time": "23:57:16",
-      "timestamp": 1792011436974,
+      "id": "1792014739263wzrm",
+      "time": "00:52:19",
+      "timestamp": 1792014739263,
       "agent": "⚔️ TRADER",
       "roleKey": "TRADER",
       "color": "#b45309",
@@ -881,9 +881,9 @@
       "tag": "TRADE"
     },
     {
-      "id": "1792011436975n5tp",
-      "time": "23:57:16",
-      "timestamp": 1792011436975,
+      "id": "17920147392648j11",
+      "time": "00:52:19",
+      "timestamp": 1792014739264,
       "agent": "💻 YAZILIMCI",
       "roleKey": "ENGINEER",
       "color": "#475569",
@@ -892,9 +892,9 @@
       "tag": "SYSTEM"
     },
     {
-      "id": "1792011737592sxj0",
-      "time": "00:02:17",
-      "timestamp": 1792011737593,
+      "id": "1792015039047jcrd",
+      "time": "00:57:19",
+      "timestamp": 1792015039047,
       "agent": "👑 YÖNETİCİ",
       "roleKey": "MANAGER",
       "color": "#7c3aed",
@@ -903,9 +903,9 @@
       "tag": "RISK"
     },
     {
-      "id": "17920117375937lu6",
-      "time": "00:02:17",
-      "timestamp": 1792011737594,
+      "id": "17920150390482cyk",
+      "time": "00:57:19",
+      "timestamp": 1792015039051,
       "agent": "🧠 ANALİZCİ",
       "roleKey": "ANALYST",
       "color": "#0284c7",
@@ -914,9 +914,9 @@
       "tag": "STRATEGY"
     },
     {
-      "id": "17920117375945fs5",
-      "time": "00:02:17",
-      "timestamp": 1792011737595,
+      "id": "1792015039052l0yu",
+      "time": "00:57:19",
+      "timestamp": 1792015039052,
       "agent": "🧪 TESTÇİ",
       "roleKey": "TESTER",
       "color": "#059669",
@@ -925,9 +925,9 @@
       "tag": "STRATEGY"
     },
     {
-      "id": "179201173759511k3",
-      "time": "00:02:17",
-      "timestamp": 1792011737595,
+      "id": "17920150390534m0b",
+      "time": "00:57:19",
+      "timestamp": 1792015039053,
       "agent": "🐋 BALİNA AVCISI",
       "roleKey": "WHALE_HUNTER",
       "color": "#0891b2",
@@ -936,9 +936,9 @@
       "tag": "FLOW"
     },
     {
-      "id": "1792011737597s4is",
-      "time": "00:02:17",
-      "timestamp": 1792011737597,
+      "id": "1792015039055ii40",
+      "time": "00:57:19",
+      "timestamp": 1792015039055,
       "agent": "🎯 FREQ-AI & LİKİDASYON",
       "roleKey": "FREQAI",
       "color": "#db2777",
@@ -947,9 +947,9 @@
       "tag": "STRATEGY"
     },
     {
-      "id": "1792011737598ni3d",
-      "time": "00:02:17",
-      "timestamp": 1792011737598,
+      "id": "1792015039056ol9x",
+      "time": "00:57:19",
+      "timestamp": 1792015039057,
       "agent": "🏛️ BAŞ YARGIÇ",
       "roleKey": "JUDGE",
       "color": "#b45309",
@@ -958,9 +958,9 @@
       "tag": "RISK"
     },
     {
-      "id": "1792011737598zuzm",
-      "time": "00:02:17",
-      "timestamp": 1792011737599,
+      "id": "17920150390587whg",
+      "time": "00:57:19",
+      "timestamp": 1792015039059,
       "agent": "⚔️ TRADER",
       "roleKey": "TRADER",
       "color": "#b45309",
@@ -969,9 +969,9 @@
       "tag": "TRADE"
     },
     {
-      "id": "1792011737599ikq0",
-      "time": "00:02:17",
-      "timestamp": 1792011737599,
+      "id": "1792015039060b9s3",
+      "time": "00:57:19",
+      "timestamp": 1792015039061,
       "agent": "💻 YAZILIMCI",
       "roleKey": "ENGINEER",
       "color": "#475569",
@@ -980,9 +980,9 @@
       "tag": "SYSTEM"
     },
     {
-      "id": "1792012037993x055",
-      "time": "00:07:17",
-      "timestamp": 1792012037994,
+      "id": "17920153384691gkt",
+      "time": "01:02:18",
+      "timestamp": 1792015338469,
       "agent": "👑 YÖNETİCİ",
       "roleKey": "MANAGER",
       "color": "#7c3aed",
@@ -991,9 +991,9 @@
       "tag": "RISK"
     },
     {
-      "id": "1792012037994l33l",
-      "time": "00:07:17",
-      "timestamp": 1792012037995,
+      "id": "1792015338470kmsh",
+      "time": "01:02:18",
+      "timestamp": 1792015338471,
       "agent": "🧠 ANALİZCİ",
       "roleKey": "ANALYST",
       "color": "#0284c7",
@@ -1002,9 +1002,9 @@
       "tag": "STRATEGY"
     },
     {
-      "id": "1792012037995c7rg",
-      "time": "00:07:17",
-      "timestamp": 1792012037995,
+      "id": "1792015338472xggh",
+      "time": "01:02:18",
+      "timestamp": 1792015338472,
       "agent": "🧪 TESTÇİ",
       "roleKey": "TESTER",
       "color": "#059669",
@@ -1013,9 +1013,9 @@
       "tag": "STRATEGY"
     },
     {
-      "id": "17920120379965ibg",
-      "time": "00:07:17",
-      "timestamp": 1792012037996,
+      "id": "1792015338473psip",
+      "time": "01:02:18",
+      "timestamp": 1792015338473,
       "agent": "🐋 BALİNA AVCISI",
       "roleKey": "WHALE_HUNTER",
       "color": "#0891b2",
@@ -1024,9 +1024,9 @@
       "tag": "FLOW"
     },
     {
-      "id": "1792012037997954z",
-      "time": "00:07:17",
-      "timestamp": 1792012037997,
+      "id": "1792015338474yb6v",
+      "time": "01:02:18",
+      "timestamp": 1792015338475,
       "agent": "🎯 FREQ-AI & LİKİDASYON",
       "roleKey": "FREQAI",
       "color": "#db2777",
@@ -1035,9 +1035,9 @@
       "tag": "STRATEGY"
     },
     {
-      "id": "17920120379983ynv",
-      "time": "00:07:17",
-      "timestamp": 1792012037998,
+      "id": "1792015338475trvk",
+      "time": "01:02:18",
+      "timestamp": 1792015338476,
       "agent": "🏛️ BAŞ YARGIÇ",
       "roleKey": "JUDGE",
       "color": "#b45309",
@@ -1046,9 +1046,9 @@
       "tag": "RISK"
     },
     {
-      "id": "17920120379992sj0",
-      "time": "00:07:17",
-      "timestamp": 1792012037999,
+      "id": "1792015338477pqww",
+      "time": "01:02:18",
+      "timestamp": 1792015338477,
       "agent": "⚔️ TRADER",
       "roleKey": "TRADER",
       "color": "#b45309",
@@ -1057,9 +1057,9 @@
       "tag": "TRADE"
     },
     {
-      "id": "17920120379998iad",
-      "time": "00:07:17",
-      "timestamp": 1792012038000,
+      "id": "1792015338478f516",
+      "time": "01:02:18",
+      "timestamp": 1792015338478,
       "agent": "💻 YAZILIMCI",
       "roleKey": "ENGINEER",
       "color": "#475569",
@@ -1068,9 +1068,9 @@
       "tag": "SYSTEM"
     },
     {
-      "id": "1792012337031khhv",
-      "time": "00:12:17",
-      "timestamp": 1792012337032,
+      "id": "1792015637959ntuj",
+      "time": "01:07:17",
+      "timestamp": 1792015637959,
       "agent": "👑 YÖNETİCİ",
       "roleKey": "MANAGER",
       "color": "#7c3aed",
@@ -1079,9 +1079,9 @@
       "tag": "RISK"
     },
     {
-      "id": "17920123370335k60",
-      "time": "00:12:17",
-      "timestamp": 1792012337033,
+      "id": "1792015637960ojjx",
+      "time": "01:07:17",
+      "timestamp": 1792015637960,
       "agent": "🧠 ANALİZCİ",
       "roleKey": "ANALYST",
       "color": "#0284c7",
@@ -1090,9 +1090,9 @@
       "tag": "STRATEGY"
     },
     {
-      "id": "1792012337033eu5x",
-      "time": "00:12:17",
-      "timestamp": 1792012337034,
+      "id": "1792015637961so7s",
+      "time": "01:07:17",
+      "timestamp": 1792015637962,
       "agent": "🧪 TESTÇİ",
       "roleKey": "TESTER",
       "color": "#059669",
@@ -1101,9 +1101,9 @@
       "tag": "STRATEGY"
     },
     {
-      "id": "1792012337034yim2",
-      "time": "00:12:17",
-      "timestamp": 1792012337034,
+      "id": "1792015637963o40v",
+      "time": "01:07:17",
+      "timestamp": 1792015637963,
       "agent": "🐋 BALİNA AVCISI",
       "roleKey": "WHALE_HUNTER",
       "color": "#0891b2",
@@ -1112,9 +1112,9 @@
       "tag": "FLOW"
     },
     {
-      "id": "1792012337035gbwr",
-      "time": "00:12:17",
-      "timestamp": 1792012337035,
+      "id": "1792015637964lxnv",
+      "time": "01:07:17",
+      "timestamp": 1792015637964,
       "agent": "🎯 FREQ-AI & LİKİDASYON",
       "roleKey": "FREQAI",
       "color": "#db2777",
@@ -1123,9 +1123,9 @@
       "tag": "STRATEGY"
     },
     {
-      "id": "1792012337036a16l",
-      "time": "00:12:17",
-      "timestamp": 1792012337036,
+      "id": "179201563796593ng",
+      "time": "01:07:17",
+      "timestamp": 1792015637965,
       "agent": "🏛️ BAŞ YARGIÇ",
       "roleKey": "JUDGE",
       "color": "#b45309",
@@ -1134,9 +1134,9 @@
       "tag": "RISK"
     },
     {
-      "id": "1792012337037pxn8",
-      "time": "00:12:17",
-      "timestamp": 1792012337037,
+      "id": "1792015637966rq8p",
+      "time": "01:07:17",
+      "timestamp": 1792015637966,
       "agent": "⚔️ TRADER",
       "roleKey": "TRADER",
       "color": "#b45309",
@@ -1145,9 +1145,9 @@
       "tag": "TRADE"
     },
     {
-      "id": "17920123370385sao",
-      "time": "00:12:17",
-      "timestamp": 1792012337038,
+      "id": "179201563796814qi",
+      "time": "01:07:17",
+      "timestamp": 1792015637968,
       "agent": "💻 YAZILIMCI",
       "roleKey": "ENGINEER",
       "color": "#475569",

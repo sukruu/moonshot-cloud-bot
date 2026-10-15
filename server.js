@@ -30,10 +30,10 @@ let CONFIG = {
   marginPerTrade: 15.0,      // Temel Teminat 15$
   leverage: 20,              // Kaldıraç 20x
   maxSlots: 2,               // 2 Slot
-  slPct: 0.25,               // Hızlı vur-kaç stop
-  bePct: 0.20,               // +%0.20 görünce başabaş
-  moonPct: 0.42,             // +%0.42 spotta komple kapat
-  tp1Pct: 0.60,              // Moon önce gelir; kademe yedek
+  slPct: 0.95,               // Sağlam koruma stopu (gürültüye kurban gitmez)
+  bePct: 0.65,               // +%0.65 görünce başabaş kilitlenir
+  moonPct: 2.40,             // +%2.40 spotta roket vur-kaç hedefini alır (+%48 ROI)
+  tp1Pct: 1.20,              // +%1.20 spotta %50 kârı cebe indirir (+%24 ROI)
   feeRate: 0.0005,           // Binance Futures taker %0.05 (TEK YÖN)
   scanIntervalMs: 2000,
   riskIntervalMs: 1000,
@@ -96,7 +96,7 @@ function engineSnapshot() {
     userSlots: userRisk.maxSlots,
     userMargin: userRisk.marginPerTrade,
     gates: {
-      entry: '1dk %0.23-%0.35, devam skoru, hacim 1.6x',
+      entry: 'Marscoin Momentum, Hacim 1.4x, Nefes Alan SL/TP',
       book: 'OBI veto',
       judge: 'açık',
       flow: 'son 12 mum',
@@ -958,8 +958,8 @@ async function scanLoop() {
 
         const curMovePct = ((curP - curO) / curO) * 100;
         const twoCandleMovePct = ((curP - prevO) / prevO) * 100;
-        const minJump = 0.23;
-        const maxChaseMove = 0.35;
+        const minJump = 0.20;
+        const maxChaseMove = 0.65;
 
         const quote1m = parseFloat(k3m[lastIdx][7]) || 0;
         const takerBuy1m = parseFloat(k3m[lastIdx][10]) || 0;
@@ -970,12 +970,11 @@ async function scanLoop() {
         const chg24Val = Number.isFinite(Number(rInfo.chg24h)) ? Number(rInfo.chg24h) : chg;
         const chg15Val = Number(rInfo.chg15m);
         if (!Number.isFinite(chg15Val) || !Number.isFinite(Number(chg24Val))) continue;
-        if (Math.abs(chg24Val) >= 7) continue;
-        if (chg24Val >= 6) continue;
+        if (chg24Val >= 65 || chg24Val <= -40) continue;
 
-        const minTakerLong = DYNAMIC.mode === 'DEFENSIVE_SNIPER' ? 56.0 : 55.0;
-        const maxTakerLong = 70;
-        const maxTakerShort = DYNAMIC.mode === 'DEFENSIVE_SNIPER' ? 44.0 : 45.0;
+        const minTakerLong = DYNAMIC.mode === 'DEFENSIVE_SNIPER' ? 54.0 : 53.0;
+        const maxTakerLong = 75;
+        const maxTakerShort = DYNAMIC.mode === 'DEFENSIVE_SNIPER' ? 46.0 : 47.0;
         const minTakerShort = 22;
         let radarOkLong = chg15Val >= 0 && chg24Val > 0;
         let radarOkShort = chg15Val <= 0 && chg24Val < 0;
@@ -986,15 +985,14 @@ async function scanLoop() {
         // 🕐 1. ANLIK MUM TEYİDİ & FRESH MOMENTUM
         const candleStart = (k3m[lastIdx] && k3m[lastIdx][0]) ? k3m[lastIdx][0] : (Date.now() - 60000);
         const candleElapsedSec = Math.max(8, Math.min(60, (Date.now() - candleStart) / 1000));
-        // İlk 25 sn'de hacmi 60 sn'ye şişirme; kısmi mum zaten 1.6 kat ise gir
-        const volMult = candleElapsedSec >= 25
+        const volMult = candleElapsedSec >= 20
           ? (curV * (60 / candleElapsedSec)) / avgVol20
           : curV / avgVol20;
-        const isWhaleVol = volMult >= 1.6;
-        if (candleElapsedSec > 50) continue;
+        const isWhaleVol = volMult >= 1.4;
+        if (candleElapsedSec > 55) continue;
 
-        // Mum zaten %0.50 koşmuşsa geç kalınmış demektir
-        if (Math.abs(curMovePct) > 0.50 || Math.abs(twoCandleMovePct) > 0.65) {
+        // Mum zaten %0.85 koşmuşsa geç kalınmış demektir
+        if (Math.abs(curMovePct) > 0.85 || Math.abs(twoCandleMovePct) > 1.20) {
           continue;
         }
         const inLongBand = curMovePct >= minJump && curMovePct <= maxChaseMove && curP > curO;
@@ -1011,18 +1009,8 @@ async function scanLoop() {
         const hasBuyerDominance = taker1m >= minTakerLong && taker1m <= maxTakerLong;
         const hasSellerDominance = taker1m <= maxTakerShort && taker1m >= minTakerShort;
 
-        const prevMovePct = prevO > 0 ? ((prevC - prevO) / prevO) * 100 : 0;
-        const tickHist = rollingTickerPrices[sym] || [];
-        let microMovePct = 0;
-        for (let hi = tickHist.length - 1; hi >= 0; hi--) {
-          if (now - tickHist[hi].t >= 12000) {
-            const pOld = tickHist[hi].p;
-            if (pOld > 0) microMovePct = ((curP - pOld) / pOld) * 100;
-            break;
-          }
-        }
-        const continuationLong = prevMovePct >= 0.06 && microMovePct >= 0.04 && curP >= prevC;
-        const continuationShort = prevMovePct <= -0.06 && microMovePct <= -0.04 && curP <= prevC;
+        const continuationLong = curP >= curO && (curP >= prevC * 0.999);
+        const continuationShort = curP <= curO && (curP <= prevC * 1.001);
 
         // 🟢 MARSCOIN LONG ATEŞLEMESİ:
         let isLongPump = false;
@@ -1030,14 +1018,14 @@ async function scanLoop() {
         if (hasRealLiquidity && noWickLong && hasBuyerDominance && inLongBand && isWhaleVol && radarOkLong && continuationLong) {
           isLongPump = true;
           isRocketSignal = true;
-          radarTag = `[⚡ HIZLI VUR-KAÇ LONG | 1dk: +%${curMovePct.toFixed(2)} | Hacim: ${volMult.toFixed(1)}x | Devam: +%${microMovePct.toFixed(2)}/12sn]`;
+          radarTag = `[⚡ MARSCOIN VUR-KAÇ LONG | 1dk: +%${curMovePct.toFixed(2)} | Hacim: ${volMult.toFixed(1)}x]`;
         }
 
         // 🔴 MARSCOIN SHORT ATEŞLEMESİ:
         let isShortDump = false;
         if (hasRealLiquidity && noWickShort && hasSellerDominance && inShortBand && isWhaleVol && radarOkShort && continuationShort) {
           isShortDump = true;
-          radarTag = `[⚡ HIZLI VUR-KAÇ SHORT | 1dk: %${curMovePct.toFixed(2)} | Hacim: ${volMult.toFixed(1)}x | Devam: %${microMovePct.toFixed(2)}/12sn]`;
+          radarTag = `[🩸 MARSCOIN VUR-KAÇ SHORT | 1dk: %${curMovePct.toFixed(2)} | Hacim: ${volMult.toFixed(1)}x]`;
         }
 
         if (isLongPump || isShortDump) {
@@ -1339,11 +1327,6 @@ async function fastRiskLoop() {
         exitReason = pos.tp1Taken
           ? `🏆 TP1 CEPTE + Kalan Lazer Kâr Kilidi (+%${pos.roi.toFixed(1)} ROI / Zirve: +%${mfe.toFixed(2)} Spot)`
           : `🏆 Lazer Vur-Kaç Kâr Kilidi (+%${pos.roi.toFixed(1)} ROI / Zirve: +%${mfe.toFixed(2)} Spot)`;
-      }
-
-      // 45 sn içinde lehe %0.12 yoksa çizikten çık (vur-kaç oturmadı)
-      if (!exitReason && durSecLive >= 45 && (pos.mfe || 0) < 0.12) {
-        exitReason = `⏱️ 45sn İvme Yok (MFE: +%${(pos.mfe || 0).toFixed(2)} / Hızlı Çıkış)`;
       }
 
       // 🚨 6. AJAN ACİL DURUM TAHLİYESİ (MAKRO PİYASA TERS DÖNÜŞ FRENİ)
