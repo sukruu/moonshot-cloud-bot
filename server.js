@@ -615,8 +615,9 @@ async function fetchBinance(url) {
     }
   }
 
-  // Vadeli ayna cevap vermiyorsa 45 sn boyunca tekrar deneme; tarama spot yedekte hızlı kalsın.
+  // Vadeli ayna cevap vermiyorsa (veya ABD IP 451 engeli varsa) doğrudan hızlı binance.vision akışını kullan.
   if (Date.now() >= fapiDownUntil) {
+    let sawGeoBlock = false;
     for (const base of BINANCE_FAPI_MIRRORS) {
       try {
         const targetUrl = base + relativePath;
@@ -631,7 +632,10 @@ async function fetchBinance(url) {
         });
         clearTimeout(timeoutId);
         if (res.status === 429) break;
-        if (res.status === 451) continue;
+        if (res.status === 451) {
+          sawGeoBlock = true;
+          continue;
+        }
         if (!res.ok) continue;
         const data = await res.json();
         if (data) {
@@ -641,7 +645,7 @@ async function fetchBinance(url) {
         }
       } catch(e) {}
     }
-    fapiDownUntil = Date.now() + 45000;
+    fapiDownUntil = Date.now() + (sawGeoBlock ? 30 * 60 * 1000 : 60000);
   }
 
   try {
@@ -661,7 +665,6 @@ async function fetchBinance(url) {
       const data = await res.json();
       if (data) {
         noteFeed(relativePath, 'spot');
-        warnFetch('Vadeli API cevap vermedi. Fiyat spot yedekten geldi.');
         return data;
       }
     }
