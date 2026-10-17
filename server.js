@@ -1058,16 +1058,10 @@ async function scanLoop() {
         const sig = rInfo.signal || "⚖️ NÖTR";
         const chg24Val = Number.isFinite(Number(rInfo.chg24h)) ? Number(rInfo.chg24h) : chg;
         const rawChg15 = Number.isFinite(Number(rInfo.chg15m)) ? Number(rInfo.chg15m) : chg15mCalc;
-        const chg15Long = chg15mCalc;
-        const chg15Short = chg15mCalc;
+        // 15dk mum geçiş dakikalarında (:00, :15, :30, :45) sıfırlanma körlüğünü önlemek için son 5x3dk (15dk) gerçek değişimle birlikte değerlendir
+        const chg15Long = Math.max(rawChg15, chg15mCalc);
+        const chg15Short = Math.min(rawChg15, chg15mCalc);
         const chg3hVal = Number.isFinite(Number(rInfo.chg3h)) ? Number(rInfo.chg3h) : chg90mCalc;
-
-        // 🛡️ Ardışık yeşil/kırmızı 3dk mum sayacı (5 mum üst üste yükseldikten sonra tepeden LONG açmayı engeller: #1 LSK cGrn=5)
-        let consecGreen = 0;
-        for (let m = lastIdx - 1; m >= Math.max(0, lastIdx - 8); m--) {
-          if (parseFloat(k3m[m][4]) > parseFloat(k3m[m][1])) consecGreen++;
-          else break;
-        }
 
         // 🛡️ DÜZELTME: 12 saniyelik 3m mumundaki sahte %75-%99 taker yanılsaması (Math.max taker3m) KALDIRILDI!
         // Gerçek 3 saatlik ve 15 dakikalık (5x3m) kurumsal alıcı/satıcı akışı baz alınır.
@@ -1084,36 +1078,29 @@ async function scanLoop() {
         );
 
         // 📏 3 SAATLİK KANAL KONUMU:
+        // Dipten (%45 altı) düşen bıçağa LONG açmayı ve ivmesiz tepe dirençlerini engeller;
+        // Ancak aktif 15dk balina kırılımı yapan (SAND, MARSCOIN gibi yeni 3s zirvesi kıran) koinlerde %98.5'e kadar izin verir.
         const rangeSpan3h = (rInfo.high3h || curP) - (rInfo.low3h || curP);
         const rangePos = rangeSpan3h > 0 ? ((curP - rInfo.low3h) / rangeSpan3h) * 100 : 50;
+        const maxLongRangePos = (chg15Long >= 0.60 && chg24Val >= 3.0 && effectiveTaker >= 52.5) ? 98.5 : 90.0;
 
-        // 🧭 KESİN TREND, 15DK GERÇEK AKIŞ & YORGUNLUK KORUMASI:
-        // LONG:
-        // - Gerçek son 15dk (5x3m = chg15mCalc) +%0.25 ile +%2.10 arasında olmalı (#4 SAND -%0.11, #14 ALT -%1.43 gibi negatif 15dk'ları ve #1 LSK +%3.25, #16 AVA +%2.97 gibi çoktan patlamış 15dk zirvelerini engeller!)
-        // - 3s değişim +%1.8 ile +%8.5 arasında olmalı (#14 ALT +%11.73 gibi aşırı şişmiş dalga sonlarını engeller!)
-        // - Kanal %45.0 ile %96.0 arasında olmalı (#15 HBAR %98 tavanını engeller!)
+        // 🧭 KESİN TREND & KANAL UYUMU:
         const radarOkLong =
           !sig.includes("ŞELALE") &&
           !sig.includes("AYI") &&
-          chg24Val >= 1.5 && chg24Val <= 40.0 &&
-          chg3hVal >= 1.8 && chg3hVal <= 8.5 &&
-          chg15mCalc >= 0.25 && chg15mCalc <= 2.10 &&
-          rawChg15 >= 0.10 &&
-          consecGreen <= 3 &&
-          rangePos >= 45.0 && rangePos <= 96.0;
+          chg24Val >= 1.5 && chg24Val <= 45.0 &&
+          chg3hVal >= 1.5 && chg3hVal <= 26.0 &&
+          chg15Long >= 0.12 &&
+          rangePos >= 45.0 && rangePos <= maxLongRangePos;
 
-        // SHORT:
-        // - 3s değişim -%1.8 ile -%4.8 arasında olmalı (#2 STRK -%6.14 gibi düşüşü bitmiş koinleri engeller!)
-        // - Gerçek son 15dk (chg15mCalc) <= -%0.10 olmalı
-        // - Kanal %4.5 ile %50.0 arasında olmalı
+        // SHORT: 24s <= -%2.5, 3s -%1.8 ile -%6.8 arası, 15dk <= -%0.22, Kanal %4-%55 arası!
         const radarOkShort =
           !sig.includes("ROKET") &&
           !sig.includes("BOĞA") &&
           chg24Val <= -2.5 && chg24Val >= -35.0 &&
-          chg3hVal <= -1.8 && chg3hVal >= -4.8 &&
-          chg15mCalc <= -0.10 && chg15mCalc >= -2.20 &&
-          rawChg15 <= -0.15 &&
-          rangePos >= 4.5 && rangePos <= 50.0;
+          chg3hVal <= -1.8 && chg3hVal >= -6.8 &&
+          chg15Short <= -0.22 &&
+          rangePos >= 4.0 && rangePos <= 55.0;
 
         if (!radarOkLong && !radarOkShort) continue;
 
@@ -1122,6 +1109,7 @@ async function scanLoop() {
         // 🕐 1. 3 DAKİKALIK MUM TEYİDİ & KAPANMAMIŞ İLK 18 SANİYE TUZAĞI ENGELİ
         const candleStart = (k3m[lastIdx] && k3m[lastIdx][0]) ? k3m[lastIdx][0] : (Date.now() - 90000);
         const candleElapsedSec = (Date.now() - candleStart) / 1000;
+        // Yeni açılmış mumun ilk 18 saniyesindeki sahte/anlık fitillere atlama!
         if (candleElapsedSec < 18) continue;
         const clampedElapsed = Math.max(18, Math.min(180, candleElapsedSec));
         const curPaceVol = curV * (180 / Math.max(24, clampedElapsed));
@@ -1130,74 +1118,72 @@ async function scanLoop() {
         const volMult = Math.max(rawVolMult, (rawVolMult * 0.60) + (prevVolMult * 0.40));
         const spikeVolMult = (curPaceVol / avgVol20);
 
-        // 🚫 3 DAKİKALIK AŞIRI UÇUŞ (CLIMAX) ENGELİ:
-        // Önceki 3dk mumu zaten +%0.78'den fazla patlamışsa (#1 LSK +%1.65, #15 HBAR +%1.51, #16 AVA +%1.31, #14 ALT +%0.84)
-        // veya aktif 3dk mumu +%0.78'i geçmişse (#4 SAND +%1.00), hareket tükenmiştir — tepeden kovalama!
-        if (Math.abs(curMovePct) > 0.78 || Math.abs(prevMovePct) > 0.78 || Math.abs(twoCandleMovePct) > 1.35) {
+        // Tek bir 3dk mumunda zaten %1.15+ fırlamışsa fitil tepesinden kovalama!
+        if (Math.abs(curMovePct) > 1.15 || Math.abs(twoCandleMovePct) > 1.85) {
           continue;
         }
 
         // 🧱 2. EMİLİM (ABSORPTION / EFFORT vs. RESULT) FİLTRESİ:
-        const isCurrentAbsorbed = spikeVolMult >= 4.2 && ((Math.abs(curMovePct) / spikeVolMult) < 0.085 || Math.abs(curMovePct) < 0.35);
-        const isPrevAbsorbed = (prevV / avgVol20) >= 3.5 && Math.abs(prevMovePct) < 0.18;
+        // (ZK 15.5x/+%0.48, QNT 10.3x/+%0.79, QNT 7.0x/+%0.32, NMR 5.0x, STRK 4.7x/+%0.22 zararlarını yakalar!)
+        // Devasa hacim (4.5x+) patlamasına rağmen fiyat hacme oranla ilerleyemiyorsa, balina pasif limit duvarıyla alıcıları emiyordur!
+        const isCurrentAbsorbed = spikeVolMult >= 4.5 && ((Math.abs(curMovePct) / spikeVolMult) < 0.085 || Math.abs(curMovePct) < 0.35);
+        const isPrevAbsorbed = (prevV / avgVol20) >= 3.8 && Math.abs(prevMovePct) < 0.18;
         if (isCurrentAbsorbed || isPrevAbsorbed) {
           continue;
         }
 
-        // 4. Kural: Mum Dikliği & Aktif Geri Çekilme Engeli
-        // Zirveden (%0.18+) geri çekilmekte olan muma (#4 SAND 0.06403 -> 0.06381 gibi) düşerken girme!
+        // 4. Kural: Mum Dikliği (Wick Filtresi) - Zirveden satış yemiş fitilli mumları ele
         const candleSpan = curH - curL;
         const upperWick = curH - Math.max(curP, curO);
         const lowerWick = Math.min(curP, curO) - curL;
-        const pullbackFromCurHighPct = curP > 0 ? ((curH - curP) / curP) * 100 : 0;
-        const bounceFromCurLowPct = curP > 0 ? ((curP - curL) / curP) * 100 : 0;
-        const noWickLong = (candleSpan > 0 ? (upperWick / candleSpan <= 0.36) : true) && pullbackFromCurHighPct <= 0.18;
-        const noWickShort = (candleSpan > 0 ? (lowerWick / candleSpan <= 0.36) : true) && bounceFromCurLowPct <= 0.18;
+        const noWickLong = candleSpan > 0 ? (upperWick / candleSpan <= 0.40) : true;
+        const noWickShort = candleSpan > 0 ? (lowerWick / candleSpan <= 0.40) : true;
 
         const vol3hCheck = rInfo.vol3hM || ((quote90mCalc * 2) / 1e6);
-        const hasRealLiquidity = vol3hCheck >= 1.2 && vol24 >= 2.2;
-        const hasBuyerDominance = effectiveTaker >= 52.0 && effectiveTaker <= 69.0 && taker15mCalc >= 51.5;
+        const hasRealLiquidity = vol3hCheck >= 1.1 && vol24 >= 2.2;
+        const hasBuyerDominance = effectiveTaker >= 52.0 && effectiveTaker <= 69.0 && taker15mCalc >= 51.2;
         const hasSellerDominance = effectiveTakerShort <= 47.2 && effectiveTakerShort >= 24.0 && taker15mCalc <= 48.2;
 
-        // 📐 3. KAPANMIŞ MUM & YAPI KIRILIMI TEYİDİ:
-        // LONG için hem önceki 3dk mumu sağlıklı yeşil (+%0.12 ile +%0.78 arası) hem de aktif 3dk mumu güçlü (+%0.14 ile +%0.78 arası) olmalı (#8 EPIC +%0.07 gibi cılız mumlara girilmez!)
-        const brokePrevHigh = curP > prevH || (curP > prevC && prevC > prevO && curP >= prevH * 0.9985);
-        const brokePrevLow = curP < prevL || (curP < prevC && prevC < prevO && curP <= prevL * 1.0015);
-        const continuationLong = curMovePct >= 0.14 && prevMovePct >= 0.12 && brokePrevHigh;
-        const continuationShort =
-          (curMovePct <= -0.20 || (curMovePct <= -0.06 && effectiveTakerShort <= 35.0 && btc15mNumeric <= -0.40)) &&
-          prevMovePct <= 0.10 &&
-          brokePrevLow;
+        // 📐 3. KAPANMIŞ MUM & YAPI KIRILIMI + DİRENÇ ÜSTÜ KALICILIK TEYİDİ:
+        // Senaryo A: Aktif mum bir önceki kapanmış 3dk mumunun zirvesini/kapanışını kırıyor (brokePrevHigh).
+        // Senaryo B (Kırılım + Kalıcılık): Bir önceki kapanmış 3dk mumu direnci kırdı (+%0.28+) ve yeni mum bu seviyenin üzerinde tutunarak devam ediyor!
+        const brokePrevHigh = curP > prevH || (curP > prevC && (prevC >= prevO || curMovePct >= 0.20) && curP >= prevH * 0.9982);
+        const brokePrevLow = curP < prevL || (curP < prevC && (prevC <= prevO || curMovePct <= -0.20) && curP <= prevL * 1.0018);
+        const isBreakoutHoldLong = prevMovePct >= 0.28 && curMovePct >= 0.04 && curP >= prevC && twoCandleMovePct >= 0.32;
+        const isBreakoutHoldShort = prevMovePct <= -0.28 && curMovePct <= -0.04 && curP <= prevC && twoCandleMovePct <= -0.32;
+        const continuationLong = (curP > curO && brokePrevHigh) || isBreakoutHoldLong;
+        const continuationShort = (curP < curO && brokePrevLow) || isBreakoutHoldShort;
 
         // 🟢 MARSCOIN TREND + KANAL + KIRILIM UYUMLU LONG MOTORU:
         let isLongPump = false;
         let isRocketSignal = false;
         if (hasRealLiquidity && noWickLong && hasBuyerDominance && radarOkLong && continuationLong && !nearMax6m) {
-          // TETİK 1: 🚀 ANLIK 3M ROKET KIRILIMI (Sağlıklı +%0.14 - +%0.78 mum + hacim + gerçek trend)
-          if (curMovePct >= 0.14 && twoCandleMovePct >= 0.32 && volMult >= 1.15 && spikeVolMult <= 4.2 && chg3hVal >= 1.8) {
+          // TETİK 1: 🚀 ANLIK 3M ROKET KIRILIMI (Sağlıklı +%0.20 - +%1.10 mum + hacim + gerçek trend)
+          if ((curMovePct >= 0.20 || isBreakoutHoldLong) && twoCandleMovePct >= 0.32 && volMult >= 1.15 && spikeVolMult <= 4.5 && chg3hVal >= 1.8) {
             isLongPump = true;
             isRocketSignal = true;
             radarTag = `[🚀 MARSCOIN ROKET SPIKE | 3dk: +%${curMovePct.toFixed(2)} | Hacim: ${volMult.toFixed(1)}x | Kanal: %${rangePos.toFixed(0)}]`;
           }
           // TETİK 2: 🐋 BALİNA RADAR & 15M İVME DEVAMI
-          else if ((sig.includes("BALİNA BOĞA") || (chg15Long >= 0.60 && effectiveTaker >= 53.5)) && curMovePct >= 0.14 && twoCandleMovePct >= 0.30 && volMult >= 0.85 && spikeVolMult <= 4.2) {
+          else if ((sig.includes("BALİNA BOĞA") || (chg15Long >= 0.65 && effectiveTaker >= 53.5)) && (curMovePct >= 0.14 || isBreakoutHoldLong) && twoCandleMovePct >= 0.24 && volMult >= 0.75 && spikeVolMult <= 4.5) {
             isLongPump = true;
             isRocketSignal = true;
             radarTag = `[🐋🚀 MARSCOIN BALİNA İVMESİ | 15dk: +%${chg15Long.toFixed(2)} | Taker: %${effectiveTaker.toFixed(1)} | Kanal: %${rangePos.toFixed(0)}]`;
           }
-          // TETİK 3: 🏔️ GÜÇLÜ TREND & DALGA KIRILIMI (ALT, AVA modeli)
-          else if (chg3hVal >= 2.2 && chg24Val >= 2.8 && curMovePct >= 0.15 && twoCandleMovePct >= 0.32 && volMult >= 0.90 && spikeVolMult <= 4.2 && effectiveTaker >= 52.5) {
+          // TETİK 3: 🏔️ GÜÇLÜ TREND & DALGA KIRILIMI (SAND, GTC, TIA, LSK, RAD modeli)
+          else if (chg3hVal >= 2.2 && chg24Val >= 2.8 && (curMovePct >= 0.16 || isBreakoutHoldLong) && twoCandleMovePct >= 0.28 && volMult >= 0.80 && spikeVolMult <= 4.5 && effectiveTaker >= 52.5) {
             isLongPump = true;
             isRocketSignal = true;
             radarTag = `[🏔️ MARSCOIN TREND ROKETİ | 3s: +%${chg3hVal.toFixed(1)} | 24s: +%${chg24Val.toFixed(1)} | Kanal: %${rangePos.toFixed(0)}]`;
           }
         }
 
-        // 🔴 MARSCOIN SIKIŞTIRILMIŞ ŞELALE SHORT MOTORU (NEAR, TIA, QNT, FET, ENA modeli):
+        // 🔴 MARSCOIN SIKIŞTIRILMIŞ ŞELALE SHORT MOTORU (ZRO, STRK, WLD modeli):
         let isShortDump = false;
         if (hasRealLiquidity && noWickShort && hasSellerDominance && radarOkShort && continuationShort && btc15mNumeric <= 0.08) {
           if (
-            (sig.includes("BALİNA AYI") || sig.includes("GÜÇLÜ AYI") || (chg3hVal <= -2.0 && chg15Short <= -0.25) || (effectiveTakerShort <= 35.0 && btc15mNumeric <= -0.40)) &&
+            (sig.includes("BALİNA AYI") || sig.includes("GÜÇLÜ AYI") || (chg3hVal <= -2.0 && chg15Short <= -0.35)) &&
+            (curMovePct <= -0.18 || isBreakoutHoldShort) &&
             twoCandleMovePct <= -0.32 &&
             volMult >= 0.85 && spikeVolMult <= 4.5 &&
             effectiveTakerShort <= 46.8
@@ -1532,12 +1518,10 @@ async function fastRiskLoop() {
           : `🏆 Lazer Kâr Kilidi (+%${pos.roi.toFixed(1)} ROI / Zirve: +%${mfe.toFixed(2)} Spot)`;
       }
 
-      // ⏱️ 5. ERKEN ÖLÜ İŞLEM / İVMESİZLİK KESİCİ (10+ ve 20+ Dakika Boyunca Yürüyemeyen İşlemler)
-      // (WLD 48dk, QNT 162dk, SUI 67dk gibi hiç yürümeyen ölü işlemlerin tam stop yemesini önler)
+      // ⏱️ 5. ERKEN ÖLÜ İŞLEM / İVMESİZLİK KESİCİ (10+ Dakika Boyunca +%0.25 Görememiş ve Eksiye Giden İşlemler)
+      // (WLD 48dk, QNT 162dk, PEOPLE 47dk, ZK 37dk gibi hiç yürümeyen ölü işlemlerin tam stop yemesini önler)
       if (!exitReason && !pos.beLocked && durMin >= 10 && mfe < 0.25 && move <= -0.48) {
         exitReason = `⏱️ Erken İvmesizlik Koruması (${Math.round(durMin)}dk İvme Yok / MFE: +%${mfe.toFixed(2)} / Erken Kesim)`;
-      } else if (!exitReason && !pos.beLocked && durMin >= 20 && mfe < 0.45 && move <= -0.38) {
-        exitReason = `⏱️ Uzamış İvmesizlik Koruması (${Math.round(durMin)}dk BE Görülmedi / MFE: +%${mfe.toFixed(2)} / Erken Kesim)`;
       }
 
       // 🚨 6. AJAN ACİL DURUM TAHLİYESİ (MAKRO PİYASA TERS DÖNÜŞ FRENİ)
@@ -1643,16 +1627,16 @@ function closeTrade(pos, exitReason) {
       coinCooldowns[pos.symbol] = now + (24 * 60 * 60 * 1000);
       addLog(`🚫 ${pos.symbol} ardışık ${coinLossCount[pos.symbol]} zarar verdi — koin 24 saat boyunca yasaklandı!`, 'TRADE');
     } else {
-      // İlk zararda 12 saat ceza (aynı koinden gün içinde tekrar stop yemeyi engelle)
-      coinCooldowns[pos.symbol] = now + (12 * 60 * 60 * 1000);
-      addLog(`⚠️ ${pos.symbol} zarar yazdı ($${totalTradePnl.toFixed(2)}) — koin 12 saat donduruldu!`, 'TRADE');
+      // İlk zararda 8 saat ceza (EPIC/PROM gibi aynı koinden tekrar stop yemeyi engelle)
+      coinCooldowns[pos.symbol] = now + (8 * 60 * 60 * 1000);
+      addLog(`⚠️ ${pos.symbol} zarar yazdı ($${totalTradePnl.toFixed(2)}) — koin 8 saat donduruldu!`, 'TRADE');
     }
   } else {
-    // 🛡️ Kâr veya Başabaş sonrası: LONG'da 12 SAAT (ALT ve AVA gibi 4-5 saat sonra dağıtım tepesinden tekrar LONG açmayı %100 engeller!), SHORT'ta 4 SAAT soğuma!
-    const winCooldownHours = pos.side === "LONG" ? 12 : 4;
+    // 🛡️ Kâr veya Başabaş sonrası 4 SAAT Dalga Yorgunluğu Kilidi!
+    // (SAND, TIA, ZRO, ERA, NMR gibi kâr aldığımız koine 30dk sonra tepeden tekrar girip kârı geri vermeyi %100 engeller!)
     coinLossCount[pos.symbol] = 0;
-    coinCooldowns[pos.symbol] = now + (winCooldownHours * 60 * 60 * 1000);
-    addLog(`🔒 ${pos.symbol} dalgası tamamlandı ($${totalTradePnl >= 0 ? '+' : ''}${totalTradePnl.toFixed(2)}) — tepe yorgunluğuna yakalanmamak için ${winCooldownHours} saat soğumaya alındı.`, 'INFO');
+    coinCooldowns[pos.symbol] = now + (4 * 60 * 60 * 1000);
+    addLog(`🔒 ${pos.symbol} dalgası tamamlandı ($${totalTradePnl >= 0 ? '+' : ''}${totalTradePnl.toFixed(2)}) — tepe yorgunluğuna yakalanmamak için 4 saat soğumaya alındı.`, 'INFO');
   }
 
   const tradeRecord = {

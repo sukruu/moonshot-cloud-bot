@@ -224,13 +224,13 @@ class JudicialAuditCourt {
         judicialScore -= 35;
         accusations.push(`Sağlıksız Taker oranı (%${taker.toFixed(1)})`);
       }
-      if (chg15 < 0.20 || chg15 > 2.20) {
+      if (chg15 < 0.10) {
         judicialScore -= 35;
-        accusations.push(`15dk ivme yetersiz veya aşırı şişmiş (%${chg15.toFixed(2)})`);
+        accusations.push(`15dk ivme yetersiz (%${chg15.toFixed(2)})`);
       }
-      if (chg3raw < 1.8 || chg3raw > 8.5) {
+      if (chg3raw < 1.5 || chg3raw > 26.0) {
         judicialScore -= 35;
-        accusations.push(`3s trend uygunsuz/tükenmiş (%${chg3raw.toFixed(1)})`);
+        accusations.push(`3s trend uygunsuz (%${chg3raw.toFixed(1)})`);
       }
       if (chg24 < 1.5) {
         judicialScore -= 35;
@@ -242,13 +242,13 @@ class JudicialAuditCourt {
         judicialScore -= 35;
         accusations.push(`Satıcı delili sağlıksız (%${sellTaker.toFixed(1)})`);
       }
-      if (chg15 > -0.10 || chg15 < -2.20) {
+      if (chg15 > -0.20) {
         judicialScore -= 35;
-        accusations.push(`15dk düşüş ivmesi uygunsuz (%${chg15.toFixed(2)})`);
+        accusations.push(`15dk düşüş ivmesi yetersiz (%${chg15.toFixed(2)})`);
       }
-      if (chg3raw > -1.8 || chg3raw < -4.8) {
+      if (chg3raw > -1.8 || chg3raw < -6.8) {
         judicialScore -= 35;
-        accusations.push(`3s düşüş kanalı uygunsuz/tükenmiş (%${chg3raw.toFixed(1)})`);
+        accusations.push(`3s düşüş kanalı uygunsuz (%${chg3raw.toFixed(1)})`);
       }
       if (chg24 > -2.5) {
         judicialScore -= 35;
