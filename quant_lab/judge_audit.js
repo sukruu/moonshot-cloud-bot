@@ -220,7 +220,7 @@ class JudicialAuditCourt {
 
     const chg3raw = Number(candidateInfo.chg3h || 0);
     if (side === 'LONG') {
-      if (taker < 52.0 || taker > 69.0) {
+      if (taker < 51.8 || taker > 69.5) {
         judicialScore -= 35;
         accusations.push(`Sağlıksız Taker oranı (%${taker.toFixed(1)})`);
       }
@@ -238,7 +238,7 @@ class JudicialAuditCourt {
       }
     } else { // SHORT
       const sellTaker = 100 - taker;
-      if (sellTaker < 53.0 || sellTaker > 76.0) {
+      if (sellTaker < 52.5 || sellTaker > 76.5) {
         judicialScore -= 35;
         accusations.push(`Satıcı delili sağlıksız (%${sellTaker.toFixed(1)})`);
       }
@@ -246,7 +246,7 @@ class JudicialAuditCourt {
         judicialScore -= 35;
         accusations.push(`15dk düşüş ivmesi yetersiz (%${chg15.toFixed(2)})`);
       }
-      if (chg3raw > -1.8 || chg3raw < -6.5) {
+      if (chg3raw > -1.8 || chg3raw < -6.8) {
         judicialScore -= 35;
         accusations.push(`3s düşüş kanalı uygunsuz (%${chg3raw.toFixed(1)})`);
       }
