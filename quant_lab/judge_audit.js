@@ -220,31 +220,39 @@ class JudicialAuditCourt {
 
     const chg3raw = Number(candidateInfo.chg3h || 0);
     if (side === 'LONG') {
-      if (taker < 50.5) {
-        judicialScore -= 25;
-        accusations.push(`Taker delili yetersiz (%${taker.toFixed(1)})`);
+      if (taker < 52.0 || taker > 69.0) {
+        judicialScore -= 35;
+        accusations.push(`Sağlıksız Taker oranı (%${taker.toFixed(1)})`);
       }
-      if (chg15 < -0.35) {
-        judicialScore -= 30;
-        accusations.push(`Düşen bıçağa atlama suçu (15m: %${chg15.toFixed(2)})`);
+      if (chg15 < 0.10) {
+        judicialScore -= 35;
+        accusations.push(`15dk ivme yetersiz (%${chg15.toFixed(2)})`);
       }
-      if (chg24 < -5.0 && chg3raw < 2.0) {
-        judicialScore -= 25;
-        accusations.push(`Günlük çöküşe karşı long suçu (24s: %${chg24.toFixed(1)})`);
+      if (chg3raw < 1.5 || chg3raw > 26.0) {
+        judicialScore -= 35;
+        accusations.push(`3s trend uygunsuz (%${chg3raw.toFixed(1)})`);
+      }
+      if (chg24 < 1.5) {
+        judicialScore -= 35;
+        accusations.push(`24s trend zayıf/eksi (%${chg24.toFixed(1)})`);
       }
     } else { // SHORT
       const sellTaker = 100 - taker;
-      if (sellTaker < 50.5) {
-        judicialScore -= 25;
-        accusations.push(`Satıcı delili yetersiz (%${sellTaker.toFixed(1)})`);
+      if (sellTaker < 53.0 || sellTaker > 76.0) {
+        judicialScore -= 35;
+        accusations.push(`Satıcı delili sağlıksız (%${sellTaker.toFixed(1)})`);
       }
-      if (chg15 > 0.35) {
-        judicialScore -= 30;
-        accusations.push(`Yükselen bıçağa short suçu (15m: +%${chg15.toFixed(2)})`);
+      if (chg15 > -0.20) {
+        judicialScore -= 35;
+        accusations.push(`15dk düşüş ivmesi yetersiz (%${chg15.toFixed(2)})`);
       }
-      if (chg24 > 5.0 && chg15 > -0.80) {
-        judicialScore -= 25;
-        accusations.push(`Günlük roketlemeye karşı short suçu (24s: +%${chg24.toFixed(1)})`);
+      if (chg3raw > -1.8 || chg3raw < -6.5) {
+        judicialScore -= 35;
+        accusations.push(`3s düşüş kanalı uygunsuz (%${chg3raw.toFixed(1)})`);
+      }
+      if (chg24 > -2.5) {
+        judicialScore -= 35;
+        accusations.push(`24s düşüş trendi yetersiz (%${chg24.toFixed(1)})`);
       }
     }
 
