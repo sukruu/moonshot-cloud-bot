@@ -319,13 +319,13 @@ const shadowDedupMap = new Map();
 try {
   if (fs.existsSync(SHADOW_FILE)) {
     const rawShadow = JSON.parse(fs.readFileSync(SHADOW_FILE, 'utf8'));
-    if (Array.isArray(rawShadow)) shadowSignals = rawShadow.slice(0, 300);
+    if (Array.isArray(rawShadow)) shadowSignals = rawShadow.slice(0, 1000);
   }
 } catch (e) {}
 
 function saveShadowSignals() {
   try {
-    fs.writeFileSync(SHADOW_FILE, JSON.stringify(shadowSignals.slice(0, 300), null, 2), 'utf8');
+    fs.writeFileSync(SHADOW_FILE, JSON.stringify(shadowSignals.slice(0, 1000), null, 2), 'utf8');
   } catch (e) {}
 }
 
@@ -334,7 +334,8 @@ function recordShadowSignal(info) {
     const now = Date.now();
     const dedupKey = `${info.symbol}:${info.stage}`;
     const lastSeen = shadowDedupMap.get(dedupKey) || 0;
-    if (info.stage !== 'TAKEN' && (now - lastSeen) < 180000) return;
+    const dedupMs = String(info.stage).startsWith('RADAR_') ? 15 * 60000 : 180000;
+    if (info.stage !== 'TAKEN' && (now - lastSeen) < dedupMs) return;
     shadowDedupMap.set(dedupKey, now);
 
     const rec = {
@@ -359,7 +360,7 @@ function recordShadowSignal(info) {
       cp15m: null
     };
     shadowSignals.unshift(rec);
-    if (shadowSignals.length > 300) shadowSignals.pop();
+    if (shadowSignals.length > 1000) shadowSignals.pop();
     saveShadowSignals();
 
     for (const cp of [{ key: 'cp1m', min: 1 }, { key: 'cp3m', min: 3 }, { key: 'cp5m', min: 5 }, { key: 'cp15m', min: 15 }]) {
@@ -1196,8 +1197,6 @@ async function scanLoop() {
           pos1h <= 12.0 &&
           rsi3m >= 20.0 && rsi3m <= 54.0;
 
-        if (!radarOkLong && !radarOkShort) continue;
-
         // 📐 VOLATİLİTE (3dk ATR-14, %): Stop mesafesi koinin normal gürültüsüne göre ayarlanır
         let trSum = 0, trCount = 0;
         for (let m = Math.max(1, lastIdx - 14); m < lastIdx; m++) {
@@ -1208,6 +1207,39 @@ async function scanLoop() {
           }
         }
         const atr3mPct = trCount > 0 ? trSum / trCount : 0.5;
+
+        if (!radarOkLong && !radarOkShort) {
+          // 👻 Radar'a ÇOK YAKIN elenen adayları da kaydet (yeni 1s/30dk/pos1h/RSI filtrelerinin etkisi ölçülebilsin)
+          const nearLong = chg24Val >= 1.5 && chg3hVal >= 1.8 && chg15Long >= 0.15;
+          const nearShort = chg24Val <= -2.5 && chg3hVal <= -1.8 && chg15Short <= -0.12;
+          if (nearLong || nearShort) {
+            const nSide = nearLong ? 'LONG' : 'SHORT';
+            let why = 'RADAR_OTHER';
+            if (nSide === 'LONG') {
+              if (chg1hCalc < 1.0) why = 'RADAR_1H';
+              else if (chg30mCalc < 1.2) why = 'RADAR_30M';
+              else if (pos1h < 50 || pos1h > 80) why = 'RADAR_POS1H';
+              else if (rsi3m < 50 || rsi3m > 70) why = 'RADAR_RSI';
+              else if (rangePos < 48 || rangePos > 88) why = 'RADAR_RANGE';
+            } else {
+              if (chg1hCalc > -0.45) why = 'RADAR_1H';
+              else if (chg30mCalc > -0.65) why = 'RADAR_30M';
+              else if (pos1h > 12) why = 'RADAR_POS1H';
+              else if (rsi3m < 20 || rsi3m > 54) why = 'RADAR_RSI';
+              else if (rangePos < 4 || rangePos > 55) why = 'RADAR_RANGE';
+            }
+            recordShadowSignal({
+              symbol: sym, side: nSide, stage: why, price: curP,
+              chg15: Number((nSide === 'LONG' ? chg15Long : chg15Short).toFixed(2)),
+              chg3h: Number(chg3hVal.toFixed(2)), chg24h: Number(chg24Val.toFixed(2)),
+              rangePos: Number(rangePos.toFixed(0)),
+              taker: Number((nSide === 'LONG' ? effectiveTaker : effectiveTakerShort).toFixed(1)),
+              cur3m: Number(curMovePct.toFixed(2)), prev3m: Number(prevMovePct.toFixed(2)),
+              atr3m: Number(atr3mPct.toFixed(2)), signal: sig
+            });
+          }
+          continue;
+        }
 
         // 👻 GÖLGE SİNYAL KAYDI: Radar ön filtresini geçen her aday, açılsa da reddedilse de kaydedilir
         const shadowSide = radarOkLong ? 'LONG' : 'SHORT';
@@ -3461,7 +3493,13 @@ const server = http.createServer(async (req, res) => {
       teamStatus: engineSnapshot(),
       dynamic: DYNAMIC,
       pingStats: pingStats,
-      shadowCount: shadowSignals.length
+      shadowCount: shadowSignals.length,
+      feed: {
+        book: bookFeed,
+        futuresSymbols: [...symbolFeed.values()].filter(v => v === 'futures').length,
+        spotSymbols: [...symbolFeed.values()].filter(v => v === 'spot').length,
+        fapiBlockedForMin: Math.max(0, Math.round((fapiDownUntil - Date.now()) / 60000))
+      }
     }));
     return;
   }
