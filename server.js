@@ -683,10 +683,24 @@ setInterval(runHistoricalDeepScan, 4 * 60 * 60 * 1000);
 // ==========================================
 
 
+const BINANCE_SPOT_MIRRORS = [
+  'https://data-api.binance.vision',
+  'https://api-gcp.binance.com',
+  'https://api1.binance.com',
+  'https://api2.binance.com',
+  'https://api3.binance.com',
+  'https://api4.binance.com'
+];
+
 const symbolFeed = new Map();
 let bookFeed = 'none';
 let lastFetchWarn = 0;
 let fapiDownUntil = 0;
+let isFapiProbing = false;
+const spotMirrorDownUntil = new Map();
+const binanceCache = new Map();
+const binanceInFlight = new Map();
+
 function noteFeed(url, source) {
   const m = String(url).match(/symbol=([A-Z0-9]+)/);
   if (m) symbolFeed.set(m[1], source);
@@ -699,26 +713,70 @@ function warnFetch(msg) {
   addLog(msg, 'WARN');
 }
 
-async function fetchBinance(url) {
-  let relativePath = url;
-  if (url.startsWith("http")) {
+function getCachePolicy(relativePath) {
+  if (relativePath.includes('ticker/24hr')) {
+    return { ttlMs: 4500, staleMs: 45000 };
+  }
+  if (relativePath.includes('interval=1d')) {
+    return { ttlMs: 30 * 60 * 1000, staleMs: 60 * 60 * 1000 };
+  }
+  if (relativePath.includes('klines')) {
+    return { ttlMs: 2500, staleMs: 12000 };
+  }
+  if (relativePath.includes('ticker/price')) {
+    return { ttlMs: 800, staleMs: 5000 };
+  }
+  return { ttlMs: 1500, staleMs: 8000 };
+}
+
+async function fetchBinanceRaw(relativePath) {
+  // Vadeli ayna cevap vermiyorsa (veya ABD IP 451 engeli varsa) tek bir probe dışındaki tüm istekler doğrudan Spot havuzuna geçer.
+  if (Date.now() >= fapiDownUntil && !isFapiProbing) {
+    isFapiProbing = true;
     try {
-      const parsed = new URL(url);
-      relativePath = parsed.pathname + parsed.search;
-    } catch(e) {
-      relativePath = url.replace(/^https?:\/\/[^\/]+/, "");
+      for (const base of BINANCE_FAPI_MIRRORS) {
+        try {
+          const targetUrl = base + relativePath;
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 1200);
+          const res = await fetch(targetUrl, {
+            signal: controller.signal,
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36',
+              'Accept': 'application/json'
+            }
+          });
+          clearTimeout(timeoutId);
+          if (res.status === 429 || res.status === 418) break;
+          if (res.status === 451) continue;
+          if (!res.ok) continue;
+          const data = await res.json();
+          if (data) {
+            fapiDownUntil = 0;
+            noteFeed(relativePath, 'futures');
+            return data;
+          }
+        } catch (e) {}
+      }
+      // Render ABD IP'sinde vadeli uçlar 451 veya timeout verdiğinde 30 dakika boyunca paralel istekleri bekletme
+      fapiDownUntil = Date.now() + 30 * 60 * 1000;
+    } finally {
+      isFapiProbing = false;
     }
   }
 
-  // Vadeli ayna cevap vermiyorsa (veya ABD IP 451 engeli varsa) doğrudan hızlı binance.vision akışını kullan.
-  if (Date.now() >= fapiDownUntil) {
-    let sawGeoBlock = false;
-    for (const base of BINANCE_FAPI_MIRRORS) {
+  const spotPath = relativePath.replace(/^\/fapi\/v1\//, '/api/v3/');
+  const now = Date.now();
+  for (const spotBase of BINANCE_SPOT_MIRRORS) {
+    const downUntil = spotMirrorDownUntil.get(spotBase) || 0;
+    if (now < downUntil) continue;
+
+    const spotUrl = spotBase + spotPath;
+    for (let attempt = 0; attempt < 2; attempt++) {
       try {
-        const targetUrl = base + relativePath;
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 1200);
-        const res = await fetch(targetUrl, {
+        const timeoutId = setTimeout(() => controller.abort(), 4000);
+        const res = await fetch(spotUrl, {
           signal: controller.signal,
           headers: {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36',
@@ -726,52 +784,79 @@ async function fetchBinance(url) {
           }
         });
         clearTimeout(timeoutId);
-        if (res.status === 429) break;
+        if (res.status === 400 || res.status === 404) return null; // Spot borsasında olmayan vadeli sembol
         if (res.status === 451) {
-          sawGeoBlock = true;
-          continue;
+          spotMirrorDownUntil.set(spotBase, Date.now() + 30 * 60 * 1000);
+          break;
         }
-        if (!res.ok) continue;
-        const data = await res.json();
-        if (data) {
-          fapiDownUntil = 0;
-          noteFeed(relativePath, 'futures');
-          return data;
+        if (res.status === 429 || res.status === 418) {
+          spotMirrorDownUntil.set(spotBase, Date.now() + 60 * 1000);
+          break;
         }
-      } catch(e) {}
+        if (res.ok) {
+          const data = await res.json();
+          if (data) {
+            noteFeed(relativePath, 'spot');
+            return data;
+          }
+        }
+      } catch (e) {}
     }
-    fapiDownUntil = Date.now() + (sawGeoBlock ? 30 * 60 * 1000 : 60000);
   }
 
-  const spotPath = relativePath.replace(/^\/fapi\/v1\//, '/api/v3/');
-  const visionUrl = 'https://data-api.binance.vision' + spotPath;
-  for (let attempt = 0; attempt < 2; attempt++) {
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 4500);
-      const res = await fetch(visionUrl, {
-        signal: controller.signal,
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36',
-          'Accept': 'application/json'
-        }
-      });
-      clearTimeout(timeoutId);
-      if (res.status === 400 || res.status === 404) return null; // Spot borsasında olmayan vadeli sembol
-      if (res.ok) {
-        const data = await res.json();
-        if (data) {
-          noteFeed(relativePath, 'spot');
-          return data;
-        }
-      }
-    } catch (e) {}
-  }
-
-  if (relativePath.includes('ticker/24hr')) {
-    warnFetch('Binance fiyatı alınamadı. Tarama durdu, işlem açılmıyor.');
-  }
   return null;
+}
+
+async function fetchBinance(url) {
+  let relativePath = url;
+  if (url.startsWith("http")) {
+    try {
+      const parsed = new URL(url);
+      relativePath = parsed.pathname + parsed.search;
+    } catch (e) {
+      relativePath = url.replace(/^https?:\/\/[^\/]+/, "");
+    }
+  }
+
+  const now = Date.now();
+  const policy = getCachePolicy(relativePath);
+  const cached = binanceCache.get(relativePath);
+  if (cached && (now - cached.ts) <= policy.ttlMs) {
+    return cached.data;
+  }
+
+  if (binanceInFlight.has(relativePath)) {
+    return binanceInFlight.get(relativePath);
+  }
+
+  const reqPromise = (async () => {
+    try {
+      const fresh = await fetchBinanceRaw(relativePath);
+      if (fresh !== null && fresh !== undefined) {
+        binanceCache.set(relativePath, { data: fresh, ts: Date.now() });
+        if (binanceCache.size > 1500) {
+          const cutoff = Date.now() - 120000;
+          for (const [k, v] of binanceCache.entries()) {
+            if (v.ts < cutoff) binanceCache.delete(k);
+          }
+        }
+        return fresh;
+      }
+      // Anlık ağ/rate-limit kesintisinde taze önbellek (stale fallback) varsa taramayı durdurmadan devam et
+      if (cached && (Date.now() - cached.ts) <= policy.staleMs) {
+        return cached.data;
+      }
+      if (relativePath.includes('ticker/24hr')) {
+        warnFetch('Binance fiyatı alınamadı. Tarama durdu, işlem açılmıyor.');
+      }
+      return null;
+    } finally {
+      binanceInFlight.delete(relativePath);
+    }
+  })();
+
+  binanceInFlight.set(relativePath, reqPromise);
+  return reqPromise;
 }
 
 // 1. RADAR (3S & 15DK ÇOKLU ZAMAN, ALICI BASKISI VE SİNYAL MOTORU)
