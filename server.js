@@ -1270,51 +1270,51 @@ async function scanLoop() {
         const atr3mPct = trCount > 0 ? trSum / trCount : 0.5;
 
         // 🧭 ÇOKLU ZAMAN DİLİMİ (15dk + 30dk + 1s + 3s + 24s), 1S KANAL (pos1h), VOLATİLİTE & RSI-14 UYUMU:
-        // LONG: 3s, 1s (+%1.0 ile +%4.8 arası) ve 30dk (+%1.2+) kesintisiz yükselişte olmalı;
-        // 1s kanalında %50-%80 arası soluklanmış, RSI 50-70 bandında ve 3dk ATR <= %1.50 olmalı (AVA gibi +%6.4 1s / %2.41 ATR blow-off tepeleri elenir)!
+        // LONG: 3s, 1s (+%0.70 ile +%7.5 arası) ve 30dk (+%0.70+) sağlıklı yükselişte olmalı;
+        // 1s kanalında %45-%88 arası kırılım modunda, RSI 48-72 bandında ve 3dk ATR <= %1.65 olmalı!
         const radarOkLong =
           !sig.includes("ŞELALE") &&
           !sig.includes("AYI") &&
-          chg24Val >= 1.5 && chg24Val <= 45.0 &&
-          chg3hVal >= 1.8 && chg3hVal <= 26.0 &&
-          chg1hCalc >= 1.0 && chg1hCalc <= 4.8 && chg30mCalc >= 1.2 && chg15Long >= 0.15 &&
-          rangePos >= 48.0 && rangePos <= 88.0 &&
-          pos1h >= 50.0 && pos1h <= 80.0 &&
-          rsi3m >= 50.0 && rsi3m <= 70.0 &&
-          atr3mPct <= 1.50;
+          chg24Val >= 1.5 && chg24Val <= 50.0 &&
+          chg3hVal >= 1.8 && chg3hVal <= 28.0 &&
+          chg1hCalc >= 0.70 && chg1hCalc <= 7.5 && chg30mCalc >= 0.70 && chg15Long >= 0.15 &&
+          rangePos >= 45.0 && rangePos <= 92.0 &&
+          pos1h >= 45.0 && pos1h <= 88.0 &&
+          rsi3m >= 48.0 && rsi3m <= 72.0 &&
+          atr3mPct <= 1.65;
 
-        // SHORT: 24s, 3s, 1s (-%0.45 altı), 30dk (-%0.65 altı) ve 15dk (-%0.12 altı) kesintisiz düşüşte olmalı;
-        // Fiyat 1 saatlik desteğini aşağı kırıyor olmalı (pos1h <= %12) ve RSI 20-54 bandında olmalı (RSI<20 aşırı satım kapitülasyonu elenir)!
+        // SHORT: 24s, 3s, 1s (-%0.35 altı), 30dk (-%0.40 altı) ve 15dk (-%0.10 altı) kesintisiz düşüşte olmalı;
+        // Fiyat 1 saatlik desteğini aşağı kırıyor olmalı (pos1h <= %22) ve RSI 18-55 bandında olmalı!
         const radarOkShort =
           !sig.includes("ROKET") &&
           !sig.includes("BOĞA") &&
-          chg24Val <= -2.5 && chg24Val >= -35.0 &&
-          chg3hVal <= -1.8 && chg3hVal >= -6.8 &&
-          chg1hCalc <= -0.45 && chg30mCalc <= -0.65 && chg15mTrue <= -0.12 && chg15mCalc <= -0.12 &&
-          rangePos >= 4.0 && rangePos <= 55.0 &&
-          pos1h <= 12.0 &&
-          rsi3m >= 20.0 && rsi3m <= 54.0;
+          chg24Val <= -2.2 && chg24Val >= -38.0 &&
+          chg3hVal <= -1.6 && chg3hVal >= -8.5 &&
+          chg1hCalc <= -0.35 && chg30mCalc <= -0.40 && chg15mTrue <= -0.10 && chg15mCalc <= -0.10 &&
+          rangePos >= 3.0 && rangePos <= 60.0 &&
+          pos1h <= 22.0 &&
+          rsi3m >= 18.0 && rsi3m <= 55.0;
 
         if (!radarOkLong && !radarOkShort) {
           // 👻 Radar'a ÇOK YAKIN elenen adayları da kaydet (yeni 1s/30dk/pos1h/RSI/ATR filtrelerinin etkisi ölçülebilsin)
           const nearLong = chg24Val >= 1.5 && chg3hVal >= 1.8 && chg15Long >= 0.15;
-          const nearShort = chg24Val <= -2.5 && chg3hVal <= -1.8 && chg15Short <= -0.12;
+          const nearShort = chg24Val <= -2.2 && chg3hVal <= -1.6 && chg15Short <= -0.10;
           if (nearLong || nearShort) {
             const nSide = nearLong ? 'LONG' : 'SHORT';
             let why = 'RADAR_OTHER';
             if (nSide === 'LONG') {
-              if (chg1hCalc < 1.0 || chg1hCalc > 4.8) why = 'RADAR_1H';
-              else if (chg30mCalc < 1.2) why = 'RADAR_30M';
-              else if (pos1h < 50 || pos1h > 80) why = 'RADAR_POS1H';
-              else if (rsi3m < 50 || rsi3m > 70) why = 'RADAR_RSI';
-              else if (atr3mPct > 1.50) why = 'RADAR_ATR';
-              else if (rangePos < 48 || rangePos > 88) why = 'RADAR_RANGE';
+              if (chg1hCalc < 0.70 || chg1hCalc > 7.5) why = 'RADAR_1H';
+              else if (chg30mCalc < 0.70) why = 'RADAR_30M';
+              else if (pos1h < 45 || pos1h > 88) why = 'RADAR_POS1H';
+              else if (rsi3m < 48 || rsi3m > 72) why = 'RADAR_RSI';
+              else if (atr3mPct > 1.65) why = 'RADAR_ATR';
+              else if (rangePos < 45 || rangePos > 92) why = 'RADAR_RANGE';
             } else {
-              if (chg1hCalc > -0.45) why = 'RADAR_1H';
-              else if (chg30mCalc > -0.65) why = 'RADAR_30M';
-              else if (pos1h > 12) why = 'RADAR_POS1H';
-              else if (rsi3m < 20 || rsi3m > 54) why = 'RADAR_RSI';
-              else if (rangePos < 4 || rangePos > 55) why = 'RADAR_RANGE';
+              if (chg1hCalc > -0.35) why = 'RADAR_1H';
+              else if (chg30mCalc > -0.40) why = 'RADAR_30M';
+              else if (pos1h > 22) why = 'RADAR_POS1H';
+              else if (rsi3m < 18 || rsi3m > 55) why = 'RADAR_RSI';
+              else if (rangePos < 3 || rangePos > 60) why = 'RADAR_RANGE';
             }
             recordShadowSignal({
               symbol: sym, side: nSide, stage: why, price: curP,
@@ -1377,7 +1377,7 @@ async function scanLoop() {
         const noWickShort = candleSpan > 0 ? (lowerWick / candleSpan <= 0.40) : true;
 
         const vol3hCheck = rInfo.vol3hM || ((quote90mCalc * 2) / 1e6);
-        const hasRealLiquidity = vol3hCheck >= 1.1 && vol24 >= 2.2;
+        const hasRealLiquidity = isVip || (vol3hCheck >= 0.70 && vol24 >= 1.5);
         const hasBuyerDominance = effectiveTaker >= 52.0 && effectiveTaker <= 69.0 && taker15mCalc >= 51.2;
         const hasSellerDominance = effectiveTakerShort <= 47.2 && effectiveTakerShort >= 24.0 && taker15mCalc <= 48.2;
 
@@ -1403,7 +1403,7 @@ async function scanLoop() {
 
         // 🔴 MARSCOIN 1S DESTEK KIRILIMI ŞELALE SHORT MOTORU:
         let isShortDump = false;
-        if (hasRealLiquidity && noWickShort && hasSellerDominance && radarOkShort && continuationShort && btc15mNumeric <= 0.08) {
+        if (hasRealLiquidity && noWickShort && hasSellerDominance && radarOkShort && continuationShort && btc15mNumeric <= 0.25) {
           if (
             (sig.includes("BALİNA AYI") || sig.includes("GÜÇLÜ AYI") || (chg3hVal <= -2.0 && chg15Short <= -0.35)) &&
             (curMovePct <= -0.18 || isBreakoutHoldShort) &&
