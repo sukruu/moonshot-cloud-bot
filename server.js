@@ -29,7 +29,7 @@ let CONFIG = {
   initialBalance: 100.0,     // Bakiye 100 Dolar
   marginPerTrade: 25.0,      // Temel Teminat 25$ (2 Slot için $50 marjin, kasada $56 serbest nakit tamponu)
   leverage: 20,              // Kaldıraç 20x
-  maxSlots: 2,               // 2 Slot
+  maxSlots: 3,               // 2 Slot
   slPct: 0.78,               // Kazanan işlemlerin %95'i MAE <= %0.67 kaldığı için sıkı SL (-$3.15 yerine -$2.64)
   bePct: 0.58,               // +%0.58 görünce başabaş+kâr kilidi (+%0.18) devreye girer
   moonPct: 2.40,             // +%2.40 spotta roket vur-kaç hedefini alır (+%48 ROI)
@@ -49,7 +49,7 @@ let DYNAMIC = {
   updatedAt: 0
 };
 
-let userRisk = { maxSlots: 2, marginPerTrade: 25 };
+let userRisk = { maxSlots: 3, marginPerTrade: 25 };
 let circuitOn = false;
 
 function rememberUserRisk() {
@@ -1275,25 +1275,25 @@ async function scanLoop() {
         const radarOkLong =
           !sig.includes("ŞELALE") &&
           !sig.includes("AYI") &&
-          chg24Val >= 1.5 && chg24Val <= 50.0 &&
-          chg3hVal >= 1.8 && chg3hVal <= 28.0 &&
-          chg1hCalc >= 0.70 && chg1hCalc <= 7.5 && chg30mCalc >= 0.70 && chg15Long >= 0.15 &&
-          rangePos >= 45.0 && rangePos <= 92.0 &&
-          pos1h >= 45.0 && pos1h <= 88.0 &&
-          rsi3m >= 48.0 && rsi3m <= 72.0 &&
-          atr3mPct <= 1.65;
+          chg24Val >= 1.0 && chg24Val <= 55.0 &&
+          chg3hVal >= 1.4 && chg3hVal <= 30.0 &&
+          chg1hCalc >= 0.50 && chg1hCalc <= 8.5 && chg30mCalc >= 0.50 && chg15Long >= 0.12 &&
+          rangePos >= 40.0 && rangePos <= 95.0 &&
+          pos1h >= 40.0 && pos1h <= 92.0 &&
+          rsi3m >= 45.0 && rsi3m <= 75.0 &&
+          atr3mPct <= 1.85;
 
         // SHORT: 24s, 3s, 1s (-%0.35 altı), 30dk (-%0.40 altı) ve 15dk (-%0.10 altı) kesintisiz düşüşte olmalı;
         // Fiyat 1 saatlik desteğini aşağı kırıyor olmalı (pos1h <= %22) ve RSI 18-55 bandında olmalı!
         const radarOkShort =
           !sig.includes("ROKET") &&
           !sig.includes("BOĞA") &&
-          chg24Val <= -2.2 && chg24Val >= -38.0 &&
-          chg3hVal <= -1.6 && chg3hVal >= -8.5 &&
-          chg1hCalc <= -0.35 && chg30mCalc <= -0.40 && chg15mTrue <= -0.10 && chg15mCalc <= -0.10 &&
-          rangePos >= 3.0 && rangePos <= 60.0 &&
-          pos1h <= 22.0 &&
-          rsi3m >= 18.0 && rsi3m <= 55.0;
+          chg24Val <= -1.8 && chg24Val >= -42.0 &&
+          chg3hVal <= -1.3 && chg3hVal >= -10.0 &&
+          chg1hCalc <= -0.28 && chg30mCalc <= -0.30 && chg15mTrue <= -0.08 && chg15mCalc <= -0.08 &&
+          rangePos >= 2.0 && rangePos <= 65.0 &&
+          pos1h <= 28.0 &&
+          rsi3m >= 15.0 && rsi3m <= 58.0;
 
         if (!radarOkLong && !radarOkShort) {
           // 👻 Radar'a ÇOK YAKIN elenen adayları da kaydet (yeni 1s/30dk/pos1h/RSI/ATR filtrelerinin etkisi ölçülebilsin)
@@ -1378,8 +1378,8 @@ async function scanLoop() {
 
         const vol3hCheck = rInfo.vol3hM || ((quote90mCalc * 2) / 1e6);
         const hasRealLiquidity = isVip || (vol3hCheck >= 0.70 && vol24 >= 1.5);
-        const hasBuyerDominance = effectiveTaker >= 52.0 && effectiveTaker <= 69.0 && taker15mCalc >= 51.2;
-        const hasSellerDominance = effectiveTakerShort <= 47.2 && effectiveTakerShort >= 24.0 && taker15mCalc <= 48.2;
+        const hasBuyerDominance = effectiveTaker >= 50.8 && effectiveTaker <= 76.0 && taker15mCalc >= 50.2;
+        const hasSellerDominance = effectiveTakerShort <= 49.2 && effectiveTakerShort >= 22.0 && taker15mCalc <= 49.5;
 
         // 📐 3. KAPANMIŞ MUM & YAPI KIRILIMI + DİRENÇ ÜSTÜ KALICILIK TEYİDİ:
         const brokePrevHigh = curP > prevH || (curP > prevC && (prevC >= prevO || curMovePct >= 0.20) && curP >= prevH * 0.9982);
@@ -1394,7 +1394,7 @@ async function scanLoop() {
         let isLongPump = false;
         let isRocketSignal = false;
         if (hasRealLiquidity && noWickLong && hasBuyerDominance && radarOkLong && continuationLong && !nearMax6m) {
-          if ((curMovePct >= 0.20 || isBreakoutHoldLong) && twoCandleMovePct >= 0.32 && volMult >= 1.15 && spikeVolMult <= 4.5 && chg3hVal >= 1.8) {
+          if ((curMovePct >= 0.14 || isBreakoutHoldLong) && twoCandleMovePct >= 0.24 && volMult >= 1.05 && spikeVolMult <= 4.8 && chg3hVal >= 1.4) {
             isLongPump = true;
             isRocketSignal = true;
             radarTag = `[🚀 MARSCOIN ROKET SPIKE | 3dk: +%${curMovePct.toFixed(2)} | 1s: +%${chg1hCalc.toFixed(1)} | Pos1h: %${pos1h.toFixed(0)} | RSI: ${rsi3m.toFixed(0)} | Kanal: %${rangePos.toFixed(0)}]`;
@@ -1406,10 +1406,10 @@ async function scanLoop() {
         if (hasRealLiquidity && noWickShort && hasSellerDominance && radarOkShort && continuationShort && btc15mNumeric <= 0.25) {
           if (
             (sig.includes("BALİNA AYI") || sig.includes("GÜÇLÜ AYI") || (chg3hVal <= -2.0 && chg15Short <= -0.35)) &&
-            (curMovePct <= -0.18 || isBreakoutHoldShort) &&
-            twoCandleMovePct <= -0.32 &&
-            volMult >= 0.85 && spikeVolMult <= 4.5 &&
-            effectiveTakerShort <= 46.8
+            (curMovePct <= -0.14 || isBreakoutHoldShort) &&
+            twoCandleMovePct <= -0.24 &&
+            volMult >= 0.75 && spikeVolMult <= 4.8 &&
+            effectiveTakerShort <= 48.8
           ) {
             isShortDump = true;
             radarTag = `[🩸 MARSCOIN ŞELALE SHORT | 3dk: %${curMovePct.toFixed(2)} | 1s: %${chg1hCalc.toFixed(1)} | Pos1h: %${pos1h.toFixed(0)} | RSI: ${rsi3m.toFixed(0)} | Kanal: %${rangePos.toFixed(0)}]`;
@@ -1442,8 +1442,8 @@ async function scanLoop() {
             else if (priceChg <= -0.50 && takerPct >= 52.0) cvdDivergence = 'BULLISH_DIVERGENCE';
             scoutInfo = {
               cvdDivergence,
-              isApprovedLong: takerPct >= 50.8 && netFlowM >= -0.02,
-              isApprovedShort: takerPct <= 49.2 && netFlowM <= 0.02,
+              isApprovedLong: takerPct >= 49.5 && netFlowM >= -0.05,
+              isApprovedShort: takerPct <= 50.5 && netFlowM <= 0.05,
               netFlowM: Number(netFlowM.toFixed(3)),
               takerPct
             };
