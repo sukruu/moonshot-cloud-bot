@@ -775,7 +775,8 @@ async function fetchBinanceRaw(relativePath) {
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 4000);
+        const timeoutMs = relativePath.includes('ticker/24hr') ? 9500 : 4500;
+        const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
         const res = await fetch(spotUrl, {
           signal: controller.signal,
           headers: {
