@@ -567,7 +567,8 @@ const BINANCE_FAPI_MIRRORS = [
   "https://fapi1.binance.com",
   "https://fapi2.binance.com",
   "https://fapi3.binance.com",
-  "https://fapi.binance.com"
+  "https://fapi.binance.com",
+  "https://www.binance.info"
 ];
 
 
@@ -684,6 +685,7 @@ setInterval(runHistoricalDeepScan, 4 * 60 * 60 * 1000);
 
 
 const BINANCE_SPOT_MIRRORS = [
+  'https://api.binance.com',
   'https://data-api.binance.vision',
   'https://api-gcp.binance.com',
   'https://api1.binance.com',
@@ -734,11 +736,12 @@ async function fetchBinanceRaw(relativePath) {
   if (Date.now() >= fapiDownUntil && !isFapiProbing) {
     isFapiProbing = true;
     try {
+      const probeTimeoutMs = relativePath.includes('ticker/24hr') ? 9500 : 3500;
       for (const base of BINANCE_FAPI_MIRRORS) {
         try {
           const targetUrl = base + relativePath;
           const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 1200);
+          const timeoutId = setTimeout(() => controller.abort(), probeTimeoutMs);
           const res = await fetch(targetUrl, {
             signal: controller.signal,
             headers: {
@@ -758,8 +761,8 @@ async function fetchBinanceRaw(relativePath) {
           }
         } catch (e) {}
       }
-      // Render ABD IP'sinde vadeli uçlar 451 veya timeout verdiğinde 30 dakika boyunca paralel istekleri bekletme
-      fapiDownUntil = Date.now() + 30 * 60 * 1000;
+      // Render ABD IP'sinde vadeli uçlar 451 veya timeout verdiğinde paralel istekleri 10 dk beklet
+      fapiDownUntil = Date.now() + 10 * 60 * 1000;
     } finally {
       isFapiProbing = false;
     }
@@ -1271,51 +1274,51 @@ async function scanLoop() {
         const atr3mPct = trCount > 0 ? trSum / trCount : 0.5;
 
         // 🧭 ÇOKLU ZAMAN DİLİMİ (15dk + 30dk + 1s + 3s + 24s), 1S KANAL (pos1h), VOLATİLİTE & RSI-14 UYUMU:
-        // LONG: 3s, 1s (+%0.70 ile +%7.5 arası) ve 30dk (+%0.70+) sağlıklı yükselişte olmalı;
-        // 1s kanalında %45-%88 arası kırılım modunda, RSI 48-72 bandında ve 3dk ATR <= %1.65 olmalı!
+        // LONG: 3s, 1s (+%0.35+) ve 30dk (+%0.28+) sağlıklı yükselişte olmalı;
+        // 1s kanalında %35-%96 arası kırılım modunda, RSI 45-75 bandında ve 3dk ATR <= %1.95 olmalı!
         const radarOkLong =
           !sig.includes("ŞELALE") &&
           !sig.includes("AYI") &&
-          chg24Val >= 1.0 && chg24Val <= 55.0 &&
-          chg3hVal >= 1.4 && chg3hVal <= 30.0 &&
-          chg1hCalc >= 0.50 && chg1hCalc <= 8.5 && chg30mCalc >= 0.50 && chg15Long >= 0.12 &&
-          rangePos >= 40.0 && rangePos <= 95.0 &&
-          pos1h >= 40.0 && pos1h <= 92.0 &&
+          chg24Val >= 0.8 && chg24Val <= 55.0 &&
+          chg3hVal >= 1.2 && chg3hVal <= 30.0 &&
+          chg1hCalc >= 0.35 && chg1hCalc <= 8.5 && chg30mCalc >= 0.28 && chg15Long >= 0.08 &&
+          rangePos >= 35.0 && rangePos <= 97.0 &&
+          pos1h >= 35.0 && pos1h <= 96.0 &&
           rsi3m >= 45.0 && rsi3m <= 75.0 &&
-          atr3mPct <= 1.85;
+          atr3mPct <= 1.95;
 
-        // SHORT: 24s, 3s, 1s (-%0.35 altı), 30dk (-%0.40 altı) ve 15dk (-%0.10 altı) kesintisiz düşüşte olmalı;
-        // Fiyat 1 saatlik desteğini aşağı kırıyor olmalı (pos1h <= %22) ve RSI 18-55 bandında olmalı!
+        // SHORT: 24s, 3s, 1s (-%0.18 altı), 30dk (-%0.20 altı) ve 15dk (-%0.06 altı) kesintisiz düşüşte olmalı;
+        // Fiyat 1 saatlik desteğini aşağı kırıyor olmalı (pos1h <= %32) ve RSI 15-60 bandında olmalı!
         const radarOkShort =
           !sig.includes("ROKET") &&
           !sig.includes("BOĞA") &&
-          chg24Val <= -1.8 && chg24Val >= -42.0 &&
-          chg3hVal <= -1.3 && chg3hVal >= -10.0 &&
-          chg1hCalc <= -0.28 && chg30mCalc <= -0.30 && chg15mTrue <= -0.08 && chg15mCalc <= -0.08 &&
-          rangePos >= 2.0 && rangePos <= 65.0 &&
-          pos1h <= 28.0 &&
-          rsi3m >= 15.0 && rsi3m <= 58.0;
+          chg24Val <= -1.5 && chg24Val >= -42.0 &&
+          chg3hVal <= -1.2 && chg3hVal >= -12.0 &&
+          chg1hCalc <= -0.18 && chg30mCalc <= -0.20 && chg15mTrue <= -0.06 && chg15mCalc <= -0.06 &&
+          rangePos >= 0.2 && rangePos <= 68.0 &&
+          pos1h <= 32.0 &&
+          rsi3m >= 15.0 && rsi3m <= 60.0;
 
         if (!radarOkLong && !radarOkShort) {
           // 👻 Radar'a ÇOK YAKIN elenen adayları da kaydet (yeni 1s/30dk/pos1h/RSI/ATR filtrelerinin etkisi ölçülebilsin)
-          const nearLong = chg24Val >= 1.5 && chg3hVal >= 1.8 && chg15Long >= 0.15;
-          const nearShort = chg24Val <= -2.2 && chg3hVal <= -1.6 && chg15Short <= -0.10;
+          const nearLong = chg24Val >= 0.8 && chg3hVal >= 1.2 && chg15Long >= 0.08;
+          const nearShort = chg24Val <= -1.5 && chg3hVal <= -1.2 && chg15Short <= -0.06;
           if (nearLong || nearShort) {
             const nSide = nearLong ? 'LONG' : 'SHORT';
             let why = 'RADAR_OTHER';
             if (nSide === 'LONG') {
-              if (chg1hCalc < 0.70 || chg1hCalc > 7.5) why = 'RADAR_1H';
-              else if (chg30mCalc < 0.70) why = 'RADAR_30M';
-              else if (pos1h < 45 || pos1h > 88) why = 'RADAR_POS1H';
-              else if (rsi3m < 48 || rsi3m > 72) why = 'RADAR_RSI';
-              else if (atr3mPct > 1.65) why = 'RADAR_ATR';
-              else if (rangePos < 45 || rangePos > 92) why = 'RADAR_RANGE';
+              if (chg1hCalc < 0.35 || chg1hCalc > 8.5) why = 'RADAR_1H';
+              else if (chg30mCalc < 0.28) why = 'RADAR_30M';
+              else if (pos1h < 35 || pos1h > 96) why = 'RADAR_POS1H';
+              else if (rsi3m < 45 || rsi3m > 75) why = 'RADAR_RSI';
+              else if (atr3mPct > 1.95) why = 'RADAR_ATR';
+              else if (rangePos < 35 || rangePos > 97) why = 'RADAR_RANGE';
             } else {
-              if (chg1hCalc > -0.35) why = 'RADAR_1H';
-              else if (chg30mCalc > -0.40) why = 'RADAR_30M';
-              else if (pos1h > 22) why = 'RADAR_POS1H';
-              else if (rsi3m < 18 || rsi3m > 55) why = 'RADAR_RSI';
-              else if (rangePos < 3 || rangePos > 60) why = 'RADAR_RANGE';
+              if (chg1hCalc > -0.18) why = 'RADAR_1H';
+              else if (chg30mCalc > -0.20) why = 'RADAR_30M';
+              else if (pos1h > 32) why = 'RADAR_POS1H';
+              else if (rsi3m < 15 || rsi3m > 60) why = 'RADAR_RSI';
+              else if (rangePos < 0.2 || rangePos > 68) why = 'RADAR_RANGE';
             }
             recordShadowSignal({
               symbol: sym, side: nSide, stage: why, price: curP,
@@ -1379,14 +1382,14 @@ async function scanLoop() {
 
         const vol3hCheck = rInfo.vol3hM || ((quote90mCalc * 2) / 1e6);
         const hasRealLiquidity = isVip || (vol3hCheck >= 0.70 && vol24 >= 1.5);
-        const hasBuyerDominance = effectiveTaker >= 50.8 && effectiveTaker <= 76.0 && taker15mCalc >= 50.2;
-        const hasSellerDominance = effectiveTakerShort <= 49.2 && effectiveTakerShort >= 22.0 && taker15mCalc <= 49.5;
+        const hasBuyerDominance = effectiveTaker >= 50.4 && effectiveTaker <= 77.0 && taker15mCalc >= 49.5;
+        const hasSellerDominance = effectiveTakerShort <= 49.6 && effectiveTakerShort >= 21.0 && taker15mCalc <= 50.5;
 
         // 📐 3. KAPANMIŞ MUM & YAPI KIRILIMI + DİRENÇ ÜSTÜ KALICILIK TEYİDİ:
-        const brokePrevHigh = curP > prevH || (curP > prevC && (prevC >= prevO || curMovePct >= 0.20) && curP >= prevH * 0.9982);
-        const brokePrevLow = curP < prevL || (curP < prevC && (prevC <= prevO || curMovePct <= -0.20) && curP <= prevL * 1.0018);
-        const isBreakoutHoldLong = prevMovePct >= 0.28 && prevMovePct <= 0.85 && curMovePct >= 0.12 && curP >= prevC && twoCandleMovePct >= 0.40;
-        const isBreakoutHoldShort = prevMovePct <= -0.28 && prevMovePct >= -0.85 && curMovePct <= -0.12 && curP <= prevC && twoCandleMovePct <= -0.40;
+        const brokePrevHigh = curP > prevH || (curP > prevC && (prevC >= prevO || curMovePct >= 0.18) && curP >= prevH * 0.9982);
+        const brokePrevLow = curP < prevL || (curP < prevC && (prevC <= prevO || curMovePct <= -0.18) && curP <= prevL * 1.0018);
+        const isBreakoutHoldLong = prevMovePct >= 0.20 && prevMovePct <= 0.90 && curMovePct >= 0.06 && curP >= prevC && twoCandleMovePct >= 0.26;
+        const isBreakoutHoldShort = prevMovePct <= -0.20 && prevMovePct >= -0.90 && curMovePct <= -0.06 && curP <= prevC && twoCandleMovePct <= -0.26;
         const continuationLong = (curP > curO && brokePrevHigh) || isBreakoutHoldLong;
         const continuationShort = (curP < curO && brokePrevLow) || isBreakoutHoldShort;
 
@@ -1395,7 +1398,7 @@ async function scanLoop() {
         let isLongPump = false;
         let isRocketSignal = false;
         if (hasRealLiquidity && noWickLong && hasBuyerDominance && radarOkLong && continuationLong && !nearMax6m) {
-          if ((curMovePct >= 0.14 || isBreakoutHoldLong) && twoCandleMovePct >= 0.24 && volMult >= 1.05 && spikeVolMult <= 4.8 && chg3hVal >= 1.4) {
+          if ((curMovePct >= 0.10 || isBreakoutHoldLong) && twoCandleMovePct >= 0.18 && volMult >= 0.88 && spikeVolMult <= 4.8 && chg3hVal >= 1.2) {
             isLongPump = true;
             isRocketSignal = true;
             radarTag = `[🚀 MARSCOIN ROKET SPIKE | 3dk: +%${curMovePct.toFixed(2)} | 1s: +%${chg1hCalc.toFixed(1)} | Pos1h: %${pos1h.toFixed(0)} | RSI: ${rsi3m.toFixed(0)} | Kanal: %${rangePos.toFixed(0)}]`;
@@ -1406,11 +1409,11 @@ async function scanLoop() {
         let isShortDump = false;
         if (hasRealLiquidity && noWickShort && hasSellerDominance && radarOkShort && continuationShort && btc15mNumeric <= 0.25) {
           if (
-            (sig.includes("BALİNA AYI") || sig.includes("GÜÇLÜ AYI") || (chg3hVal <= -2.0 && chg15Short <= -0.35)) &&
-            (curMovePct <= -0.14 || isBreakoutHoldShort) &&
-            twoCandleMovePct <= -0.24 &&
-            volMult >= 0.75 && spikeVolMult <= 4.8 &&
-            effectiveTakerShort <= 48.8
+            (sig.includes("BALİNA AYI") || sig.includes("GÜÇLÜ AYI") || (chg3hVal <= -1.6 && chg15Short <= -0.20)) &&
+            (curMovePct <= -0.10 || isBreakoutHoldShort) &&
+            twoCandleMovePct <= -0.18 &&
+            volMult >= 0.68 && spikeVolMult <= 4.8 &&
+            effectiveTakerShort <= 49.5
           ) {
             isShortDump = true;
             radarTag = `[🩸 MARSCOIN ŞELALE SHORT | 3dk: %${curMovePct.toFixed(2)} | 1s: %${chg1hCalc.toFixed(1)} | Pos1h: %${pos1h.toFixed(0)} | RSI: ${rsi3m.toFixed(0)} | Kanal: %${rangePos.toFixed(0)}]`;
@@ -3507,12 +3510,19 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (pathname === '/api/test-fetch') {
-    const results = {};
+    const results = {
+      fapiDownUntil: fapiDownUntil ? new Date(fapiDownUntil).toISOString() : 0,
+      bookFeed,
+      futuresSymbols: [...symbolFeed.values()].filter(v => v === 'futures').length,
+      spotSymbols: [...symbolFeed.values()].filter(v => v === 'spot').length,
+      activeSlots: `${activePositions.length}/${CONFIG.maxSlots}`,
+      positions: {}
+    };
     for (const p of activePositions) {
       try {
         const t0 = Date.now();
         const pData = await fetchBinance(`/fapi/v1/ticker/price?symbol=${p.symbol}`);
-        results[p.symbol] = {
+        results.positions[p.symbol] = {
           entry: p.entryPrice,
           current: p.currentPrice,
           side: p.side,
@@ -3524,7 +3534,7 @@ const server = http.createServer(async (req, res) => {
           ms: Date.now() - t0
         };
       } catch (err) {
-        results[p.symbol] = { error: err.message };
+        results.positions[p.symbol] = { error: err.message };
       }
     }
     results._isRiskRunning = isRiskRunning;
