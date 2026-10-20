@@ -685,8 +685,8 @@ setInterval(runHistoricalDeepScan, 4 * 60 * 60 * 1000);
 
 
 const BINANCE_SPOT_MIRRORS = [
-  'https://api.binance.com',
   'https://data-api.binance.vision',
+  'https://api.binance.com',
   'https://api-gcp.binance.com',
   'https://api1.binance.com',
   'https://api2.binance.com',
@@ -717,18 +717,18 @@ function warnFetch(msg) {
 
 function getCachePolicy(relativePath) {
   if (relativePath.includes('ticker/24hr')) {
-    return { ttlMs: 4500, staleMs: 45000 };
+    return { ttlMs: 8000, staleMs: 300000 }; // 8 sn taze, 5 dakika stale toleransı
   }
   if (relativePath.includes('interval=1d')) {
     return { ttlMs: 30 * 60 * 1000, staleMs: 60 * 60 * 1000 };
   }
   if (relativePath.includes('klines')) {
-    return { ttlMs: 2500, staleMs: 12000 };
+    return { ttlMs: 2500, staleMs: 25000 };
   }
   if (relativePath.includes('ticker/price')) {
-    return { ttlMs: 800, staleMs: 5000 };
+    return { ttlMs: 800, staleMs: 10000 };
   }
-  return { ttlMs: 1500, staleMs: 8000 };
+  return { ttlMs: 1500, staleMs: 15000 };
 }
 
 async function fetchBinanceRaw(relativePath) {
@@ -851,6 +851,9 @@ async function fetchBinance(url) {
         return cached.data;
       }
       if (relativePath.includes('ticker/24hr')) {
+        if (cached && cached.data) {
+          return cached.data; // Kesinlikle taramayı durdurma, önbellekteki koin listesiyle devam et
+        }
         warnFetch('Binance fiyatı alınamadı. Tarama durdu, işlem açılmıyor.');
       }
       return null;
@@ -3510,12 +3513,39 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (pathname === '/api/test-fetch') {
+    const mirrorTests = [];
+    for (const m of BINANCE_FAPI_MIRRORS) {
+      const t0 = Date.now();
+      try {
+        const c = new AbortController();
+        const tid = setTimeout(() => c.abort(), 4000);
+        const res = await fetch(`${m}/fapi/v1/ping`, { signal: c.signal });
+        clearTimeout(tid);
+        mirrorTests.push({ type: 'fapi', mirror: m, status: res.status, ok: res.ok, ms: Date.now() - t0 });
+      } catch (e) {
+        mirrorTests.push({ type: 'fapi', mirror: m, error: e.name === 'AbortError' ? 'TIMEOUT' : e.message, ms: Date.now() - t0 });
+      }
+    }
+    for (const m of BINANCE_SPOT_MIRRORS) {
+      const t0 = Date.now();
+      try {
+        const c = new AbortController();
+        const tid = setTimeout(() => c.abort(), 4000);
+        const res = await fetch(`${m}/api/v3/ping`, { signal: c.signal });
+        clearTimeout(tid);
+        mirrorTests.push({ type: 'spot', mirror: m, status: res.status, ok: res.ok, ms: Date.now() - t0 });
+      } catch (e) {
+        mirrorTests.push({ type: 'spot', mirror: m, error: e.name === 'AbortError' ? 'TIMEOUT' : e.message, ms: Date.now() - t0 });
+      }
+    }
+
     const results = {
       fapiDownUntil: fapiDownUntil ? new Date(fapiDownUntil).toISOString() : 0,
       bookFeed,
       futuresSymbols: [...symbolFeed.values()].filter(v => v === 'futures').length,
       spotSymbols: [...symbolFeed.values()].filter(v => v === 'spot').length,
       activeSlots: `${activePositions.length}/${CONFIG.maxSlots}`,
+      mirrorTests,
       positions: {}
     };
     for (const p of activePositions) {
