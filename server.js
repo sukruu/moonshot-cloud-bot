@@ -190,9 +190,9 @@ function sanitizeSettings(s) {
   if (inRange(margin, 1, 100000)) out.marginPerTrade = margin;
   if (inRange(lev, 1, 125)) out.leverage = lev;
   if (inRange(sl, 0.50, 2.5)) out.slPct = sl;
-  if (inRange(be, 0.35, 2.0)) out.bePct = be;
+  if (inRange(be, 0.25, 2.0)) out.bePct = be;
   if (inRange(moon, 1.0, 5.0)) out.moonPct = moon;
-  if (inRange(tp1, 0.70, 3.0)) out.tp1Pct = tp1;
+  if (inRange(tp1, 0.35, 3.0)) out.tp1Pct = tp1;
   return out;
 }
 
@@ -220,10 +220,9 @@ function loadSettings() {
       slots: saved.maxSlots, margin: saved.marginPerTrade, lev: saved.leverage,
       sl: saved.slPct, be: saved.bePct, moon: saved.moonPct, tp1: saved.tp1Pct
     });
-    // Optimal Runner koruma bantları: SL %0.78, BE %0.62, TP1 %1.05 (%40), Moon %2.40
     clean.slPct = 0.78;
-    clean.bePct = 0.58;
-    clean.tp1Pct = 1.00;
+    clean.bePct = 0.45;
+    clean.tp1Pct = 0.50;
     clean.moonPct = 2.40;
     Object.assign(CONFIG, clean);
     rememberUserRisk();
