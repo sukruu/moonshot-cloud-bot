@@ -27,13 +27,14 @@ try {
 // --- EKRAN 1 BİREBİR AYARLARI ---
 let CONFIG = {
   initialBalance: 100.0,     // Bakiye 100 Dolar
-  marginPerTrade: 15.0,      // Temel Teminat 15$ (2 Slot için $30 marjin, kasada serbest nakit tamponu)
+  marginPerTrade: 15.0,      // Temel Teminat 15$ (Dinamik bileşik büyüme motoru ile kasanın %18'ine ölçeklenir)
   leverage: 20,              // Kaldıraç 20x
   maxSlots: 2,               // 2 Slot
   slPct: 0.78,               // Kazanan işlemlerin %95'i MAE <= %0.67 kaldığı için sıkı SL (-$3.15 yerine -$2.64)
   bePct: 0.45,               // +%0.45 spot görünce kâr kilidi (+%0.28 spot / +%3.6 net ROI) devreye girer
   moonPct: 2.40,             // +%2.40 spotta roket vur-kaç hedefini alır (+%48 ROI)
-  tp1Pct: 0.50,              // +%0.50 spotta (+%10 ROI) %50 kârı anında cebe indirir, %50 runner trende bırakılır
+  tp1Pct: 0.50,              // +%0.50 spotta (+%10 ROI) %30 kârı anında cebe indirir
+  tp2Pct: 1.00,              // +%1.00 spotta (+%20 ROI) %35 kârı cebe indirir, %35 runner roket vur-kaça gider
   feeRate: 0.0005,           // Binance Futures taker %0.05 (TEK YÖN)
   scanIntervalMs: 2000,
   riskIntervalMs: 1000,
@@ -51,6 +52,21 @@ let DYNAMIC = {
 
 let userRisk = { maxSlots: 2, marginPerTrade: 15 };
 let circuitOn = false;
+
+function getDynamicMargin() {
+  if (circuitOn) {
+    return Math.min(Number(userRisk.marginPerTrade) || 12, 10);
+  }
+  // 🚀 DİNAMİK BİLEŞİK KASA MOTORU (Dynamic Compounding):
+  // Kasa büyüdükçe işlem başına dolar kârı büyüsün diye kasanın %18'i teminat olarak kullanılır (min $15.0, max $50.0).
+  // Örn: $100 iken $18.0, $116 iken $20.9, $150 iken $27.0, $200 iken $36.0 teminat.
+  // Kasada daima 2 slot sonrası en az %64 serbest nakit tamponu korunur!
+  const currentBal = Math.max(balance, 30.0);
+  const compoundMargin = currentBal * 0.18;
+  const userCfg = Number(userRisk.marginPerTrade) || 15.0;
+  const targetMargin = Math.max(userCfg, compoundMargin);
+  return Number(Math.max(15.0, Math.min(targetMargin, 50.0)).toFixed(1));
+}
 
 function rememberUserRisk() {
   userRisk = {
@@ -76,15 +92,16 @@ function applyCircuitBreaker() {
     }
     return;
   }
+  const dynamicMargin = getDynamicMargin();
   if (circuitOn) {
     circuitOn = false;
     CONFIG.maxSlots = userRisk.maxSlots;
-    CONFIG.marginPerTrade = userRisk.marginPerTrade;
+    CONFIG.marginPerTrade = dynamicMargin;
     DYNAMIC.mode = 'MARSCOIN_ROCKET';
     addLog(`✅ Devre kesici kapandı. Slot ${CONFIG.maxSlots}, teminat $${CONFIG.marginPerTrade}.`, 'INFO');
   } else {
     CONFIG.maxSlots = userRisk.maxSlots || 2;
-    CONFIG.marginPerTrade = userRisk.marginPerTrade || 15;
+    CONFIG.marginPerTrade = dynamicMargin;
     DYNAMIC.mode = 'MARSCOIN_ROCKET';
   }
 }
@@ -185,7 +202,7 @@ function sanitizeSettings(s) {
   const num = (v) => { const n = parseFloat(v); return (isFinite(n) ? n : null); };
   const inRange = (n, lo, hi) => (n !== null && n >= lo && n <= hi);
   const slots = num(s.slots), margin = num(s.margin), lev = num(s.lev);
-  const sl = num(s.sl), be = num(s.be), moon = num(s.moon), tp1 = num(s.tp1);
+  const sl = num(s.sl), be = num(s.be), moon = num(s.moon), tp1 = num(s.tp1), tp2 = num(s.tp2);
   if (inRange(slots, 1, 20)) out.maxSlots = Math.round(slots);
   if (inRange(margin, 1, 100000)) out.marginPerTrade = margin;
   if (inRange(lev, 1, 125)) out.leverage = lev;
@@ -193,6 +210,7 @@ function sanitizeSettings(s) {
   if (inRange(be, 0.25, 2.0)) out.bePct = be;
   if (inRange(moon, 1.0, 5.0)) out.moonPct = moon;
   if (inRange(tp1, 0.35, 3.0)) out.tp1Pct = tp1;
+  if (inRange(tp2, 0.70, 5.0)) out.tp2Pct = tp2;
   return out;
 }
 
@@ -206,6 +224,7 @@ function saveSettings() {
       bePct: CONFIG.bePct,
       moonPct: CONFIG.moonPct,
       tp1Pct: CONFIG.tp1Pct,
+      tp2Pct: CONFIG.tp2Pct,
       savedAt: Date.now()
     }, null, 2), 'utf8');
     settingsCustomized = true;
@@ -218,11 +237,12 @@ function loadSettings() {
     const saved = JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8'));
     const clean = sanitizeSettings({
       slots: saved.maxSlots, margin: saved.marginPerTrade, lev: saved.leverage,
-      sl: saved.slPct, be: saved.bePct, moon: saved.moonPct, tp1: saved.tp1Pct
+      sl: saved.slPct, be: saved.bePct, moon: saved.moonPct, tp1: saved.tp1Pct, tp2: saved.tp2Pct
     });
     clean.slPct = 0.78;
     clean.bePct = 0.45;
     clean.tp1Pct = 0.50;
+    clean.tp2Pct = 1.00;
     clean.moonPct = 2.40;
     Object.assign(CONFIG, clean);
     rememberUserRisk();
@@ -232,8 +252,15 @@ function loadSettings() {
 
 function getSettingsPayload() {
   return {
-    slots: userRisk.maxSlots, margin: userRisk.marginPerTrade, lev: CONFIG.leverage,
-    sl: CONFIG.slPct, be: CONFIG.bePct, moon: CONFIG.moonPct, tp1: CONFIG.tp1Pct
+    slots: userRisk.maxSlots, 
+    margin: CONFIG.marginPerTrade,
+    userMargin: userRisk.marginPerTrade, 
+    lev: CONFIG.leverage,
+    sl: CONFIG.slPct, 
+    be: CONFIG.bePct, 
+    moon: CONFIG.moonPct, 
+    tp1: CONFIG.tp1Pct,
+    tp2: CONFIG.tp2Pct
   };
 }
 
@@ -258,8 +285,8 @@ function initStorage() {
       history = JSON.parse(fs.readFileSync(HISTORY_FILE, 'utf8'));
       if (Array.isArray(history) && history.length > 0) {
         const totalPnl = history.reduce((acc, h) => acc + (h.pnl || 0), 0);
-        const activeTp1Pnl = Array.isArray(activePositions) ? activePositions.reduce((acc, p) => acc + (p.tp1Pnl || 0), 0) : 0;
-        balance = CONFIG.initialBalance + totalPnl + activeTp1Pnl;
+        const activeTpPnl = Array.isArray(activePositions) ? activePositions.reduce((acc, p) => acc + (p.tp1Pnl || 0) + (p.tp2Pnl || 0), 0) : 0;
+        balance = CONFIG.initialBalance + totalPnl + activeTpPnl;
       }
     }
 
@@ -1522,16 +1549,29 @@ async function scanLoop() {
             continue;
           }
 
-          // 📐 VOLATİLİTEYE GÖRE STOP & POZİSYON BÜYÜKLÜĞÜ:
+          // 📐 VOLATİLİTEYE VE DİNAMİK BİLEŞİK KASAYA GÖRE TEMİNAT & HEDEFLER:
+          // Teminat Dinamik Bileşik Kasa Motorundan (%18) gelir ($116 bakiyede ~$21, $150 bakiyede $27).
           // Stop = 1.6 × 3dk ATR (taban %0.78, tavan %2.0). Stop genişledikçe teminat aynı oranda küçülür,
-          // böylece işlem başına dolar riski sabit kalır. Tüm kâr kademeleri (BE, kilit, TP1, Moon) volK ile ölçeklenir.
-          const baseMargin = Number(CONFIG.marginPerTrade) || 15;
+          // böylece işlem başına dolar riski sabit kalır. Kâr kademeleri (BE, kilit, TP1, TP2, Moon) volK ile ölçeklenir.
+          const baseMargin = getDynamicMargin();
           const baseSlPct = Number(CONFIG.slPct) || 0.78;
           const tradeSlPct = Math.min(2.0, Math.max(baseSlPct, atr3mPct * 1.5));
           const volK = tradeSlPct / baseSlPct;
-          const tradeMargin = Number(Math.max(12.0, baseMargin / Math.sqrt(volK)).toFixed(2));
+          let tradeMargin = Number(Math.max(12.0, baseMargin / Math.sqrt(volK)).toFixed(2));
+
+          // 🛡️ KASA SERBEST NAKİT KORUMASI: Açık pozisyonlar ve yeni işlem serbest bakiyeyi aşamaz
+          const usedMargin = activePositions.reduce((acc, p) => acc + (p.margin || 0), 0);
+          const freeMargin = Math.max(0, balance - usedMargin);
+          if (tradeMargin > freeMargin) {
+            tradeMargin = Number(freeMargin.toFixed(2));
+          }
+          if (tradeMargin < 10.0) {
+            continue; // Yetersiz serbest teminat
+          }
+
           const tradeBePct = Number(CONFIG.bePct) || 0.45;
           const tradeTp1Pct = Number(CONFIG.tp1Pct) || 0.50;
+          const tradeTp2Pct = Number(CONFIG.tp2Pct) || 1.00;
           const tradeMoonPct = Number(CONFIG.moonPct) || 2.40;
           radarTag += ` [SL: %${tradeSlPct.toFixed(2)} | ATR3m: %${atr3mPct.toFixed(2)} | Teminat: $${tradeMargin.toFixed(1)}]`;
 
@@ -1551,6 +1591,8 @@ async function scanLoop() {
             tier1Locked: false,
             tp1Taken: false,
             tp2Taken: false,
+            tp1Pnl: 0,
+            tp2Pnl: 0,
             mfe: 0.0,
             mae: 0.0,
             pnl: 0.0,
@@ -1568,6 +1610,7 @@ async function scanLoop() {
             atr3mPct: atr3mPct,
             bePct: tradeBePct,
             tp1Pct: tradeTp1Pct,
+            tp2Pct: tradeTp2Pct,
             moonPct: tradeMoonPct,
             convictionTier: isRocketSignal ? 'A_PLUS' : 'B_STANDARD',
             convictionScore: isRocketSignal ? 90 : 75,
@@ -1590,7 +1633,7 @@ async function scanLoop() {
           persistState();
           shadow('TAKEN', { slPct: Number(tradeSlPct.toFixed(2)) });
 
-          addLog(`🚀 POZİSYON AÇILDI: [${side}] ${sym} @ $${curP.toFixed(4)} | ${radarTag} | SL: $${stopPrice.toFixed(4)} | TP1: +%${(tradeTp1Pct * volK).toFixed(2)} | Moon: +%${(tradeMoonPct * volK).toFixed(2)}`, 'TRADE');
+          addLog(`🚀 POZİSYON AÇILDI: [${side}] ${sym} @ $${curP.toFixed(4)} | ${radarTag} | Teminat: $${tradeMargin.toFixed(1)} | SL: $${stopPrice.toFixed(4)} | TP1: +%${(tradeTp1Pct * volK).toFixed(2)} | TP2: +%${(tradeTp2Pct * volK).toFixed(2)} | Moon: +%${(tradeMoonPct * volK).toFixed(2)}`, 'TRADE');
           break;
         }
       }
@@ -1684,39 +1727,93 @@ async function fastRiskLoop() {
       const nMove = move / k;
       const nMfe = mfe / k;
       const lockSpot = (pct) => isLong ? pos.entryPrice * (1 + pct / 100) : pos.entryPrice * (1 - pct / 100);
-      const lockPrice = (pct) => isLong ? pos.entryPrice * (1 + (pct * k) / 100) : pos.entryPrice * (1 - (pct * k) / 100);
 
-      // 🎯 1. KADEMELİ KÂR ALMA (TP1): +%0.50 (×volK) Görünce %50 Pozisyon Kapatılır, %50 Runner Trende Bırakılır!
+      // ========================================================
+      // 🛑 1. STOP LOSS VEYA KİLİTLİ STOP KONTROLÜ (EN YÜKSEK ÖNCELİK)
+      // ========================================================
+      const isStopHit = (isLong && curP <= pos.stopPrice) || (!isLong && curP >= pos.stopPrice);
+      if (isStopHit) {
+        const fill = pos.stopPrice;
+        const fillMove = isLong
+          ? ((fill - pos.entryPrice) / pos.entryPrice) * 100
+          : ((pos.entryPrice - fill) / pos.entryPrice) * 100;
+        pos.currentPrice = fill;
+        pos.pnl = (nominalSize * (fillMove / 100)) - feeCost;
+        pos.roi = pos.margin > 0 ? (pos.pnl / pos.margin) * 100 : 0;
+        if ((isLong && pos.stopPrice > pos.entryPrice * 1.0025) || (!isLong && pos.stopPrice < pos.entryPrice * 0.9975)) {
+          exitReason = `🔒 Garanti Kilitli Kâr Çıkışı (+%${pos.roi.toFixed(1)} ROI / Zirve: +%${mfe.toFixed(2)} Spot)`;
+        } else if (pos.beLocked) {
+          exitReason = (pos.tp1Taken || pos.tp2Taken)
+            ? `🛡️ TP KÂRI CEPTE + Kalan Başabaş Kapandı`
+            : `🛡️ Başabaş (ücret payı +%0.18 / Zirve: +%${mfe.toFixed(2)})`;
+        } else {
+          exitReason = `🛑 Moonshot Stop Loss (-%${(pos.slPct || CONFIG.slPct).toFixed(2)})`;
+        }
+      }
+
+      // ========================================================
+      // 🎯 2. KADEMELİ KÂR ALMA - TP1 (+%0.50 spot, %30 Pozisyon Kapatılır)
+      // ========================================================
       const tp1Goal = pos.tp1Pct || CONFIG.tp1Pct || 0.50;
-      if (!pos.tp1Taken && (move >= tp1Goal || nMove >= tp1Goal)) {
+      if (!exitReason && !pos.tp1Taken && (move >= tp1Goal || nMove >= tp1Goal)) {
         pos.tp1Taken = true;
         pos.initialMargin = pos.initialMargin || pos.margin;
-        const closedMargin = Number((pos.margin * 0.50).toFixed(4));
+        const closedMargin = Number((pos.initialMargin * 0.30).toFixed(4));
         const closedNominal = closedMargin * pos.leverage;
         const closedFee = closedNominal * CONFIG.feeRate * 2;
         const tp1Profit = (closedNominal * (move / 100)) - closedFee;
 
         pos.tp1Pnl = (pos.tp1Pnl || 0) + tp1Profit;
         balance += tp1Profit; // Kâr bakiyeye anında eklenir
-        pos.margin = Number((pos.margin - closedMargin).toFixed(4)); // Kalan %50 runner pozisyon marjini
+        pos.margin = Number((pos.margin - closedMargin).toFixed(4)); // Kalan %70 pozisyon marjini
 
-        // Kalan marjin için anlık nominal ve pnl güncellemesi (aynı tickte çıkış olursa çifte kazanç yazılmasını engeller)
+        // Kalan marjin için anlık nominal ve pnl güncellemesi
         const remNominal = pos.margin * pos.leverage;
         const remFee = remNominal * CONFIG.feeRate * 2;
         pos.pnl = (remNominal * (move / 100)) - remFee;
-        pos.roi = (pos.pnl / pos.margin) * 100;
+        pos.roi = pos.margin > 0 ? (pos.pnl / pos.margin) * 100 : 0;
 
-        // Kalan %50 Runner için Stop Loss derhal +%0.28 kâra kilitlenir (komisyon üstü net kâr)
+        // Kalan %70 pozisyon için Stop Loss derhal +%0.28 kâra kilitlenir (komisyon üstü net kâr)
         pos.beLocked = true;
         pos.tier1Locked = true;
         pos.stopPrice = lockSpot(0.28);
         stateChanged = true;
 
-        addLog(`💰 [TP1 ALINDI] ${pos.symbol} %50 Pozisyon Kapatıldı! +$${tp1Profit.toFixed(2)} Kâr Cebe İndi (+%${(move * pos.leverage).toFixed(1)} ROI). Kalan %50 Runner Stop +%${(0.28 * k).toFixed(2)} Kâra Kilitlendi.`, 'TRADE');
+        addLog(`💰 [TP1 ALINDI] ${pos.symbol} %30 Pozisyon Kapatıldı! +$${tp1Profit.toFixed(2)} Kâr Cebe İndi (+%${(move * pos.leverage).toFixed(1)} ROI). Kalan %70 Stop +%${(0.28 * k).toFixed(2)} Kâra Kilitlendi.`, 'TRADE');
       }
 
-      // 🛡️ 2. KADEMELİ İZ SÜREN LAZER KÂR KİLİTLERİ (hepsi ×volK)
-      // Kârı asla masada bırakmaz; koin yükseldikçe stopu adım adım kârın içine çeker!
+      // ========================================================
+      // 🎯 3. İKİNCİ KADEMELİ KÂR ALMA - TP2 (+%1.00 spot, %35 Daha Pozisyon Kapatılır)
+      // ========================================================
+      const tp2Goal = pos.tp2Pct || CONFIG.tp2Pct || 1.00;
+      if (!exitReason && pos.tp1Taken && !pos.tp2Taken && (move >= tp2Goal || nMove >= tp2Goal)) {
+        pos.tp2Taken = true;
+        pos.initialMargin = pos.initialMargin || pos.margin;
+        const closedMargin = Number((pos.initialMargin * 0.35).toFixed(4));
+        const closedNominal = closedMargin * pos.leverage;
+        const closedFee = closedNominal * CONFIG.feeRate * 2;
+        const tp2Profit = (closedNominal * (move / 100)) - closedFee;
+
+        pos.tp2Pnl = (pos.tp2Pnl || 0) + tp2Profit;
+        balance += tp2Profit; // Kâr bakiyeye anında eklenir
+        pos.margin = Number((pos.margin - closedMargin).toFixed(4)); // Kalan %35 runner marjini
+
+        // Kalan marjin için anlık nominal ve pnl güncellemesi
+        const remNominal = pos.margin * pos.leverage;
+        const remFee = remNominal * CONFIG.feeRate * 2;
+        pos.pnl = (remNominal * (move / 100)) - remFee;
+        pos.roi = pos.margin > 0 ? (pos.pnl / pos.margin) * 100 : 0;
+
+        // Kalan %35 Runner için Stop Loss +%0.70 kâra yükseltilir (+%12 net ROI garantisi)
+        pos.stopPrice = lockSpot(0.70);
+        stateChanged = true;
+
+        addLog(`💰 [TP2 ALINDI] ${pos.symbol} %35 Pozisyon Kapatıldı! +$${tp2Profit.toFixed(2)} Kâr Cebe İndi (+%${(move * pos.leverage).toFixed(1)} ROI). Kalan %35 Runner Stop +%${(0.70 * k).toFixed(2)} Kâra Yükseltildi!`, 'TRADE');
+      }
+
+      // ========================================================
+      // 🛡️ 4. KADEMELİ İZ SÜREN LAZER KÂR KİLİTLERİ (hepsi ×volK)
+      // ========================================================
       const beGoal = Math.min(0.45, pos.bePct || CONFIG.bePct || 0.45);
       let targetStop = null;
       if (mfe >= 2.40 || nMfe >= 2.20) {
@@ -1730,7 +1827,7 @@ async function fastRiskLoop() {
       } else if (mfe >= 0.65 || nMfe >= 0.60) {
         targetStop = lockSpot(0.45); // Spot +%0.45 -> Net ROI +%7.0!
       } else if (mfe >= beGoal || nMfe >= beGoal) {
-        targetStop = lockSpot(0.28); // Spot +%0.28 -> Net ROI +%3.6 (komisyon üstü temiz kâr!)
+        targetStop = lockSpot(0.28); // Spot +%0.28 -> Net ROI +%3.6
       }
 
       if (targetStop) {
@@ -1748,32 +1845,43 @@ async function fastRiskLoop() {
         }
       }
 
-      // 🎯 3. MOONSHOT HEDEFİ (+%2.40 ×volK Spot ile Tam Kapat!)
+      // ========================================================
+      // 🎯 5. MOONSHOT HEDEFİ (+%2.40 ×volK Spot ile Runner Tam Kapat!)
+      // ========================================================
       const moonGoal = Math.max(2.40, pos.moonPct || CONFIG.moonPct || 2.40);
       if (!exitReason && nMove >= moonGoal) {
-        exitReason = pos.tp1Taken
-          ? `🎯 KADEMELİ MOONSHOT ALINDI (TP1 + Kalan: +%${pos.roi.toFixed(1)} ROI / +%${move.toFixed(2)} Spot)`
+        exitReason = (pos.tp1Taken || pos.tp2Taken)
+          ? `🎯 KADEMELİ MOONSHOT ALINDI (TP1+TP2+Runner: +%${pos.roi.toFixed(1)} ROI / +%${move.toFixed(2)} Spot)`
           : `🎯 MOONSHOT HEDEFİ VURULDU (+%${pos.roi.toFixed(1)} ROI / +%${move.toFixed(2)} Spot)`;
       }
 
-      // 4. DİNAMİK ZİRVEDEN DÖNÜŞ KÂR KORUMASI (SADECE TP1 SONRASI RUNNER İÇİN, ×volK)
-      // TP1 (+%1.05) alınmadan önce işlemleri %0.19-%0.21 geri çekilmeyle erken boğmaz!
-      if (!exitReason && pos.tp1Taken && mfe >= 1.25 && move >= 0.45) {
+      // ========================================================
+      // 🏆 6. DİNAMİK ZİRVEDEN DÖNÜŞ KÂR KORUMASI (SADECE TP ALINDIKTAN SONRA RUNNER İÇİN)
+      // ========================================================
+      if (!exitReason && (pos.tp1Taken || pos.tp2Taken) && mfe >= 1.25 && move >= 0.45) {
         const pullbackLimit = mfe >= 2.0 ? 0.45 : 0.40;
         if ((mfe - move) >= pullbackLimit) {
-          exitReason = `🏆 TP1 CEPTE + Runner Lazer Kâr Kilidi (+%${pos.roi.toFixed(1)} ROI / Zirve: +%${mfe.toFixed(2)} Spot)`;
+          exitReason = `🏆 TP CEPTE + Runner Lazer Kâr Kilidi (+%${pos.roi.toFixed(1)} ROI / Zirve: +%${mfe.toFixed(2)} Spot)`;
         }
       }
 
-      // ⏱️ 5. ERKEN ÖLÜ İŞLEM / İVMESİZLİK KESİCİ (10+ Dakika Boyunca +%0.25 Görememiş ve Eksiye Giden İşlemler, ×volK)
-      // (WLD 48dk, QNT 162dk, PEOPLE 47dk, ZK 37dk gibi hiç yürümeyen ölü işlemlerin tam stop yemesini önler)
-      if (!exitReason && !pos.beLocked && durMin >= 10 && nMfe < 0.25 && nMove <= -0.48) {
-        exitReason = `⏱️ Erken İvmesizlik Koruması (${Math.round(durMin)}dk İvme Yok / MFE: +%${mfe.toFixed(2)} / Erken Kesim)`;
-      } else if (!exitReason && !pos.beLocked && durMin >= 20 && nMfe < 0.45 && nMove <= -0.38) {
-        exitReason = `⏱️ Uzamış İvmesizlik Koruması (${Math.round(durMin)}dk BE Görülmedi / MFE: +%${mfe.toFixed(2)} / Erken Kesim)`;
+      // ========================================================
+      // ⏱️ 7. ÖLÜ İŞLEM NEŞTERİ (Dead Trade Scalpel)
+      // ========================================================
+      // İvmesiz kalan ölü işlemleri saatlerce bekleyip tam stop (-$2.50) yemek yerine erkenden küçük bir çizikle (-%0.25 spot / -$0.75) keser!
+      if (!exitReason && !pos.beLocked) {
+        if (durMin >= 8 && nMfe < 0.20 && nMove <= -0.25) {
+          exitReason = `⏱️ Ölü İşlem Neşteri (${Math.round(durMin)}dk İvmesiz / MFE: +%${mfe.toFixed(2)} / Erken Kesim)`;
+        } else if (durMin >= 15 && nMfe < 0.35 && nMove <= -0.20) {
+          exitReason = `⏱️ İvmesizlik Neşteri (${Math.round(durMin)}dk Zayıf Akış / MFE: +%${mfe.toFixed(2)} / Erken Kesim)`;
+        } else if (durMin >= 30 && nMfe < 0.40) {
+          exitReason = `⏱️ Maksimum Süre Aşımı (${Math.round(durMin)}dk Yatay / MFE: +%${mfe.toFixed(2)} / Rotasyon Çıkışı)`;
+        }
       }
 
-      // 🚨 6. AJAN ACİL DURUM TAHLİYESİ (MAKRO PİYASA TERS DÖNÜŞ FRENİ)
+      // ========================================================
+      // 🚨 8. AJAN ACİL DURUM TAHLİYESİ (MAKRO PİYASA TERS DÖNÜŞ FRENİ)
+      // ========================================================
       if (!exitReason && pos.roi <= -5.0) {
         if (!isLong && (btc15mNumeric >= 0.65 || btc5mNumeric >= 0.70)) {
           exitReason = `🚨 BTC ters dönüş, SHORT erken kesildi (${btc15mTrend}, %${pos.roi.toFixed(1)} ROI)`;
@@ -1782,28 +1890,24 @@ async function fastRiskLoop() {
         }
       }
 
-      // 7. STOP LOSS VEYA KİLİTLİ STOP TETİKLENMESİ
-      if (!exitReason && ((isLong && curP <= pos.stopPrice) || (!isLong && curP >= pos.stopPrice))) {
-        const fill = pos.stopPrice;
-        const fillMove = isLong
-          ? ((fill - pos.entryPrice) / pos.entryPrice) * 100
-          : ((pos.entryPrice - fill) / pos.entryPrice) * 100;
-        const nominal = pos.margin * pos.leverage;
-        pos.currentPrice = fill;
-        pos.pnl = (nominal * (fillMove / 100)) - (nominal * CONFIG.feeRate * 2);
-        pos.roi = pos.margin > 0 ? (pos.pnl / pos.margin) * 100 : 0;
-        if ((isLong && pos.stopPrice > pos.entryPrice * 1.0025) || (!isLong && pos.stopPrice < pos.entryPrice * 0.9975)) {
-          exitReason = `🔒 Garanti Kilitli Kâr Çıkışı (+%${pos.roi.toFixed(1)} ROI / Zirve: +%${mfe.toFixed(2)} Spot)`;
-        } else if (pos.beLocked) {
-          exitReason = pos.tp1Taken
-            ? `🛡️ TP1 KÂRI CEPTE + Kalan Başabaş Kapandı`
-            : `🛡️ Başabaş (ücret payı +%0.18 / Zirve: +%${mfe.toFixed(2)})`;
-        } else {
-          exitReason = `🛑 Moonshot Stop Loss (-%${(pos.slPct || CONFIG.slPct).toFixed(2)})`;
-        }
-      }
-
+      // ========================================================
+      // 🏁 ÇIKIŞ VE MUTLAK FİYAT KORUMASI (Clamping Safeguard)
+      // ========================================================
       if (exitReason) {
+        // MUTLAK KORUMA: Hiçbir çıkış fiyatı belirlenmiş stopPrice'tan daha kötü olamaz!
+        if (isLong && pos.currentPrice < pos.stopPrice) {
+          pos.currentPrice = pos.stopPrice;
+        } else if (!isLong && pos.currentPrice > pos.stopPrice) {
+          pos.currentPrice = pos.stopPrice;
+        }
+
+        const finalNominal = pos.margin * pos.leverage;
+        const finalMove = isLong 
+          ? ((pos.currentPrice - pos.entryPrice) / pos.entryPrice) * 100 
+          : ((pos.entryPrice - pos.currentPrice) / pos.entryPrice) * 100;
+        pos.pnl = (finalNominal * (finalMove / 100)) - (finalNominal * CONFIG.feeRate * 2);
+        pos.roi = pos.margin > 0 ? (pos.pnl / pos.margin) * 100 : 0;
+
         activePositions.splice(i, 1);
         closeTrade(pos, exitReason);
         stateChanged = true;
@@ -1853,26 +1957,28 @@ function closeTrade(pos, exitReason) {
   const now = Date.now();
   const durMin = Math.round((now - pos.entryTime) / 60000);
   
-  // Kalan pozisyonun PnL'i bakiyeye eklenir (TP1 zaten TP1 anında eklenmişti)
+  // Kalan pozisyonun PnL'i bakiyeye eklenir (TP1 ve TP2 anında zaten eklenmişti)
   balance += pos.pnl;
 
-  const totalTradePnl = pos.pnl + (pos.tp1Pnl || 0);
-  const initialMargin = pos.initialMargin || (pos.tp1Taken ? Number((pos.margin / 0.60).toFixed(2)) : pos.margin) || 15.0;
+  const totalTradePnl = pos.pnl + (pos.tp1Pnl || 0) + (pos.tp2Pnl || 0);
+  const initialMargin = pos.initialMargin || pos.margin || 15.0;
   const totalTradeRoi = (totalTradePnl / initialMargin) * 100;
   
   let formattedExitReason = exitReason;
-  if (pos.tp1Taken && exitReason.includes("Başabaş")) {
-    formattedExitReason = `🛡️ TP1 KÂRI CEPTE + Kalan Başabaş Kapandı (+%${totalTradeRoi.toFixed(1)} ROI / +$${totalTradePnl.toFixed(2)})`;
-  } else if (pos.tp1Taken && exitReason.includes("Garanti Kilitli")) {
-    formattedExitReason = `🔒 TP1 CEPTE + Runner Kilitli Kâr (+%${totalTradeRoi.toFixed(1)} ROI / +$${totalTradePnl.toFixed(2)} / Zirve: +%${(pos.mfe || 0).toFixed(2)} Spot)`;
-  } else if (pos.tp1Taken && exitReason.includes("Lazer Kâr Kilidi")) {
-    formattedExitReason = `🏆 TP1 CEPTE + Runner Lazer Kâr Kilidi (+%${totalTradeRoi.toFixed(1)} ROI / +$${totalTradePnl.toFixed(2)} / Zirve: +%${(pos.mfe || 0).toFixed(2)} Spot)`;
-  } else if (pos.tp1Taken && exitReason.includes("MOONSHOT")) {
-    formattedExitReason = `🎯 KADEMELİ MOONSHOT ALINDI (Toplam: +$${totalTradePnl.toFixed(2)} / +%${totalTradeRoi.toFixed(1)} ROI)`;
+  const anyTpTaken = pos.tp1Taken || pos.tp2Taken;
+  const tpTag = pos.tp2Taken ? "TP1+TP2 CEPTE" : (pos.tp1Taken ? "TP1 CEPTE" : "");
+  if (anyTpTaken && exitReason.includes("Başabaş")) {
+    formattedExitReason = `🛡️ ${tpTag} + Kalan Başabaş Kapandı (+%${totalTradeRoi.toFixed(1)} ROI / +$${totalTradePnl.toFixed(2)})`;
+  } else if (anyTpTaken && exitReason.includes("Garanti Kilitli")) {
+    formattedExitReason = `🔒 ${tpTag} + Runner Kilitli Kâr (+%${totalTradeRoi.toFixed(1)} ROI / +$${totalTradePnl.toFixed(2)} / Zirve: +%${(pos.mfe || 0).toFixed(2)} Spot)`;
+  } else if (anyTpTaken && exitReason.includes("Lazer Kâr Kilidi")) {
+    formattedExitReason = `🏆 ${tpTag} + Runner Lazer Kâr Kilidi (+%${totalTradeRoi.toFixed(1)} ROI / +$${totalTradePnl.toFixed(2)} / Zirve: +%${(pos.mfe || 0).toFixed(2)} Spot)`;
+  } else if (anyTpTaken && exitReason.includes("MOONSHOT")) {
+    formattedExitReason = `🎯 3 KADEMELİ MOONSHOT ALINDI (Toplam: +$${totalTradePnl.toFixed(2)} / +%${totalTradeRoi.toFixed(1)} ROI)`;
   }
 
   // 🛡️ ÇOKLAMA / DALGA YORGUNLUĞU VE ARDIŞIK ZARAR KORUMASI (COOLDOWN)
-  const isRealLoss = (totalTradePnl <= -0.05) || exitReason.includes("Stop Loss") || exitReason.includes("İvmesizlik");
+  const isRealLoss = (totalTradePnl <= -0.05) || exitReason.includes("Stop Loss") || exitReason.includes("Neşteri") || exitReason.includes("İvmesizlik");
   if (isRealLoss) {
     coinLossCount[pos.symbol] = (coinLossCount[pos.symbol] || 0) + 1;
     if (coinLossCount[pos.symbol] >= 2) {
@@ -2774,18 +2880,29 @@ function serveDashboardHtml() {
         <div style="background:linear-gradient(90deg, var(--blue-bg) 0%, var(--panel) 100%); border-left:3px solid var(--blue); border:1px solid var(--blue-border); border-radius:5px; padding:6px 8px; margin-bottom:5px; display:flex; justify-content:space-between; align-items:center; box-shadow:var(--shadow-sm);">
           <div>
             <div style="font-size:10px;font-weight:800;color:var(--blue);letter-spacing:0.3px;">🎯 İLK KÂR ALMA (TP1)</div>
-            <div style="font-size:8.5px;color:var(--muted);margin-top:1px;">%50 Kâr Cebe, Kalan Başabaşa</div>
+            <div style="font-size:8.5px;color:var(--muted);margin-top:1px;">%30 Cebe, Kalan %70 Trende</div>
           </div>
           <div style="display:flex;align-items:baseline;gap:2px;background:var(--panel2);padding:2px 6px;border-radius:4px;border:1px solid var(--blue-border);">
-            <input type="number" id="inpTp1" value="${(CONFIG.tp1Pct || 1.00).toFixed(2)}" step="0.1" style="width:52px;background:none;border:none;color:var(--blue);font-family:'JetBrains Mono';font-size:13px;font-weight:650;text-align:right;outline:none;">
+            <input type="number" id="inpTp1" value="${(CONFIG.tp1Pct || 0.50).toFixed(2)}" step="0.1" style="width:52px;background:none;border:none;color:var(--blue);font-family:'JetBrains Mono';font-size:13px;font-weight:650;text-align:right;outline:none;">
             <span style="font-size:10px;color:var(--blue);opacity:0.7;">%</span>
+          </div>
+        </div>
+
+        <div style="background:linear-gradient(90deg, rgba(99,102,241,0.08) 0%, var(--panel) 100%); border-left:3px solid #6366f1; border:1px solid rgba(99,102,241,0.3); border-radius:5px; padding:6px 8px; margin-bottom:5px; display:flex; justify-content:space-between; align-items:center; box-shadow:var(--shadow-sm);">
+          <div>
+            <div style="font-size:10px;font-weight:800;color:#6366f1;letter-spacing:0.3px;">🚀 2. KÂR ALMA (TP2)</div>
+            <div style="font-size:8.5px;color:var(--muted);margin-top:1px;">%35 Cebe, %35 Runner Rokete</div>
+          </div>
+          <div style="display:flex;align-items:baseline;gap:2px;background:var(--panel2);padding:2px 6px;border-radius:4px;border:1px solid rgba(99,102,241,0.3);">
+            <input type="number" id="inpTp2" value="${(CONFIG.tp2Pct || 1.00).toFixed(2)}" step="0.1" style="width:52px;background:none;border:none;color:#6366f1;font-family:'JetBrains Mono';font-size:13px;font-weight:650;text-align:right;outline:none;">
+            <span style="font-size:10px;color:#6366f1;opacity:0.7;">%</span>
           </div>
         </div>
 
         <div style="background:linear-gradient(90deg, var(--amber-bg) 0%, var(--panel) 100%); border-left:3px solid var(--amber); border:1px solid var(--amber-border); border-radius:5px; padding:6px 8px; margin-bottom:6px; display:flex; justify-content:space-between; align-items:center; box-shadow:var(--shadow-sm);">
           <div>
             <div style="font-size:10px;font-weight:800;color:var(--amber);letter-spacing:0.3px;">🏆 VUR-KAÇ MOONSHOT</div>
-            <div style="font-size:8.5px;color:var(--muted);margin-top:1px;">Kâr hedefinde tamamen çıkılır</div>
+            <div style="font-size:8.5px;color:var(--muted);margin-top:1px;">%35 Runner Zirvede Vurur</div>
           </div>
           <div style="display:flex;align-items:baseline;gap:2px;background:var(--panel2);padding:2px 6px;border-radius:4px;border:1px solid var(--amber-border);">
             <input type="number" id="inpMoon" value="${CONFIG.moonPct.toFixed(2)}" step="0.1" style="width:52px;background:none;border:none;color:var(--amber);font-family:'JetBrains Mono';font-size:13px;font-weight:650;text-align:right;outline:none;">
@@ -3268,12 +3385,15 @@ function serveDashboardHtml() {
 
     // Parametreleri Dinamik Güncelleme (sunucuya + tarayıcı hafızasına kaydeder)
     const LS_SET = 'moon_settings';
-    const SET_IDS = { slots: 'inpSlots', margin: 'inpMargin', lev: 'inpLev', sl: 'inpSl', be: 'inpBe', moon: 'inpMoon', tp1: 'inpTp1' };
+    const SET_IDS = { slots: 'inpSlots', margin: 'inpMargin', lev: 'inpLev', sl: 'inpSl', be: 'inpBe', moon: 'inpMoon', tp1: 'inpTp1', tp2: 'inpTp2' };
     let settingsSynced = false;
 
     function readSettingsFromInputs() {
       const o = {};
-      Object.keys(SET_IDS).forEach(k => { o[k] = document.getElementById(SET_IDS[k]).value; });
+      Object.keys(SET_IDS).forEach(k => {
+        const el = document.getElementById(SET_IDS[k]);
+        if (el) o[k] = el.value;
+      });
       return o;
     }
 
@@ -3297,11 +3417,14 @@ function serveDashboardHtml() {
     }
 
     Object.keys(SET_IDS).forEach(k => {
-      document.getElementById(SET_IDS[k]).addEventListener('change', async () => {
-        const o = readSettingsFromInputs();
-        try { localStorage.setItem(LS_SET, JSON.stringify(o)); } catch (e) {}
-        await pushSettings(o);
-      });
+      const el = document.getElementById(SET_IDS[k]);
+      if (el) {
+        el.addEventListener('change', async () => {
+          const o = readSettingsFromInputs();
+          try { localStorage.setItem(LS_SET, JSON.stringify(o)); } catch (e) {}
+          await pushSettings(o);
+        });
+      }
     });
 
     updateDashboard();
@@ -3319,8 +3442,12 @@ function renderActiveRows(positions) {
     const isLong = p.side === 'LONG';
     const isWin = (p.pnl || 0) >= 0;
     const stopText = p.beLocked 
-      ? '<span class="badge-be">🛡️ BAŞABAŞ ($0 RİSK)</span>' 
-      : `<span class="badge-sl">🛑 STOP: -%${CONFIG.slPct.toFixed(2)}</span>`;
+      ? (p.tp2Taken 
+          ? '<span class="badge-be" style="background:#059669;color:#fff;">🎯 TP1+TP2 ALINDI (+%0.70 KİLİT)</span>' 
+          : (p.tp1Taken 
+              ? '<span class="badge-be" style="background:#10b981;color:#fff;">💰 TP1 CEPTE (+%0.28 KİLİT)</span>' 
+              : '<span class="badge-be">🛡️ BAŞABAŞ ($0 RİSK)</span>'))
+      : `<span class="badge-sl">🛑 STOP: -%${(p.slPct || CONFIG.slPct).toFixed(2)}</span>`;
 
     const roiStr = (p.roi >= 0 ? '+' : '') + (p.roi || 0).toFixed(1) + '%';
     const pnlStr = (p.pnl >= 0 ? '+$' : '-$') + Math.abs(p.pnl || 0).toFixed(2);
@@ -3389,8 +3516,12 @@ function renderActiveCards(positions) {
     const isLong = p.side === 'LONG';
     const isWin = (p.pnl || 0) >= 0;
     const stopText = p.beLocked 
-      ? '<span class="badge-be">🛡️ BAŞABAŞ ($0 RİSK)</span>' 
-      : `<span class="badge-sl">🛑 STOP: -%${CONFIG.slPct.toFixed(2)}</span>`;
+      ? (p.tp2Taken 
+          ? '<span class="badge-be" style="background:#059669;color:#fff;">🎯 TP1+TP2 ALINDI (+%0.70 KİLİT)</span>' 
+          : (p.tp1Taken 
+              ? '<span class="badge-be" style="background:#10b981;color:#fff;">💰 TP1 CEPTE (+%0.28 KİLİT)</span>' 
+              : '<span class="badge-be">🛡️ BAŞABAŞ ($0 RİSK)</span>'))
+      : `<span class="badge-sl">🛑 STOP: -%${(p.slPct || CONFIG.slPct).toFixed(2)}</span>`;
     const roiStr = (p.roi >= 0 ? '+' : '') + (p.roi || 0).toFixed(1) + '%';
     const pnlStr = (p.pnl >= 0 ? '+$' : '-$') + Math.abs(p.pnl || 0).toFixed(2);
 
@@ -3669,8 +3800,8 @@ const server = http.createServer(async (req, res) => {
         if (history.length > 500) history = history.slice(0, 500);
 
         const totalPnl = history.reduce((acc, h) => acc + (h.pnl || 0), 0);
-        const activeTp1Pnl = Array.isArray(activePositions) ? activePositions.reduce((acc, p) => acc + (p.tp1Pnl || 0), 0) : 0;
-        balance = CONFIG.initialBalance + totalPnl + activeTp1Pnl;
+        const activeTpPnl = Array.isArray(activePositions) ? activePositions.reduce((acc, p) => acc + (p.tp1Pnl || 0) + (p.tp2Pnl || 0), 0) : 0;
+        balance = CONFIG.initialBalance + totalPnl + activeTpPnl;
 
         rebuildCoinLossHistory();
         rewriteCsvFile();
@@ -3726,8 +3857,8 @@ const server = http.createServer(async (req, res) => {
           balance = parseFloat(body.balance);
         } else {
           const totalPnl = history.reduce((acc, h) => acc + (h.pnl || 0), 0);
-          const activeTp1Pnl = Array.isArray(activePositions) ? activePositions.reduce((acc, p) => acc + (p.tp1Pnl || 0), 0) : 0;
-          balance = (body.initialBalance || CONFIG.initialBalance) + totalPnl + activeTp1Pnl;
+          const activeTpPnl = Array.isArray(activePositions) ? activePositions.reduce((acc, p) => acc + (p.tp1Pnl || 0) + (p.tp2Pnl || 0), 0) : 0;
+          balance = (body.initialBalance || CONFIG.initialBalance) + totalPnl + activeTpPnl;
         }
         rebuildCoinLossHistory();
         rewriteCsvFile();
@@ -3797,13 +3928,14 @@ const server = http.createServer(async (req, res) => {
       sl: parsedUrl.searchParams.get('sl'),
       be: parsedUrl.searchParams.get('be'),
       moon: parsedUrl.searchParams.get('moon'),
-      tp1: parsedUrl.searchParams.get('tp1')
+      tp1: parsedUrl.searchParams.get('tp1'),
+      tp2: parsedUrl.searchParams.get('tp2')
     });
     Object.assign(CONFIG, clean);
     rememberUserRisk();
     saveSettings();
     applyCircuitBreaker();
-    addLog(`⚙️ Ayarlar kaydedildi: Slot ${CONFIG.maxSlots} | Teminat $${CONFIG.marginPerTrade} | ${CONFIG.leverage}x | SL %${CONFIG.slPct} | BE %${CONFIG.bePct} | TP1 %${CONFIG.tp1Pct} | Moon %${CONFIG.moonPct}`, 'INFO');
+    addLog(`⚙️ Ayarlar kaydedildi: Slot ${CONFIG.maxSlots} | Teminat $${CONFIG.marginPerTrade} | ${CONFIG.leverage}x | SL %${CONFIG.slPct} | BE %${CONFIG.bePct} | TP1 %${CONFIG.tp1Pct} | TP2 %${CONFIG.tp2Pct} | Moon %${CONFIG.moonPct}`, 'INFO');
 
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ ok: true, config: CONFIG }));
