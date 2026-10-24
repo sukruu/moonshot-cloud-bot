@@ -24,17 +24,17 @@ try {
   evaluatePreTradeClearance = judgeMod.evaluatePreTradeClearance;
 } catch (e) {}
 
-// --- EKRAN 1 BİREBİR AYARLARI ---
+// --- ⚡ MODEL B: ULTRA AGRESİF 40X BALİNA SNIPER ROKET ---
 let CONFIG = {
   initialBalance: 100.0,     // Bakiye 100 Dolar
-  marginPerTrade: 15.0,      // Temel Teminat 15$ (Dinamik bileşik büyüme motoru ile kasanın %18'ine ölçeklenir)
-  leverage: 20,              // Kaldıraç 20x
-  maxSlots: 2,               // 2 Slot
-  slPct: 0.78,               // Kazanan işlemlerin %95'i MAE <= %0.67 kaldığı için sıkı SL (-$3.15 yerine -$2.64)
-  bePct: 0.45,               // +%0.45 spot görünce kâr kilidi (+%0.28 spot / +%3.6 net ROI) devreye girer
-  moonPct: 2.40,             // +%2.40 spotta roket vur-kaç hedefini alır (+%48 ROI)
-  tp1Pct: 0.50,              // +%0.50 spotta (+%10 ROI) %30 kârı anında cebe indirir
-  tp2Pct: 1.00,              // +%1.00 spotta (+%20 ROI) %35 kârı cebe indirir, %35 runner roket vur-kaça gider
+  marginPerTrade: 22.0,      // Temel Teminat 22$ (Tek Slot Sniper, Kasanın ~%20'si)
+  leverage: 40,              // Kaldıraç 40x (Ultra Agresif 2-3 Katı Kâr Hedefi)
+  maxSlots: 1,               // 1 Slot (Tek Mermi / Odaklanmış Balina Gücü)
+  slPct: 0.55,               // Sıkı Milimetrik Stop: -%0.55 spot (-%22 ROI risk, max -$4.8)
+  bePct: 0.70,               // +%0.70 spot (+%28 ROI) görünce stop başabaş kâr kilidine (+%0.30 spot / +%12 net ROI) çekilir
+  tp1Pct: 1.25,              // TP1: +%1.25 spotta (+%50 ROI) %35 kâr anında nakde döner
+  tp2Pct: 2.50,              // TP2: +%2.50 spotta (+%100 ROI) %35 kâr nakde döner (PARANIN TAM 2 KATI!)
+  moonPct: 4.00,             // Moonshot Runner: +%4.00 spotta (+%160 ROI) kalan %30 runner vur-kaç yapar (PARANIN 2.6 KATI!)
   feeRate: 0.0005,           // Binance Futures taker %0.05 (TEK YÖN)
   scanIntervalMs: 2000,
   riskIntervalMs: 1000,
@@ -46,26 +46,24 @@ let DYNAMIC = {
   vol3hMin: 1.0,
   candidateSlice: 35,
   regime: 'SCALP',
-  mode: 'HIZLI_VUR_KAC',
+  mode: 'BALINA_SNIPER_40X',
   updatedAt: 0
 };
 
-let userRisk = { maxSlots: 2, marginPerTrade: 15 };
+let userRisk = { maxSlots: 1, marginPerTrade: 22.0 };
 let circuitOn = false;
 
 function getDynamicMargin() {
   if (circuitOn) {
-    return Math.min(Number(userRisk.marginPerTrade) || 12, 10);
+    return Math.min(Number(userRisk.marginPerTrade) || 15, 12);
   }
-  // 🚀 DİNAMİK BİLEŞİK KASA MOTORU (Dynamic Compounding):
-  // Kasa büyüdükçe işlem başına dolar kârı büyüsün diye kasanın %18'i teminat olarak kullanılır (min $15.0, max $50.0).
-  // Örn: $100 iken $18.0, $116 iken $20.9, $150 iken $27.0, $200 iken $36.0 teminat.
-  // Kasada daima 2 slot sonrası en az %64 serbest nakit tamponu korunur!
+  // ⚡ MODEL B DİNAMİK BİLEŞİK KASA (Tek Slot, Kasanın %20'si, min $20.0, max $60.0)
+  // Kasa $110 iken $22.0, $150 iken $30.0, $200 iken $40.0
   const currentBal = Math.max(balance, 30.0);
-  const compoundMargin = currentBal * 0.18;
-  const userCfg = Number(userRisk.marginPerTrade) || 15.0;
+  const compoundMargin = currentBal * 0.20;
+  const userCfg = Number(userRisk.marginPerTrade) || 22.0;
   const targetMargin = Math.max(userCfg, compoundMargin);
-  return Number(Math.max(15.0, Math.min(targetMargin, 50.0)).toFixed(1));
+  return Number(Math.max(20.0, Math.min(targetMargin, 60.0)).toFixed(1));
 }
 
 function rememberUserRisk() {
@@ -81,7 +79,7 @@ function applyCircuitBreaker() {
   const dd = peak > 0 ? (peak - balance) / peak : 0;
   const severe = balance < 45 || dd >= 0.45;
   if (severe) {
-    const nextMargin = Math.min(Number(userRisk.marginPerTrade) || 12, 10);
+    const nextMargin = Math.min(Number(userRisk.marginPerTrade) || 15, 12);
     const changed = !circuitOn || CONFIG.maxSlots !== 1 || CONFIG.marginPerTrade !== nextMargin;
     circuitOn = true;
     CONFIG.maxSlots = 1;
@@ -95,14 +93,14 @@ function applyCircuitBreaker() {
   const dynamicMargin = getDynamicMargin();
   if (circuitOn) {
     circuitOn = false;
-    CONFIG.maxSlots = userRisk.maxSlots;
+    CONFIG.maxSlots = userRisk.maxSlots || 1;
     CONFIG.marginPerTrade = dynamicMargin;
-    DYNAMIC.mode = 'MARSCOIN_ROCKET';
+    DYNAMIC.mode = 'BALINA_SNIPER_40X';
     addLog(`✅ Devre kesici kapandı. Slot ${CONFIG.maxSlots}, teminat $${CONFIG.marginPerTrade}.`, 'INFO');
   } else {
-    CONFIG.maxSlots = userRisk.maxSlots || 2;
+    CONFIG.maxSlots = userRisk.maxSlots || 1;
     CONFIG.marginPerTrade = dynamicMargin;
-    DYNAMIC.mode = 'MARSCOIN_ROCKET';
+    DYNAMIC.mode = 'BALINA_SNIPER_40X';
   }
 }
 
@@ -206,11 +204,11 @@ function sanitizeSettings(s) {
   if (inRange(slots, 1, 20)) out.maxSlots = Math.round(slots);
   if (inRange(margin, 1, 100000)) out.marginPerTrade = margin;
   if (inRange(lev, 1, 125)) out.leverage = lev;
-  if (inRange(sl, 0.50, 2.5)) out.slPct = sl;
+  if (inRange(sl, 0.30, 2.5)) out.slPct = sl;
   if (inRange(be, 0.25, 2.0)) out.bePct = be;
-  if (inRange(moon, 1.0, 5.0)) out.moonPct = moon;
-  if (inRange(tp1, 0.35, 3.0)) out.tp1Pct = tp1;
-  if (inRange(tp2, 0.70, 5.0)) out.tp2Pct = tp2;
+  if (inRange(moon, 1.0, 10.0)) out.moonPct = moon;
+  if (inRange(tp1, 0.35, 5.0)) out.tp1Pct = tp1;
+  if (inRange(tp2, 0.70, 8.0)) out.tp2Pct = tp2;
   return out;
 }
 
@@ -239,11 +237,14 @@ function loadSettings() {
       slots: saved.maxSlots, margin: saved.marginPerTrade, lev: saved.leverage,
       sl: saved.slPct, be: saved.bePct, moon: saved.moonPct, tp1: saved.tp1Pct, tp2: saved.tp2Pct
     });
-    clean.slPct = 0.78;
-    clean.bePct = 0.45;
-    clean.tp1Pct = 0.50;
-    clean.tp2Pct = 1.00;
-    clean.moonPct = 2.40;
+    clean.maxSlots = 1;
+    clean.leverage = 40;
+    clean.marginPerTrade = clean.marginPerTrade || 22.0;
+    clean.slPct = 0.55;
+    clean.bePct = 0.70;
+    clean.tp1Pct = 1.25;
+    clean.tp2Pct = 2.50;
+    clean.moonPct = 4.00;
     Object.assign(CONFIG, clean);
     rememberUserRisk();
     settingsCustomized = true;
@@ -1302,59 +1303,39 @@ async function scanLoop() {
         }
         const atr3mPct = trCount > 0 ? trSum / trCount : 0.5;
 
-        // 🧭 ÇOKLU ZAMAN DİLİMİ (15dk + 30dk + 1s + 3s + 24s), 1S KANAL (pos1h), VOLATİLİTE & RSI-14 UYUMU:
-        // LONG: 3s, 1s (+%0.70+) ve 30dk (+%0.50+) sağlıklı yükselişte olmalı;
-        // 1s kanalında %45-%88 arası soluklanma/kırılım modunda, RSI 48-74 bandında ve 3dk ATR <= %1.75 olmalı!
+        // ⚡ MODEL B: A++ BALİNA SNIPER RADAR FİLTRESİ (Günde 1-2 İşlem İçin Ultra Seçici)
+        // Sadece LONG! Dibe batmış koinleri shortlama riski kapalı.
+        // Koin 24s ve 3s güçlü pozitif trendde olmalı, 1s ve 30dk kırılım bölgesinde olmalı!
         const radarOkLong =
           !sig.includes("ŞELALE") &&
           !sig.includes("AYI") &&
-          chg24Val >= 1.0 && chg24Val <= 50.0 &&
-          chg3hVal >= 1.6 && chg3hVal <= 28.0 &&
-          chg1hCalc >= 0.70 && chg1hCalc <= 7.5 && chg30mCalc >= 0.50 && chg15Long >= 0.15 &&
-          rangePos >= 40.0 && rangePos <= 90.0 &&
-          pos1h >= 45.0 && pos1h <= 88.0 &&
-          rsi3m >= 48.0 && rsi3m <= 74.0 &&
-          atr3mPct <= 1.75;
+          chg24Val >= 1.5 && chg24Val <= 70.0 &&
+          chg3hVal >= 2.0 && chg3hVal <= 45.0 &&
+          chg1hCalc >= 0.80 && chg30mCalc >= 0.40 && chg15Long >= 0.20 &&
+          rangePos >= 40.0 && rangePos <= 96.0 &&
+          pos1h >= 45.0 && pos1h <= 96.0 &&
+          rsi3m >= 50.0 && rsi3m <= 84.0 &&
+          atr3mPct <= 2.20;
 
-        // SHORT: 24s, 3s, 1s (-%0.30 altı), 30dk (-%0.35 altı) ve 15dk (-%0.10 altı) kesintisiz düşüşte olmalı;
-        // Fiyat 1 saatlik desteğini aşağı kırıyor olmalı (pos1h <= %24) ve RSI 15-55 bandında olmalı!
-        const radarOkShort =
-          !sig.includes("ROKET") &&
-          !sig.includes("BOĞA") &&
-          chg24Val <= -1.8 && chg24Val >= -42.0 &&
-          chg3hVal <= -1.6 && chg3hVal >= -12.0 &&
-          chg1hCalc <= -0.30 && chg30mCalc <= -0.35 && chg15mTrue <= -0.10 && chg15mCalc <= -0.10 &&
-          rangePos >= 2.0 && rangePos <= 55.0 &&
-          pos1h <= 24.0 &&
-          rsi3m >= 15.0 && rsi3m <= 55.0;
+        const radarOkShort = false; // 🚫 40x Modunda Dip Shortları Tamamen Devre Dışı
 
         if (!radarOkLong && !radarOkShort) {
-          // 👻 Radar'a ÇOK YAKIN elenen adayları da kaydet (yeni 1s/30dk/pos1h/RSI/ATR filtrelerinin etkisi ölçülebilsin)
+          // 👻 Radar'a ÇOK YAKIN elenen adayları da kaydet
           const nearLong = chg24Val >= 1.2 && chg3hVal >= 1.5 && chg15Long >= 0.12;
-          const nearShort = chg24Val <= -1.8 && chg3hVal <= -1.5 && chg15Short <= -0.10;
-          if (nearLong || nearShort) {
-            const nSide = nearLong ? 'LONG' : 'SHORT';
+          if (nearLong) {
             let why = 'RADAR_OTHER';
-            if (nSide === 'LONG') {
-              if (chg1hCalc < 0.70 || chg1hCalc > 7.5) why = 'RADAR_1H';
-              else if (chg30mCalc < 0.50) why = 'RADAR_30M';
-              else if (pos1h < 45 || pos1h > 88) why = 'RADAR_POS1H';
-              else if (rsi3m < 48 || rsi3m > 74) why = 'RADAR_RSI';
-              else if (atr3mPct > 1.75) why = 'RADAR_ATR';
-              else if (rangePos < 40 || rangePos > 90) why = 'RADAR_RANGE';
-            } else {
-              if (chg1hCalc > -0.30) why = 'RADAR_1H';
-              else if (chg30mCalc > -0.35) why = 'RADAR_30M';
-              else if (pos1h > 24) why = 'RADAR_POS1H';
-              else if (rsi3m < 15 || rsi3m > 55) why = 'RADAR_RSI';
-              else if (rangePos < 2 || rangePos > 55) why = 'RADAR_RANGE';
-            }
+            if (chg1hCalc < 0.80) why = 'RADAR_1H';
+            else if (chg30mCalc < 0.40) why = 'RADAR_30M';
+            else if (pos1h < 45 || pos1h > 96) why = 'RADAR_POS1H';
+            else if (rsi3m < 50 || rsi3m > 84) why = 'RADAR_RSI';
+            else if (atr3mPct > 2.20) why = 'RADAR_ATR';
+            else if (rangePos < 40 || rangePos > 96) why = 'RADAR_RANGE';
             recordShadowSignal({
-              symbol: sym, side: nSide, stage: why, price: curP,
-              chg15: Number((nSide === 'LONG' ? chg15Long : chg15Short).toFixed(2)),
+              symbol: sym, side: 'LONG', stage: why, price: curP,
+              chg15: Number(chg15Long.toFixed(2)),
               chg3h: Number(chg3hVal.toFixed(2)), chg24h: Number(chg24Val.toFixed(2)),
               rangePos: Number(rangePos.toFixed(0)),
-              taker: Number((nSide === 'LONG' ? effectiveTaker : effectiveTakerShort).toFixed(1)),
+              taker: Number(effectiveTaker.toFixed(1)),
               cur3m: Number(curMovePct.toFixed(2)), prev3m: Number(prevMovePct.toFixed(2)),
               atr3m: Number(atr3mPct.toFixed(2)), signal: sig
             });
@@ -1362,14 +1343,14 @@ async function scanLoop() {
           continue;
         }
 
-        // 👻 GÖLGE SİNYAL KAYDI: Radar ön filtresini geçen her aday, açılsa da reddedilse de kaydedilir
-        const shadowSide = radarOkLong ? 'LONG' : 'SHORT';
+        // 👻 GÖLGE SİNYAL KAYDI
+        const shadowSide = 'LONG';
         const shadow = (stage, extra = {}) => recordShadowSignal({
           symbol: sym, side: shadowSide, stage, price: curP,
-          chg15: Number((shadowSide === 'LONG' ? chg15Long : chg15Short).toFixed(2)),
+          chg15: Number(chg15Long.toFixed(2)),
           chg3h: Number(chg3hVal.toFixed(2)), chg24h: Number(chg24Val.toFixed(2)),
           rangePos: Number(rangePos.toFixed(0)),
-          taker: Number((shadowSide === 'LONG' ? effectiveTaker : effectiveTakerShort).toFixed(1)),
+          taker: Number(effectiveTaker.toFixed(1)),
           cur3m: Number(curMovePct.toFixed(2)), prev3m: Number(prevMovePct.toFixed(2)),
           atr3m: Number(atr3mPct.toFixed(2)), signal: sig, ...extra
         });
@@ -1379,7 +1360,6 @@ async function scanLoop() {
         // 🕐 1. 3 DAKİKALIK MUM TEYİDİ & KAPANMAMIŞ İLK 18 SANİYE TUZAĞI ENGELİ
         const candleStart = (k3m[lastIdx] && k3m[lastIdx][0]) ? k3m[lastIdx][0] : (Date.now() - 90000);
         const candleElapsedSec = (Date.now() - candleStart) / 1000;
-        // Yeni açılmış mumun ilk 18 saniyesindeki sahte/anlık fitillere atlama!
         if (candleElapsedSec < 18) continue;
         const clampedElapsed = Math.max(18, Math.min(180, candleElapsedSec));
         const curPaceVol = curV * (180 / Math.max(24, clampedElapsed));
@@ -1388,13 +1368,13 @@ async function scanLoop() {
         const volMult = Math.max(rawVolMult, (rawVolMult * 0.60) + (prevVolMult * 0.40));
         const spikeVolMult = (curPaceVol / avgVol20);
 
-        // Aktif veya bir önceki 3dk mumunda zaten %0.90+ / %0.95+ fırlamışsa fitil tepesinden kovalama!
-        if (Math.abs(curMovePct) > 0.95 || Math.abs(prevMovePct) > 0.90 || Math.abs(twoCandleMovePct) > 1.65) {
+        // Climax: Sadece aşırı şişmiş (%2.2+ tek mum veya %3.5+ 2 mum) fitil tepelerini engelle
+        if (Math.abs(curMovePct) > 2.20 || Math.abs(prevMovePct) > 1.80 || Math.abs(twoCandleMovePct) > 3.50) {
           shadow('CLIMAX');
           continue;
         }
 
-        // 🧱 2. EMİLİM (ABSORPTION / EFFORT vs. RESULT) FİLTRESİ:
+        // 🧱 2. EMİLİM (ABSORPTION) FİLTRESİ:
         const isCurrentAbsorbed = spikeVolMult >= 4.5 && ((Math.abs(curMovePct) / spikeVolMult) < 0.085 || Math.abs(curMovePct) < 0.35);
         const isPrevAbsorbed = (prevV / avgVol20) >= 3.8 && Math.abs(prevMovePct) < 0.18;
         if (isCurrentAbsorbed || isPrevAbsorbed) {
@@ -1402,51 +1382,32 @@ async function scanLoop() {
           continue;
         }
 
-        // 4. Kural: Mum Dikliği (Wick Filtresi) - Zirveden satış yemiş fitilli mumları ele
+        // 4. Kural: Mum Dikliği (Wick Filtresi)
         const candleSpan = curH - curL;
         const upperWick = curH - Math.max(curP, curO);
-        const lowerWick = Math.min(curP, curO) - curL;
         const noWickLong = candleSpan > 0 ? (upperWick / candleSpan <= 0.40) : true;
-        const noWickShort = candleSpan > 0 ? (lowerWick / candleSpan <= 0.40) : true;
 
         const vol3hCheck = rInfo.vol3hM || ((quote90mCalc * 2) / 1e6);
-        const hasRealLiquidity = isVip || (vol3hCheck >= 0.70 && vol24 >= 1.5);
-        const hasBuyerDominance = effectiveTaker >= 51.5 && effectiveTaker <= 75.0 && taker15mCalc >= 50.5;
-        const hasSellerDominance = effectiveTakerShort <= 48.5 && effectiveTakerShort >= 23.0 && taker15mCalc <= 49.5;
+        const hasRealLiquidity = isVip || (vol3hCheck >= 1.0 && vol24 >= 2.0); // En az $1M 3s hacim
+        const hasBuyerDominance = effectiveTaker >= 56.5 && taker15mCalc >= 53.0; // Net kurumsal alıcı baskısı
 
         // 📐 3. KAPANMIŞ MUM & YAPI KIRILIMI + DİRENÇ ÜSTÜ KALICILIK TEYİDİ:
         const brokePrevHigh = curP > prevH || (curP > prevC && (prevC >= prevO || curMovePct >= 0.22) && curP >= prevH * 0.9982);
-        const brokePrevLow = curP < prevL || (curP < prevC && (prevC <= prevO || curMovePct <= -0.22) && curP <= prevL * 1.0018);
-        const isBreakoutHoldLong = prevMovePct >= 0.28 && prevMovePct <= 0.85 && curMovePct >= 0.12 && curP >= prevC && twoCandleMovePct >= 0.38;
-        const isBreakoutHoldShort = prevMovePct <= -0.28 && prevMovePct >= -0.85 && curMovePct <= -0.12 && curP <= prevC && twoCandleMovePct <= -0.38;
+        const isBreakoutHoldLong = prevMovePct >= 0.28 && prevMovePct <= 1.20 && curMovePct >= 0.15 && curP >= prevC && twoCandleMovePct >= 0.45;
         const continuationLong = (curP > curO && brokePrevHigh) || isBreakoutHoldLong;
-        const continuationShort = (curP < curO && brokePrevLow) || isBreakoutHoldShort;
 
-        // 🟢 MARSCOIN ÇOKLU ZAMAN DİLİMİ + 1S KANAL + HACİMLİ KIRILIM LONG MOTORU:
+        // 🟢 ⚡ 40X BALİNA SNIPER ROKET LONG MOTORU:
         let isLongPump = false;
         let isRocketSignal = false;
         if (hasRealLiquidity && noWickLong && hasBuyerDominance && radarOkLong && continuationLong && !nearMax6m) {
-          if ((curMovePct >= 0.20 || isBreakoutHoldLong) && twoCandleMovePct >= 0.30 && volMult >= 1.05 && spikeVolMult <= 4.8 && chg3hVal >= 1.6) {
+          if ((curMovePct >= 0.28 || isBreakoutHoldLong) && twoCandleMovePct >= 0.45 && volMult >= 2.0 && spikeVolMult <= 5.5 && chg3hVal >= 2.0) {
             isLongPump = true;
             isRocketSignal = true;
-            radarTag = `[🚀 MARSCOIN ROKET SPIKE | 3dk: +%${curMovePct.toFixed(2)} | 1s: +%${chg1hCalc.toFixed(1)} | Pos1h: %${pos1h.toFixed(0)} | RSI: ${rsi3m.toFixed(0)} | Kanal: %${rangePos.toFixed(0)}]`;
+            radarTag = `[⚡ 40X BALİNA SNIPER | 3dk: +%${curMovePct.toFixed(2)} | Hacim: ${volMult.toFixed(1)}x | Taker: %${effectiveTaker.toFixed(0)} | Pos1h: %${pos1h.toFixed(0)}]`;
           }
         }
 
-        // 🔴 MARSCOIN 1S DESTEK KIRILIMI ŞELALE SHORT MOTORU:
-        let isShortDump = false;
-        if (hasRealLiquidity && noWickShort && hasSellerDominance && radarOkShort && continuationShort && btc15mNumeric <= 0.25) {
-          if (
-            (sig.includes("BALİNA AYI") || sig.includes("GÜÇLÜ AYI") || (chg3hVal <= -2.0 && chg15Short <= -0.35)) &&
-            (curMovePct <= -0.18 || isBreakoutHoldShort) &&
-            twoCandleMovePct <= -0.28 &&
-            volMult >= 0.78 && spikeVolMult <= 4.8 &&
-            effectiveTakerShort <= 48.5
-          ) {
-            isShortDump = true;
-            radarTag = `[🩸 MARSCOIN ŞELALE SHORT | 3dk: %${curMovePct.toFixed(2)} | 1s: %${chg1hCalc.toFixed(1)} | Pos1h: %${pos1h.toFixed(0)} | RSI: ${rsi3m.toFixed(0)} | Kanal: %${rangePos.toFixed(0)}]`;
-          }
-        }
+        let isShortDump = false; // 🚫 Model B: Short Tamamen Kapalı
 
         if (!isLongPump && !isShortDump) {
           shadow('NO_TRIGGER', { volMult: Number(volMult.toFixed(2)) });
@@ -1549,35 +1510,30 @@ async function scanLoop() {
             continue;
           }
 
-          // 📐 VOLATİLİTEYE VE DİNAMİK BİLEŞİK KASAYA GÖRE TEMİNAT & HEDEFLER:
-          // Teminat Dinamik Bileşik Kasa Motorundan (%18) gelir ($116 bakiyede ~$21, $150 bakiyede $27).
-          // Stop = 1.6 × 3dk ATR (taban %0.78, tavan %2.0). Stop genişledikçe teminat aynı oranda küçülür,
-          // böylece işlem başına dolar riski sabit kalır. Kâr kademeleri (BE, kilit, TP1, TP2, Moon) volK ile ölçeklenir.
+          // 📐 ⚡ 40X BALİNA SNIPER BİLEŞİK TEMİNAT & RİSK:
           const baseMargin = getDynamicMargin();
-          const baseSlPct = Number(CONFIG.slPct) || 0.78;
-          const tradeSlPct = Math.min(2.0, Math.max(baseSlPct, atr3mPct * 1.5));
+          const baseSlPct = Number(CONFIG.slPct) || 0.55;
+          const tradeSlPct = Math.min(1.20, Math.max(baseSlPct, atr3mPct * 1.2)); // 40x'te tavan %1.20 stop
           const volK = tradeSlPct / baseSlPct;
-          let tradeMargin = Number(Math.max(12.0, baseMargin / Math.sqrt(volK)).toFixed(2));
+          let tradeMargin = Number(Math.max(15.0, baseMargin / Math.sqrt(volK)).toFixed(2));
 
-          // 🛡️ KASA SERBEST NAKİT KORUMASI: Açık pozisyonlar ve yeni işlem serbest bakiyeyi aşamaz
+          // 🛡️ KASA SERBEST NAKİT KORUMASI: Tek slot çalışır, kasanın %80'i nakit kalır
           const usedMargin = activePositions.reduce((acc, p) => acc + (p.margin || 0), 0);
           const freeMargin = Math.max(0, balance - usedMargin);
           if (tradeMargin > freeMargin) {
             tradeMargin = Number(freeMargin.toFixed(2));
           }
-          if (tradeMargin < 10.0) {
+          if (tradeMargin < 12.0) {
             continue; // Yetersiz serbest teminat
           }
 
-          const tradeBePct = Number(CONFIG.bePct) || 0.45;
-          const tradeTp1Pct = Number(CONFIG.tp1Pct) || 0.50;
-          const tradeTp2Pct = Number(CONFIG.tp2Pct) || 1.00;
-          const tradeMoonPct = Number(CONFIG.moonPct) || 2.40;
-          radarTag += ` [SL: %${tradeSlPct.toFixed(2)} | ATR3m: %${atr3mPct.toFixed(2)} | Teminat: $${tradeMargin.toFixed(1)}]`;
+          const tradeBePct = Number(CONFIG.bePct) || 0.70;
+          const tradeTp1Pct = Number(CONFIG.tp1Pct) || 1.25;
+          const tradeTp2Pct = Number(CONFIG.tp2Pct) || 2.50;
+          const tradeMoonPct = Number(CONFIG.moonPct) || 4.00;
+          radarTag += ` [SL: %${tradeSlPct.toFixed(2)} | Teminat: $${tradeMargin.toFixed(1)} | 40x]`;
 
-          const stopPrice = side === "LONG" 
-            ? curP * (1 - tradeSlPct / 100) 
-            : curP * (1 + tradeSlPct / 100);
+          const stopPrice = curP * (1 - tradeSlPct / 100);
 
           const position = {
             id: Date.now() + Math.random().toString(36).substring(2, 6),
@@ -1752,20 +1708,20 @@ async function fastRiskLoop() {
       }
 
       // ========================================================
-      // 🎯 2. KADEMELİ KÂR ALMA - TP1 (+%0.50 spot, %30 Pozisyon Kapatılır)
+      // 🎯 2. KADEMELİ KÂR ALMA - TP1 (+%1.25 spot, %35 Pozisyon Kapatılır = +%50 ROI)
       // ========================================================
-      const tp1Goal = pos.tp1Pct || CONFIG.tp1Pct || 0.50;
+      const tp1Goal = pos.tp1Pct || CONFIG.tp1Pct || 1.25;
       if (!exitReason && !pos.tp1Taken && (move >= tp1Goal || nMove >= tp1Goal)) {
         pos.tp1Taken = true;
         pos.initialMargin = pos.initialMargin || pos.margin;
-        const closedMargin = Number((pos.initialMargin * 0.30).toFixed(4));
+        const closedMargin = Number((pos.initialMargin * 0.35).toFixed(4));
         const closedNominal = closedMargin * pos.leverage;
         const closedFee = closedNominal * CONFIG.feeRate * 2;
         const tp1Profit = (closedNominal * (move / 100)) - closedFee;
 
         pos.tp1Pnl = (pos.tp1Pnl || 0) + tp1Profit;
         balance += tp1Profit; // Kâr bakiyeye anında eklenir
-        pos.margin = Number((pos.margin - closedMargin).toFixed(4)); // Kalan %70 pozisyon marjini
+        pos.margin = Number((pos.margin - closedMargin).toFixed(4)); // Kalan %65 pozisyon marjini
 
         // Kalan marjin için anlık nominal ve pnl güncellemesi
         const remNominal = pos.margin * pos.leverage;
@@ -1773,19 +1729,19 @@ async function fastRiskLoop() {
         pos.pnl = (remNominal * (move / 100)) - remFee;
         pos.roi = pos.margin > 0 ? (pos.pnl / pos.margin) * 100 : 0;
 
-        // Kalan %70 pozisyon için Stop Loss derhal +%0.28 kâra kilitlenir (komisyon üstü net kâr)
+        // Kalan %65 pozisyon için Stop Loss derhal +%0.30 kâra kilitlenir (+%12 net ROI garantisi)
         pos.beLocked = true;
         pos.tier1Locked = true;
-        pos.stopPrice = lockSpot(0.28);
+        pos.stopPrice = lockSpot(0.30);
         stateChanged = true;
 
-        addLog(`💰 [TP1 ALINDI] ${pos.symbol} %30 Pozisyon Kapatıldı! +$${tp1Profit.toFixed(2)} Kâr Cebe İndi (+%${(move * pos.leverage).toFixed(1)} ROI). Kalan %70 Stop +%${(0.28 * k).toFixed(2)} Kâra Kilitlendi.`, 'TRADE');
+        addLog(`💰 [TP1 ALINDI] ${pos.symbol} %35 Pozisyon Kapatıldı! +$${tp1Profit.toFixed(2)} Kâr Cebe İndi (+%${(move * pos.leverage).toFixed(1)} ROI / +%50). Kalan %65 Stop +%${(0.30 * k).toFixed(2)} Kâra Kilitlendi.`, 'TRADE');
       }
 
       // ========================================================
-      // 🎯 3. İKİNCİ KADEMELİ KÂR ALMA - TP2 (+%1.00 spot, %35 Daha Pozisyon Kapatılır)
+      // 🚀 3. İKİNCİ KADEMELİ KÂR ALMA - TP2 (+%2.50 spot, %35 Kapat = +%100 ROI / PARANIN 2 KATI!)
       // ========================================================
-      const tp2Goal = pos.tp2Pct || CONFIG.tp2Pct || 1.00;
+      const tp2Goal = pos.tp2Pct || CONFIG.tp2Pct || 2.50;
       if (!exitReason && pos.tp1Taken && !pos.tp2Taken && (move >= tp2Goal || nMove >= tp2Goal)) {
         pos.tp2Taken = true;
         pos.initialMargin = pos.initialMargin || pos.margin;
@@ -1796,7 +1752,7 @@ async function fastRiskLoop() {
 
         pos.tp2Pnl = (pos.tp2Pnl || 0) + tp2Profit;
         balance += tp2Profit; // Kâr bakiyeye anında eklenir
-        pos.margin = Number((pos.margin - closedMargin).toFixed(4)); // Kalan %35 runner marjini
+        pos.margin = Number((pos.margin - closedMargin).toFixed(4)); // Kalan %30 runner marjini
 
         // Kalan marjin için anlık nominal ve pnl güncellemesi
         const remNominal = pos.margin * pos.leverage;
@@ -1804,40 +1760,36 @@ async function fastRiskLoop() {
         pos.pnl = (remNominal * (move / 100)) - remFee;
         pos.roi = pos.margin > 0 ? (pos.pnl / pos.margin) * 100 : 0;
 
-        // Kalan %35 Runner için Stop Loss +%0.70 kâra yükseltilir (+%12 net ROI garantisi)
-        pos.stopPrice = lockSpot(0.70);
+        // Kalan %30 Runner için Stop Loss +%1.20 kâra yükseltilir (+%48 net ROI garantisi)
+        pos.stopPrice = lockSpot(1.20);
         stateChanged = true;
 
-        addLog(`💰 [TP2 ALINDI] ${pos.symbol} %35 Pozisyon Kapatıldı! +$${tp2Profit.toFixed(2)} Kâr Cebe İndi (+%${(move * pos.leverage).toFixed(1)} ROI). Kalan %35 Runner Stop +%${(0.70 * k).toFixed(2)} Kâra Yükseltildi!`, 'TRADE');
+        addLog(`🚀 [TP2 ALINDI] ${pos.symbol} %35 Pozisyon Kapatıldı! +$${tp2Profit.toFixed(2)} Kâr Cebe İndi (+%100 ROI - PARANIN 2 KATI!). Kalan %30 Runner Stop +%${(1.20 * k).toFixed(2)} Kâra Yükseltildi!`, 'TRADE');
       }
 
       // ========================================================
       // 🛡️ 4. KADEMELİ İZ SÜREN LAZER KÂR KİLİTLERİ (hepsi ×volK)
       // ========================================================
-      const beGoal = Math.min(0.45, pos.bePct || CONFIG.bePct || 0.45);
+      const beGoal = Math.min(0.70, pos.bePct || CONFIG.bePct || 0.70);
       let targetStop = null;
-      if (mfe >= 2.40 || nMfe >= 2.20) {
-        targetStop = lockSpot(Math.max(1.85, mfe - 0.45));
-      } else if (mfe >= 1.75 || nMfe >= 1.50) {
-        targetStop = lockSpot(Math.max(1.30, mfe - 0.40));
-      } else if (mfe >= 1.20 || nMfe >= 1.10) {
-        targetStop = lockSpot(Math.max(0.85, mfe - 0.35));
-      } else if (mfe >= 0.90 || nMfe >= 0.85) {
-        targetStop = lockSpot(0.65); // Spot +%0.65 -> Net ROI +%11.0!
-      } else if (mfe >= 0.65 || nMfe >= 0.60) {
-        targetStop = lockSpot(0.45); // Spot +%0.45 -> Net ROI +%7.0!
+      if (mfe >= 3.50 || nMfe >= 3.20) {
+        targetStop = lockSpot(Math.max(2.60, mfe - 0.70));
+      } else if (mfe >= 2.50 || nMfe >= 2.20) {
+        targetStop = lockSpot(Math.max(1.80, mfe - 0.50));
+      } else if (mfe >= 1.50 || nMfe >= 1.30) {
+        targetStop = lockSpot(0.85); // Spot +%0.85 -> Net ROI +%34!
       } else if (mfe >= beGoal || nMfe >= beGoal) {
-        targetStop = lockSpot(0.28); // Spot +%0.28 -> Net ROI +%3.6
+        targetStop = lockSpot(0.30); // Spot +%0.30 -> Net ROI +%12
       }
 
       if (targetStop) {
         if (!pos.beLocked && (mfe >= beGoal || nMfe >= beGoal)) {
           pos.beLocked = true;
-          addLog(`🛡️ [KÂR KİLİDİ 1] ${pos.symbol} +%${mfe.toFixed(2)} gördü. Stop giriş+%${(0.28 * k).toFixed(2)} kâra çekildi.`, 'TRADE');
+          addLog(`🛡️ [KÂR KİLİDİ 1] ${pos.symbol} +%${mfe.toFixed(2)} gördü. Stop giriş+%${(0.30 * k).toFixed(2)} kâra çekildi.`, 'TRADE');
         }
-        if (!pos.tier1Locked && (mfe >= 0.65 || nMfe >= 0.60)) {
+        if (!pos.tier1Locked && (mfe >= 1.50 || nMfe >= 1.30)) {
           pos.tier1Locked = true;
-          addLog(`🔒 [KÂR KİLİDİ 2] ${pos.symbol} +%${mfe.toFixed(2)} gördü. Garanti kâr stopu +%${(0.45 * k).toFixed(2)} (+%7 Net ROI) seviyesine yükseltildi!`, 'TRADE');
+          addLog(`🔒 [KÂR KİLİDİ 2] ${pos.symbol} +%${mfe.toFixed(2)} gördü. Garanti kâr stopu +%${(0.85 * k).toFixed(2)} (+%34 Net ROI) seviyesine yükseltildi!`, 'TRADE');
         }
         if (!pos.stopPrice || (isLong && targetStop > pos.stopPrice) || (!isLong && targetStop < pos.stopPrice)) {
           pos.stopPrice = targetStop;
@@ -1846,20 +1798,20 @@ async function fastRiskLoop() {
       }
 
       // ========================================================
-      // 🎯 5. MOONSHOT HEDEFİ (+%2.40 ×volK Spot ile Runner Tam Kapat!)
+      // 🎯 5. MOONSHOT HEDEFİ (+%4.00 ×volK Spot ile Runner Kapat = +%160 ROI / PARANIN 2.6 KATI!)
       // ========================================================
-      const moonGoal = Math.max(2.40, pos.moonPct || CONFIG.moonPct || 2.40);
+      const moonGoal = Math.max(4.00, pos.moonPct || CONFIG.moonPct || 4.00);
       if (!exitReason && nMove >= moonGoal) {
         exitReason = (pos.tp1Taken || pos.tp2Taken)
-          ? `🎯 KADEMELİ MOONSHOT ALINDI (TP1+TP2+Runner: +%${pos.roi.toFixed(1)} ROI / +%${move.toFixed(2)} Spot)`
-          : `🎯 MOONSHOT HEDEFİ VURULDU (+%${pos.roi.toFixed(1)} ROI / +%${move.toFixed(2)} Spot)`;
+          ? `🎯 40X MOONSHOT ALINDI (PARANIN 2.6 KATI! TP1+TP2+Runner: +%${pos.roi.toFixed(1)} ROI / +%${move.toFixed(2)} Spot)`
+          : `🎯 40X MOONSHOT HEDEFİ VURULDU (+%${pos.roi.toFixed(1)} ROI / +%${move.toFixed(2)} Spot)`;
       }
 
       // ========================================================
       // 🏆 6. DİNAMİK ZİRVEDEN DÖNÜŞ KÂR KORUMASI (SADECE TP ALINDIKTAN SONRA RUNNER İÇİN)
       // ========================================================
-      if (!exitReason && (pos.tp1Taken || pos.tp2Taken) && mfe >= 1.25 && move >= 0.45) {
-        const pullbackLimit = mfe >= 2.0 ? 0.45 : 0.40;
+      if (!exitReason && (pos.tp1Taken || pos.tp2Taken) && mfe >= 2.0 && move >= 0.80) {
+        const pullbackLimit = mfe >= 3.0 ? 0.70 : 0.55;
         if ((mfe - move) >= pullbackLimit) {
           exitReason = `🏆 TP CEPTE + Runner Lazer Kâr Kilidi (+%${pos.roi.toFixed(1)} ROI / Zirve: +%${mfe.toFixed(2)} Spot)`;
         }
@@ -1868,13 +1820,12 @@ async function fastRiskLoop() {
       // ========================================================
       // ⏱️ 7. ÖLÜ İŞLEM NEŞTERİ (Dead Trade Scalpel)
       // ========================================================
-      // İvmesiz kalan ölü işlemleri saatlerce bekleyip tam stop (-$2.50) yemek yerine erkenden küçük bir çizikle (-%0.25 spot / -$0.75) keser!
       if (!exitReason && !pos.beLocked) {
-        if (durMin >= 8 && nMfe < 0.20 && nMove <= -0.25) {
+        if (durMin >= 6 && nMfe < 0.25 && nMove <= -0.25) {
           exitReason = `⏱️ Ölü İşlem Neşteri (${Math.round(durMin)}dk İvmesiz / MFE: +%${mfe.toFixed(2)} / Erken Kesim)`;
-        } else if (durMin >= 15 && nMfe < 0.35 && nMove <= -0.20) {
+        } else if (durMin >= 15 && nMfe < 0.40 && nMove <= -0.20) {
           exitReason = `⏱️ İvmesizlik Neşteri (${Math.round(durMin)}dk Zayıf Akış / MFE: +%${mfe.toFixed(2)} / Erken Kesim)`;
-        } else if (durMin >= 30 && nMfe < 0.40) {
+        } else if (durMin >= 25 && nMfe < 0.50) {
           exitReason = `⏱️ Maksimum Süre Aşımı (${Math.round(durMin)}dk Yatay / MFE: +%${mfe.toFixed(2)} / Rotasyon Çıkışı)`;
         }
       }
@@ -2865,11 +2816,11 @@ function serveDashboardHtml() {
           </div>
         </div>
 
-        <div class="sidebar-section-title">🛡️ SIFIR RİSK VE KADEMELİ HEDEFLER</div>
+        <div class="sidebar-section-title">🛡️ 40X SNIPER KADEMELİ HEDEFLER</div>
         <div style="background:linear-gradient(90deg, var(--green-bg) 0%, var(--panel) 100%); border-left:3px solid var(--green); border:1px solid var(--green-border); border-radius:5px; padding:6px 8px; margin-bottom:5px; display:flex; justify-content:space-between; align-items:center; box-shadow:var(--shadow-sm);">
           <div>
             <div style="font-size:10px;font-weight:800;color:var(--green);letter-spacing:0.3px;">🛡️ OTOMATİK BAŞABAŞ</div>
-            <div style="font-size:8.5px;color:var(--muted);margin-top:1px;">Kâr yakalanınca $0 Riske çekilir</div>
+            <div style="font-size:8.5px;color:var(--muted);margin-top:1px;">+%0.70 Spot (+%28 ROI) -> +%12 Garanti Stop</div>
           </div>
           <div style="display:flex;align-items:baseline;gap:2px;background:var(--panel2);padding:2px 6px;border-radius:4px;border:1px solid var(--green-border);">
             <input type="number" id="inpBe" value="${CONFIG.bePct.toFixed(2)}" step="0.1" style="width:52px;background:none;border:none;color:var(--green);font-family:'JetBrains Mono';font-size:13px;font-weight:650;text-align:right;outline:none;">
@@ -2880,29 +2831,29 @@ function serveDashboardHtml() {
         <div style="background:linear-gradient(90deg, var(--blue-bg) 0%, var(--panel) 100%); border-left:3px solid var(--blue); border:1px solid var(--blue-border); border-radius:5px; padding:6px 8px; margin-bottom:5px; display:flex; justify-content:space-between; align-items:center; box-shadow:var(--shadow-sm);">
           <div>
             <div style="font-size:10px;font-weight:800;color:var(--blue);letter-spacing:0.3px;">🎯 İLK KÂR ALMA (TP1)</div>
-            <div style="font-size:8.5px;color:var(--muted);margin-top:1px;">%30 Cebe, Kalan %70 Trende</div>
+            <div style="font-size:8.5px;color:var(--muted);margin-top:1px;">%35 Cebe (+%50 ROI), Kalan %65 Trende</div>
           </div>
           <div style="display:flex;align-items:baseline;gap:2px;background:var(--panel2);padding:2px 6px;border-radius:4px;border:1px solid var(--blue-border);">
-            <input type="number" id="inpTp1" value="${(CONFIG.tp1Pct || 0.50).toFixed(2)}" step="0.1" style="width:52px;background:none;border:none;color:var(--blue);font-family:'JetBrains Mono';font-size:13px;font-weight:650;text-align:right;outline:none;">
+            <input type="number" id="inpTp1" value="${(CONFIG.tp1Pct || 1.25).toFixed(2)}" step="0.1" style="width:52px;background:none;border:none;color:var(--blue);font-family:'JetBrains Mono';font-size:13px;font-weight:650;text-align:right;outline:none;">
             <span style="font-size:10px;color:var(--blue);opacity:0.7;">%</span>
           </div>
         </div>
 
         <div style="background:linear-gradient(90deg, rgba(99,102,241,0.08) 0%, var(--panel) 100%); border-left:3px solid #6366f1; border:1px solid rgba(99,102,241,0.3); border-radius:5px; padding:6px 8px; margin-bottom:5px; display:flex; justify-content:space-between; align-items:center; box-shadow:var(--shadow-sm);">
           <div>
-            <div style="font-size:10px;font-weight:800;color:#6366f1;letter-spacing:0.3px;">🚀 2. KÂR ALMA (TP2)</div>
-            <div style="font-size:8.5px;color:var(--muted);margin-top:1px;">%35 Cebe, %35 Runner Rokete</div>
+            <div style="font-size:10px;font-weight:800;color:#6366f1;letter-spacing:0.3px;">🚀 2. KÂR ALMA (TP2 - 2 KATI!)</div>
+            <div style="font-size:8.5px;color:var(--muted);margin-top:1px;">%35 Cebe (+%100 ROI / 2X Kasa), %30 Rokete</div>
           </div>
           <div style="display:flex;align-items:baseline;gap:2px;background:var(--panel2);padding:2px 6px;border-radius:4px;border:1px solid rgba(99,102,241,0.3);">
-            <input type="number" id="inpTp2" value="${(CONFIG.tp2Pct || 1.00).toFixed(2)}" step="0.1" style="width:52px;background:none;border:none;color:#6366f1;font-family:'JetBrains Mono';font-size:13px;font-weight:650;text-align:right;outline:none;">
+            <input type="number" id="inpTp2" value="${(CONFIG.tp2Pct || 2.50).toFixed(2)}" step="0.1" style="width:52px;background:none;border:none;color:#6366f1;font-family:'JetBrains Mono';font-size:13px;font-weight:650;text-align:right;outline:none;">
             <span style="font-size:10px;color:#6366f1;opacity:0.7;">%</span>
           </div>
         </div>
 
         <div style="background:linear-gradient(90deg, var(--amber-bg) 0%, var(--panel) 100%); border-left:3px solid var(--amber); border:1px solid var(--amber-border); border-radius:5px; padding:6px 8px; margin-bottom:6px; display:flex; justify-content:space-between; align-items:center; box-shadow:var(--shadow-sm);">
           <div>
-            <div style="font-size:10px;font-weight:800;color:var(--amber);letter-spacing:0.3px;">🏆 VUR-KAÇ MOONSHOT</div>
-            <div style="font-size:8.5px;color:var(--muted);margin-top:1px;">%35 Runner Zirvede Vurur</div>
+            <div style="font-size:10px;font-weight:800;color:var(--amber);letter-spacing:0.3px;">🏆 BALİNA MOONSHOT (2.6 KATI!)</div>
+            <div style="font-size:8.5px;color:var(--muted);margin-top:1px;">%30 Runner (+%160 ROI) Zirvede Patlar</div>
           </div>
           <div style="display:flex;align-items:baseline;gap:2px;background:var(--panel2);padding:2px 6px;border-radius:4px;border:1px solid var(--amber-border);">
             <input type="number" id="inpMoon" value="${CONFIG.moonPct.toFixed(2)}" step="0.1" style="width:52px;background:none;border:none;color:var(--amber);font-family:'JetBrains Mono';font-size:13px;font-weight:650;text-align:right;outline:none;">
