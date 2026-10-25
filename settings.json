@@ -3,9 +3,9 @@
   "marginPerTrade": 22.0,
   "leverage": 40,
   "slPct": 0.55,
-  "bePct": 0.70,
-  "tp1Pct": 1.25,
-  "tp2Pct": 2.50,
-  "moonPct": 4.00,
-  "savedAt": 1792015637970
+  "bePct": 0.40,
+  "tp1Pct": 0.60,
+  "tp2Pct": 1.20,
+  "moonPct": 2.20,
+  "savedAt": 1792867524994
 }
