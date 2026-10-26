@@ -1143,7 +1143,7 @@ async function scanLoop() {
 
     if (now - lastScanHeartbeat > 45000 && topCandidates.length > 0) {
       lastScanHeartbeat = now;
-      addLog(`🔍 350+ Koin Taranıyor | Lider: ${topCandidates[0].symbol} (%${topCandidates[0].chg.toFixed(1)}, Puan: ${topCandidates[0].hotScore.toFixed(0)}) | Slot: ${activePositions.length}/${CONFIG.maxSlots}`);
+      addLog(`🔍 ${validTickers.length} Koin Taranıyor (En Sıcak ${topCandidates.length} Aday Mercekte) | Lider: ${topCandidates[0].symbol} (%${topCandidates[0].chg.toFixed(1)}, Puan: ${topCandidates[0].hotScore.toFixed(0)}) | Slot: ${activePositions.length}/${CONFIG.maxSlots}`);
     }
 
     // 5'li paralel kline taraması (3m Marscoin Motoru)
