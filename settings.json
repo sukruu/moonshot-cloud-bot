@@ -1,11 +1,11 @@
 {
   "maxSlots": 2,
-  "marginPerTrade": 15.0,
+  "marginPerTrade": 18,
   "leverage": 20,
-  "slPct": 0.78,
-  "bePct": 0.45,
-  "tp1Pct": 0.50,
-  "tp2Pct": 1.00,
-  "moonPct": 2.40,
-  "savedAt": 1792867524994
+  "slPct": 0.65,
+  "bePct": 0.42,
+  "moonPct": 2,
+  "tp1Pct": 0.5,
+  "tp2Pct": 0.8,
+  "savedAt": 1793213766100
 }
