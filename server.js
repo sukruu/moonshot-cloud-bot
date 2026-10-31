@@ -116,7 +116,7 @@ function engineSnapshot() {
     userSlots: userRisk.maxSlots,
     userMargin: userRisk.marginPerTrade,
     gates: {
-      entry: '3dk kırılım + gün yönü + hacim (2 slot, 40x, TP1 +%0.48, TP2 +%0.85, Moon +%2.00, stop %0.80)',
+      entry: 'Kapanmış 3dk kırılım + tutunma (2 slot, 40x, TP1 +%0.48, yaklaşınca kilit +%0.22, stop %0.80)',
       book: 'OBI veto',
       judge: 'açık',
       flow: 'son 12 mum',
@@ -1482,30 +1482,31 @@ async function scanLoop() {
         const hasBuyerDominance = effectiveTaker >= 51.0 && effectiveTaker <= 86.0;
         const hasSellerDominance = effectiveTakerShort <= 49.0 && effectiveTakerShort >= 16.0;
 
-        // 📐 3. KAPANMIŞ MUM & YAPI KIRILIMI + DİRENÇ ÜSTÜ KALICILIK TEYİDİ:
-        const brokePrevHigh = curP > prevH || (curP > prevC && (prevC >= prevO || curMovePct >= 0.22) && curP >= prevH * 0.9982);
-        const brokePrevLow = curP < prevL || (curP < prevC && (prevC <= prevO || curMovePct <= -0.22) && curP <= prevL * 1.0018);
-        const isBreakoutHoldLong = prevMovePct >= 0.28 && prevMovePct <= 0.85 && curMovePct >= 0.12 && curP >= prevC && twoCandleMovePct >= 0.38;
-        const isBreakoutHoldShort = prevMovePct <= -0.28 && prevMovePct >= -0.85 && curMovePct <= -0.12 && curP <= prevC && twoCandleMovePct <= -0.38;
-        const continuationLong = curP > curO && curMovePct >= 0.20 && (brokePrevHigh || isBreakoutHoldLong);
-        const continuationShort = curP < curO && curMovePct <= -0.18 && (brokePrevLow || isBreakoutHoldShort);
+        // Kırılım mumu kapanmış olmalı. Açık mumun tepesinden girilmez.
+        const priorH = parseFloat(k3m[lastIdx - 2][2]);
+        const priorL = parseFloat(k3m[lastIdx - 2][3]);
+        const closedBreakLong = prevMovePct >= 0.22 && prevMovePct <= 1.20 && prevC > priorH;
+        const closedBreakShort = prevMovePct <= -0.20 && prevMovePct >= -1.20 && prevC < priorL;
+        const holdLong = curP >= prevC && curMovePct > -0.12 && curMovePct <= 0.45;
+        const holdShort = curP <= prevC && curMovePct < 0.12 && curMovePct >= -0.45;
+        const continuationLong = closedBreakLong && holdLong;
+        const continuationShort = closedBreakShort && holdShort;
 
-        // 3 dakikalık kırılım, günün yönü ve hacim.
         let isLongPump = false;
         let isRocketSignal = false;
         if (hasRealLiquidity && noWickLong && hasBuyerDominance && radarOkLong && continuationLong) {
-          if (prevMovePct >= -0.30 && volMult >= 0.65 && spikeVolMult <= 6.0) {
+          if (prevVolMult >= 0.90 && spikeVolMult <= 6.0) {
             isLongPump = true;
             isRocketSignal = true;
-            radarTag = `[🚀 3dk KIRILIM | 3dk: +%${curMovePct.toFixed(2)} | 24s: +%${chg24Val.toFixed(1)} | Hacim: ${volMult.toFixed(2)}x | Taker: %${effectiveTaker.toFixed(0)}]`;
+            radarTag = `[🚀 KIRILIM TUTUNDU | Kapanan 3dk: +%${prevMovePct.toFixed(2)} | Şimdi: %${curMovePct.toFixed(2)} | 24s: +%${chg24Val.toFixed(1)} | Hacim: ${prevVolMult.toFixed(2)}x | Taker: %${effectiveTaker.toFixed(0)}]`;
           }
         }
 
         let isShortDump = false;
         if (hasRealLiquidity && noWickShort && hasSellerDominance && radarOkShort && continuationShort) {
-          if (prevMovePct <= 0.30 && volMult >= 0.60 && spikeVolMult <= 6.0) {
+          if (prevVolMult >= 0.80 && spikeVolMult <= 6.0) {
             isShortDump = true;
-            radarTag = `[🩸 3dk KIRILIM SHORT | 3dk: %${curMovePct.toFixed(2)} | 24s: %${chg24Val.toFixed(1)} | Hacim: ${volMult.toFixed(2)}x | Taker: %${effectiveTakerShort.toFixed(0)}]`;
+            radarTag = `[🩸 KIRILIM TUTUNDU SHORT | Kapanan 3dk: %${prevMovePct.toFixed(2)} | Şimdi: %${curMovePct.toFixed(2)} | 24s: %${chg24Val.toFixed(1)} | Hacim: ${prevVolMult.toFixed(2)}x | Taker: %${effectiveTakerShort.toFixed(0)}]`;
           }
         }
 
@@ -1887,6 +1888,8 @@ async function fastRiskLoop() {
         targetStop = lockSpot(0.60);
       } else if (mfe >= 0.65 || nMfe >= 0.65) {
         targetStop = lockSpot(0.35);
+      } else if (mfe >= 0.42 || nMfe >= 0.42) {
+        targetStop = lockSpot(0.22);
       }
 
       if (targetStop) {
