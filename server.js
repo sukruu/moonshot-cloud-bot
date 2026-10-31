@@ -27,9 +27,9 @@ try {
 // --- EKRAN 1 BİREBİR AYARLARI ---
 let CONFIG = {
   initialBalance: 100.0,     // Bakiye 100 Dolar
-  marginPerTrade: 15.0,      // Temel Teminat 15$ (Kasa Zirve Kalkanı + Dinamik Bileşik Motor)
+  marginPerTrade: 14.0,      // Temel Teminat 14$ (3 Slot ile $42 margin, kasada $56+ serbest tampon)
   leverage: 20,              // Kaldıraç 20x (Sabit güvenli kaldıraç)
-  maxSlots: 2,               // 2 Slot
+  maxSlots: 3,               // 3 Slot (Daha yüksek işlem hızı ve fırsat yakalama)
   slPct: 0.80,               // Dengeli SL -%0.80 spot (Kayıp boyutunu küçültür, tavan -%0.85)
   bePct: 0.38,               // +%0.38 spot görünce erken başabaş koruması (+%0.14 spot) devreye girer (boğmaz)
   moonPct: 2.00,             // +%2.00 spotta (%25 runner) roket vur-kaç hedefini alır (+%40 ROI)
@@ -44,13 +44,13 @@ let CONFIG = {
 // Giriş genişliği. Ajan toplantısı bunu değiştirmez.
 let DYNAMIC = {
   vol3hMin: 1.0,
-  candidateSlice: 35,
+  candidateSlice: 50,
   regime: 'SCALP',
   mode: 'HIZLI_VUR_KAC',
   updatedAt: 0
 };
 
-let userRisk = { maxSlots: 2, marginPerTrade: 15 };
+let userRisk = { maxSlots: 3, marginPerTrade: 14 };
 let circuitOn = false;
 
 function getDynamicMargin() {
@@ -241,7 +241,7 @@ function loadSettings() {
       slots: saved.maxSlots, margin: saved.marginPerTrade, lev: saved.leverage,
       sl: saved.slPct, be: saved.bePct, moon: saved.moonPct, tp1: saved.tp1Pct, tp2: saved.tp2Pct
     });
-    clean.maxSlots = 2;
+    clean.maxSlots = 3;
     clean.leverage = 20;
     clean.slPct = 0.80;
     clean.bePct = 0.38;
@@ -325,15 +325,15 @@ function rebuildCoinLossHistory() {
     if (isLoss) {
       coinLossCount[sym] = (coinLossCount[sym] || 0) + 1;
       if (coinLossCount[sym] >= 2) {
-        coinCooldowns[sym] = Math.max(coinCooldowns[sym] || 0, closeMs + (24 * 60 * 60 * 1000));
+        coinCooldowns[sym] = Math.max(coinCooldowns[sym] || 0, closeMs + (3 * 60 * 60 * 1000));
         if (!banned.includes(sym)) banned.push(sym);
       } else {
-        coinCooldowns[sym] = Math.max(coinCooldowns[sym] || 0, closeMs + (12 * 60 * 60 * 1000));
+        coinCooldowns[sym] = Math.max(coinCooldowns[sym] || 0, closeMs + (45 * 60 * 1000));
       }
     } else {
-      const winHours = t.side === "LONG" ? 12 : 4;
+      const winMin = 30; // Kâr alan koin sadece 30 dakika dinlendirilir
       coinLossCount[sym] = 0;
-      coinCooldowns[sym] = Math.max(coinCooldowns[sym] || 0, closeMs + (winHours * 60 * 60 * 1000));
+      coinCooldowns[sym] = Math.max(coinCooldowns[sym] || 0, closeMs + (winMin * 60 * 1000));
       const bIdx = banned.indexOf(sym);
       if (bIdx !== -1) banned.splice(bIdx, 1);
     }
@@ -1124,9 +1124,11 @@ async function scanLoop() {
       let radarBoost = 0;
       if (rInfo) {
         if (rInfo.signal && rInfo.signal.includes("BALİNA")) radarBoost += 60;
-        else if (rInfo.signal && (rInfo.signal.includes("ROKET") || rInfo.signal.includes("BOĞA") || rInfo.signal.includes("SIÇRAMA"))) radarBoost += 35;
+        else if (rInfo.signal && (rInfo.signal.includes("ROKET") || rInfo.signal.includes("BOĞA") || rInfo.signal.includes("SIÇRAMA") || rInfo.signal.includes("AYI") || rInfo.signal.includes("ŞELALE"))) radarBoost += 35;
         if (Math.abs(rInfo.chg15m || 0) >= 0.8) radarBoost += Math.min(40, Math.abs(rInfo.chg15m) * 10);
-        if ((rInfo.takerBuyRatio || 50) >= 54.0 || (rInfo.taker15m || 50) >= 55.0) radarBoost += 20;
+        const buyTaker = rInfo.takerBuyRatio || 50;
+        const sellTaker = 100 - buyTaker;
+        if (buyTaker >= 54.0 || sellTaker >= 54.0 || (rInfo.taker15m || 50) >= 55.0 || (100 - (rInfo.taker15m || 50)) >= 55.0) radarBoost += 20;
       }
 
       const cappedDailyChg = Math.min(Math.abs(rawChg), 35.0);
@@ -1433,7 +1435,7 @@ async function scanLoop() {
         let isLongPump = false;
         let isRocketSignal = false;
         if (hasRealLiquidity && noWickLong && hasBuyerDominance && radarOkLong && continuationLong && !nearMax6m) {
-          if (curMovePct >= 0.22 && prevMovePct >= -0.12 && twoCandleMovePct >= 0.30 && volMult >= 0.92 && spikeVolMult <= 5.2 && chg3hVal >= 1.35) {
+          if (curMovePct >= 0.20 && prevMovePct >= -0.15 && twoCandleMovePct >= 0.26 && volMult >= 0.85 && spikeVolMult <= 5.2 && chg3hVal >= 1.25) {
             isLongPump = true;
             isRocketSignal = true;
             radarTag = `[🚀 MARSCOIN ROKET SPIKE | 3dk: +%${curMovePct.toFixed(2)} | 1s: +%${chg1hCalc.toFixed(1)} | Pos1h: %${pos1h.toFixed(0)} | RSI: ${rsi3m.toFixed(0)} | Kanal: %${rangePos.toFixed(0)}]`;
@@ -1444,11 +1446,11 @@ async function scanLoop() {
         let isShortDump = false;
         if (hasRealLiquidity && noWickShort && hasSellerDominance && radarOkShort && continuationShort && btc15mNumeric <= 0.25 && btc5mNumeric <= 0.20) {
           if (
-            curMovePct <= -0.18 &&
-            prevMovePct <= 0.08 &&
-            twoCandleMovePct <= -0.24 &&
-            volMult >= 0.72 && spikeVolMult <= 5.2 &&
-            effectiveTakerShort <= 48.5
+            curMovePct <= -0.16 &&
+            prevMovePct <= 0.10 &&
+            twoCandleMovePct <= -0.22 &&
+            volMult >= 0.68 && spikeVolMult <= 5.2 &&
+            effectiveTakerShort <= 49.0
           ) {
             isShortDump = true;
             radarTag = `[🩸 MARSCOIN ŞELALE SHORT | 3dk: %${curMovePct.toFixed(2)} | 1s: %${chg1hCalc.toFixed(1)} | Pos1h: %${pos1h.toFixed(0)} | RSI: ${rsi3m.toFixed(0)} | Kanal: %${rangePos.toFixed(0)}]`;
@@ -1989,20 +1991,17 @@ function closeTrade(pos, exitReason) {
   if (isRealLoss) {
     coinLossCount[pos.symbol] = (coinLossCount[pos.symbol] || 0) + 1;
     if (coinLossCount[pos.symbol] >= 2) {
-      // 2 kez zarar eden koin 24 saat kilitlenir!
-      coinCooldowns[pos.symbol] = now + (24 * 60 * 60 * 1000);
-      addLog(`🚫 ${pos.symbol} ardışık ${coinLossCount[pos.symbol]} zarar verdi — koin 24 saat boyunca yasaklandı!`, 'TRADE');
+      coinCooldowns[pos.symbol] = now + (3 * 60 * 60 * 1000);
+      addLog(`🚫 ${pos.symbol} ardışık ${coinLossCount[pos.symbol]} zarar verdi — koin 3 saat kilitlendi!`, 'TRADE');
     } else {
-      // İlk zararda 12 saat ceza (AVA/EPIC gibi aynı koinden tekrar stop yemeyi engelle)
-      coinCooldowns[pos.symbol] = now + (12 * 60 * 60 * 1000);
-      addLog(`⚠️ ${pos.symbol} zarar yazdı ($${totalTradePnl.toFixed(2)}) — koin 12 saat donduruldu!`, 'TRADE');
+      coinCooldowns[pos.symbol] = now + (45 * 60 * 1000);
+      addLog(`⚠️ ${pos.symbol} zarar yazdı (${totalTradePnl.toFixed(2)}) — koin 45 dakika dinlendiriliyor.`, 'TRADE');
     }
   } else {
-    // 🛡️ Kâr veya Başabaş sonrası: LONG'da 12 saat (pump bitti), SHORT'ta 4 saat Dalga Yorgunluğu Kilidi!
     coinLossCount[pos.symbol] = 0;
-    const winLockHours = pos.side === 'LONG' ? 12 : 4;
-    coinCooldowns[pos.symbol] = now + (winLockHours * 60 * 60 * 1000);
-    addLog(`🔒 ${pos.symbol} dalgası tamamlandı ($${totalTradePnl >= 0 ? '+' : ''}${totalTradePnl.toFixed(2)}) — tepe yorgunluğuna yakalanmamak için ${winLockHours} saat soğumaya alındı.`, 'INFO');
+    const winLockMin = 30;
+    coinCooldowns[pos.symbol] = now + (winLockMin * 60 * 1000);
+    addLog(`🔒 ${pos.symbol} dalgası tamamlandı (${totalTradePnl >= 0 ? '+' : ''}${totalTradePnl.toFixed(2)}) — 30 dakika dinlendiriliyor.`, 'INFO');
   }
 
   const tradeRecord = {

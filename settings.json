@@ -1,6 +1,6 @@
 {
-  "maxSlots": 2,
-  "marginPerTrade": 16,
+  "maxSlots": 3,
+  "marginPerTrade": 14,
   "leverage": 20,
   "slPct": 0.8,
   "bePct": 0.38,
