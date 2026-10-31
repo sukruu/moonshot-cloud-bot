@@ -2,7 +2,7 @@
  * ============================================================================
  * 🚀 MOONSHOT 7/24 BULUT TEST LABORATUVARI (SCREEN 1 - BİREBİR EKRAN MOTORU)
  * ============================================================================
- * Bakiye: $100.00 | Max Slot: 4 | Teminat: $10 | Kaldıraç: 20x | SL: %2.50 | BE: %1.80
+ * Bakiye: $100.00 | Max Slot: 2 | Teminat: $15 | Kaldıraç: 20x | SL: %0.80 | TP1: %0.48
  * HTML Ekran 1 tasarımı, renkleri, panelleri ve kuralları ile 1-e-1 aynı.
  * ============================================================================
  */
@@ -27,30 +27,30 @@ try {
 // --- EKRAN 1 BİREBİR AYARLARI ---
 let CONFIG = {
   initialBalance: 100.0,     // Bakiye 100 Dolar
-  marginPerTrade: 12.0,      // Temel Teminat 12$ (4 Slot ile $48 margin, kasada $50 serbest tampon)
+  marginPerTrade: 15.0,      // Temel Teminat 15$ (2 slot, kasada serbest tampon kalır)
   leverage: 20,              // Kaldıraç 20x (Sabit güvenli kaldıraç)
-  maxSlots: 4,               // 4 Slot (Agresif Yüksek İşlem Frekansı)
+  maxSlots: 2,               // 2 Slot (18-26 Ekim kârlı defter)
   slPct: 0.80,               // Dengeli SL -%0.80 spot (Kayıp boyutunu küçültür, tavan -%0.85)
   bePct: 0.38,               // +%0.38 spot görünce erken başabaş koruması (+%0.14 spot) devreye girer (boğmaz)
   moonPct: 2.00,             // +%2.00 spotta (%25 runner) roket vur-kaç hedefini alır (+%40 ROI)
   tp1Pct: 0.48,              // +%0.48 spotta (+%9.6 ROI) %40 kârı anında cebe indirir
   tp2Pct: 0.85,              // +%0.85 spotta (+%17 ROI) %35 kârı cebe indirir, %25 runner rokete gider
   feeRate: 0.0005,           // Binance Futures taker %0.05 (TEK YÖN)
-  scanIntervalMs: 2000,
+  scanIntervalMs: 3000,
   riskIntervalMs: 1000,
-  radarIntervalMs: 20000
+  radarIntervalMs: 35000
 };
 
 // Giriş genişliği. Ajan toplantısı bunu değiştirmez.
 let DYNAMIC = {
   vol3hMin: 0.8,
-  candidateSlice: 60,
+  candidateSlice: 30,
   regime: 'SCALP',
   mode: 'HIZLI_VUR_KAC',
   updatedAt: 0
 };
 
-let userRisk = { maxSlots: 4, marginPerTrade: 12 };
+let userRisk = { maxSlots: 2, marginPerTrade: 15 };
 let circuitOn = false;
 
 function getDynamicMargin() {
@@ -63,11 +63,10 @@ function getDynamicMargin() {
   if (recentTwo.length === 2 && (recentTwo[0].pnl || 0) < -0.05 && (recentTwo[1].pnl || 0) < -0.05) {
     return 14.0;
   }
-  // 🚀 DİNAMİK BİLEŞİK KASA MOTORU (Dynamic Compounding):
-  // Kasanın %16'sı teminat olarak kullanılır (min $15.0, tavan $22.0).
+  // Kasanın %15'i teminat (taban $15, tavan $20). $100 kasada tam $15.
   const currentBal = Math.max(balance, 30.0);
-  const compoundMargin = currentBal * 0.16;
-  return Number(Math.max(15.0, Math.min(compoundMargin, 22.0)).toFixed(1));
+  const compoundMargin = currentBal * 0.15;
+  return Number(Math.max(15.0, Math.min(compoundMargin, 20.0)).toFixed(1));
 }
 
 function rememberUserRisk() {
@@ -117,7 +116,7 @@ function engineSnapshot() {
     userSlots: userRisk.maxSlots,
     userMargin: userRisk.marginPerTrade,
     gates: {
-      entry: '3dk Marscoin Trend+Kanal+Runner Motoru (BE +%0.62 / Tier1 +%0.85 / TP1 +%1.05 [%40] / Moon +%2.40)',
+      entry: '3dk kırılım + gün yönü + hacim (2 slot, 20x, TP1 +%0.48, TP2 +%0.85, Moon +%2.00, stop %0.80)',
       book: 'OBI veto',
       judge: 'açık',
       flow: 'son 12 mum',
@@ -241,7 +240,8 @@ function loadSettings() {
       slots: saved.maxSlots, margin: saved.marginPerTrade, lev: saved.leverage,
       sl: saved.slPct, be: saved.bePct, moon: saved.moonPct, tp1: saved.tp1Pct, tp2: saved.tp2Pct
     });
-    clean.maxSlots = 4;
+    clean.maxSlots = 2;
+    clean.marginPerTrade = 15;
     clean.leverage = 20;
     clean.slPct = 0.80;
     clean.bePct = 0.38;
@@ -594,11 +594,7 @@ function appendTradeToCsv(trade) {
 
 // BİNANCE RESMİ API & ISP/DPI/BULUT ENGELİNE KARŞI ÇOKLU AYNA SİSTEMİ
 const BINANCE_FAPI_MIRRORS = [
-  "https://fapi1.binance.com",
-  "https://fapi2.binance.com",
-  "https://fapi3.binance.com",
-  "https://fapi.binance.com",
-  "https://www.binance.info"
+  "https://fapi.binance.com"
 ];
 
 
@@ -709,8 +705,8 @@ async function runHistoricalDeepScan() {
   }
 }
 
-setTimeout(runHistoricalDeepScan, 3 * 60 * 1000);
-setInterval(runHistoricalDeepScan, 4 * 60 * 60 * 1000);
+// setTimeout(runHistoricalDeepScan, 3 * 60 * 1000); // 🛡️ Rate limit koruması: Binance IP banı önlendi
+// setInterval(runHistoricalDeepScan, 4 * 60 * 60 * 1000);
 // ==========================================
 
 
@@ -752,13 +748,19 @@ function getCachePolicy(relativePath) {
   if (relativePath.includes('interval=1d')) {
     return { ttlMs: 30 * 60 * 1000, staleMs: 60 * 60 * 1000 };
   }
+  if (relativePath.includes('interval=15m')) {
+    return { ttlMs: 35000, staleMs: 120000 }; // 35 sn taze (15m mumlar için)
+  }
+  if (relativePath.includes('interval=3m')) {
+    return { ttlMs: 5000, staleMs: 25000 }; // 5 sn taze (3m mumlar için)
+  }
   if (relativePath.includes('klines')) {
-    return { ttlMs: 2500, staleMs: 25000 };
+    return { ttlMs: 5000, staleMs: 25000 };
   }
   if (relativePath.includes('ticker/price')) {
-    return { ttlMs: 800, staleMs: 10000 };
+    return { ttlMs: 1000, staleMs: 10000 };
   }
-  return { ttlMs: 1500, staleMs: 15000 };
+  return { ttlMs: 2000, staleMs: 15000 };
 }
 
 async function fetchBinanceRaw(relativePath) {
@@ -824,7 +826,16 @@ async function fetchBinanceRaw(relativePath) {
           break;
         }
         if (res.status === 429 || res.status === 418) {
-          spotMirrorDownUntil.set(spotBase, Date.now() + 60 * 1000);
+          let banMs = 60 * 1000;
+          try {
+            const txt = await res.text();
+            const m = txt.match(/banned until (\d+)/);
+            if (m) {
+              const until = parseInt(m[1], 10);
+              if (until > Date.now()) banMs = until - Date.now() + 5000;
+            }
+          } catch (e) {}
+          spotMirrorDownUntil.set(spotBase, Date.now() + banMs);
           break;
         }
         if (res.ok) {
@@ -967,7 +978,7 @@ async function updateRadar() {
     const chunkSize = 15;
     const scanned = [];
     const freshRadarMap = {};
-    for (let i = 0; i < Math.min(valid.length, 120); i += chunkSize) {
+    for (let i = 0; i < Math.min(valid.length, 45); i += chunkSize) {
       const chunk = valid.slice(i, i + chunkSize);
       await Promise.all(chunk.map(async item => {
         const sym = item.symbol;
@@ -1143,7 +1154,7 @@ async function scanLoop() {
         isVip
       };
     })
-    .filter(t => (t.isVip || t.volM >= 1.5) && t.chg <= 65 && t.chg >= -40)
+    .filter(t => (t.isVip || t.volM >= 1.5) && t.chg <= 65 && t.chg >= -40 && radarMap[t.symbol])
     .sort((a, b) => b.hotScore - a.hotScore)
     .slice(0, DYNAMIC.candidateSlice);
 
@@ -1308,56 +1319,36 @@ async function scanLoop() {
         }
         const atr3mPct = trCount > 0 ? trSum / trCount : 0.5;
 
-        // 🧭 ÇOKLU ZAMAN DİLİMİ (15dk + 30dk + 1s + 3s + 24s), 1S KANAL (pos1h), VOLATİLİTE & RSI-14 UYUMU:
-        // LONG: 3s, 1s (+%0.70+) ve 30dk (+%0.50+) sağlıklı yükselişte olmalı;
-        // 1s kanalında %45-%88 arası soluklanma/kırılım modunda, RSI 48-74 bandında ve 3dk ATR <= %1.75 olmalı!
-        // LONG: 24s (+%2.0+), 3s (+%1.6..+%7.5) ve 15dk (+%0.65+) güçlü yükselişte olmalı;
-        // 1s ve 3s direnç kırılımlarında pos1h (%45-%120) ve rangePos (%45-%108) tavan kilidine takılmamalı!
+        // Giriş yönü: gün ve 3 saat aynı tarafta. 1s, 30dk, kanal, RSI ve ATR burada şart değil.
         const radarOkLong =
           !sig.includes("ŞELALE") &&
           !sig.includes("AYI") &&
-          chg24Val >= 0.80 && chg24Val <= 50.0 &&
-          chg3hVal >= 1.00 && chg3hVal <= 30.0 &&
-          chg1hCalc >= 0.15 && chg1hCalc <= 15.0 && chg30mCalc >= 0.10 && chg15Long >= 0.12 &&
-          rangePos >= 32.0 && rangePos <= 112.0 &&
-          pos1h >= 35.0 && pos1h <= 128.0 &&
-          rsi3m >= 45.0 && rsi3m <= 80.0 &&
-          atr3mPct >= 0.20 && atr3mPct <= 1.85;
+          chg24Val >= 0.40 && chg24Val <= 35.0 &&
+          chg3hVal > 0;
 
-        // SHORT: BTC sert roket modunda değilken (btc15m <= %0.25) ve koin destek kırılımındayken aktif
         const radarOkShort =
           !sig.includes("ROKET") &&
           !sig.includes("BOĞA") &&
-          btc15mNumeric <= 0.25 && btc5mNumeric <= 0.20 &&
-          chg24Val <= -1.0 && chg24Val >= -42.0 &&
-          chg3hVal <= -1.0 && chg3hVal >= -20.0 &&
-          chg1hCalc <= -0.15 && chg30mCalc <= -0.10 && chg15Short <= -0.10 &&
-          rangePos >= -18.0 && rangePos <= 40.0 &&
-          pos1h <= 28.0 &&
-          rsi3m >= 18.0 && rsi3m <= 54.0 &&
-          atr3mPct >= 0.18 && atr3mPct <= 1.65;
+          btc15mNumeric <= 0.35 && btc5mNumeric <= 0.30 &&
+          chg24Val <= -0.40 && chg24Val >= -35.0 &&
+          chg3hVal < 0;
 
         if (!radarOkLong && !radarOkShort) {
           // 👻 Radar'a ÇOK YAKIN elenen adayları da kaydet (yeni 1s/30dk/pos1h/RSI/ATR filtrelerinin etkisi ölçülebilsin)
-          const nearLong = chg24Val >= 1.2 && chg3hVal >= 1.5 && chg15Long >= 0.12;
-          const nearShort = chg24Val <= -1.8 && chg3hVal <= -1.5 && chg15Short <= -0.10;
-          if (nearLong || nearShort) {
-            const nSide = nearLong ? 'LONG' : 'SHORT';
-            let why = 'RADAR_OTHER';
-            if (nSide === 'LONG') {
-              if (chg1hCalc < 0.70 || chg1hCalc > 7.5) why = 'RADAR_1H';
-              else if (chg30mCalc < 0.50) why = 'RADAR_30M';
-              else if (pos1h < 45 || pos1h > 88) why = 'RADAR_POS1H';
-              else if (rsi3m < 48 || rsi3m > 74) why = 'RADAR_RSI';
-              else if (atr3mPct > 1.75) why = 'RADAR_ATR';
-              else if (rangePos < 40 || rangePos > 90) why = 'RADAR_RANGE';
-            } else {
-              if (chg1hCalc > -0.30) why = 'RADAR_1H';
-              else if (chg30mCalc > -0.35) why = 'RADAR_30M';
-              else if (pos1h > 24) why = 'RADAR_POS1H';
-              else if (rsi3m < 15 || rsi3m > 55) why = 'RADAR_RSI';
-              else if (rangePos < 2 || rangePos > 55) why = 'RADAR_RANGE';
-            }
+            const nearLong = chg24Val >= 0.20 && chg15Long >= -0.05;
+            const nearShort = chg24Val <= -0.20 && chg15Short <= 0.05;
+            if (nearLong || nearShort) {
+              const nSide = nearLong ? 'LONG' : 'SHORT';
+              let why = 'RADAR_OTHER';
+              if (nSide === 'LONG') {
+                if (chg24Val < 0.40 || chg24Val > 35) why = 'RADAR_24H';
+                else if (chg3hVal <= 0) why = 'RADAR_3H';
+                else why = 'RADAR_SIGNAL';
+              } else {
+                if (chg24Val > -0.40 || chg24Val < -35) why = 'RADAR_24H';
+                else if (chg3hVal >= 0) why = 'RADAR_3H';
+                else why = 'RADAR_SIGNAL';
+              }
             recordShadowSignal({
               symbol: sym, side: nSide, stage: why, price: curP,
               chg15: Number((nSide === 'LONG' ? chg15Long : chg15Short).toFixed(2)),
@@ -1404,8 +1395,8 @@ async function scanLoop() {
         }
 
         // 🧱 2. EMİLİM (ABSORPTION / EFFORT vs. RESULT) FİLTRESİ:
-        const isCurrentAbsorbed = spikeVolMult >= 4.5 && ((Math.abs(curMovePct) / spikeVolMult) < 0.085 || Math.abs(curMovePct) < 0.35);
-        const isPrevAbsorbed = (prevV / avgVol20) >= 3.8 && Math.abs(prevMovePct) < 0.18;
+        const isCurrentAbsorbed = spikeVolMult >= 6.5 && Math.abs(curMovePct) < 0.18;
+        const isPrevAbsorbed = (prevV / avgVol20) >= 5.5 && Math.abs(prevMovePct) < 0.12;
         if (isCurrentAbsorbed || isPrevAbsorbed) {
           shadow('ABSORPTION', { volMult: Number(spikeVolMult.toFixed(2)) });
           continue;
@@ -1420,40 +1411,33 @@ async function scanLoop() {
 
         const vol3hCheck = rInfo.vol3hM || ((quote90mCalc * 2) / 1e6);
         const hasRealLiquidity = isVip || (vol3hCheck >= 0.70 && vol24 >= 1.5);
-        const hasBuyerDominance = effectiveTaker >= 52.0 && effectiveTaker <= 84.0 && taker15mCalc >= 50.5;
-        const hasSellerDominance = effectiveTakerShort <= 46.0 && effectiveTakerShort >= 16.0 && taker15mCalc <= 48.5;
+        const hasBuyerDominance = effectiveTaker >= 51.0 && effectiveTaker <= 86.0;
+        const hasSellerDominance = effectiveTakerShort <= 49.0 && effectiveTakerShort >= 16.0;
 
         // 📐 3. KAPANMIŞ MUM & YAPI KIRILIMI + DİRENÇ ÜSTÜ KALICILIK TEYİDİ:
         const brokePrevHigh = curP > prevH || (curP > prevC && (prevC >= prevO || curMovePct >= 0.22) && curP >= prevH * 0.9982);
         const brokePrevLow = curP < prevL || (curP < prevC && (prevC <= prevO || curMovePct <= -0.22) && curP <= prevL * 1.0018);
         const isBreakoutHoldLong = prevMovePct >= 0.28 && prevMovePct <= 0.85 && curMovePct >= 0.12 && curP >= prevC && twoCandleMovePct >= 0.38;
         const isBreakoutHoldShort = prevMovePct <= -0.28 && prevMovePct >= -0.85 && curMovePct <= -0.12 && curP <= prevC && twoCandleMovePct <= -0.38;
-        const continuationLong = (curP > curO && brokePrevHigh) || isBreakoutHoldLong;
-        const continuationShort = (curP < curO && brokePrevLow) || isBreakoutHoldShort;
+        const continuationLong = curP > curO && curMovePct >= 0.14 && (brokePrevHigh || isBreakoutHoldLong || curP >= prevC);
+        const continuationShort = curP < curO && curMovePct <= -0.12 && (brokePrevLow || isBreakoutHoldShort || curP <= prevC);
 
-        // 🟢 MARSCOIN ÇOKLU ZAMAN DİLİMİ + 2-MUM ONAYLI HACİMLİ KIRILIM LONG MOTORU:
+        // 3 dakikalık kırılım, günün yönü ve hacim.
         let isLongPump = false;
         let isRocketSignal = false;
-        if (hasRealLiquidity && noWickLong && hasBuyerDominance && radarOkLong && continuationLong && !nearMax6m) {
-          if (curMovePct >= 0.16 && prevMovePct >= -0.18 && twoCandleMovePct >= 0.22 && volMult >= 0.78 && spikeVolMult <= 5.5 && chg3hVal >= 1.00) {
+        if (hasRealLiquidity && noWickLong && hasBuyerDominance && radarOkLong && continuationLong) {
+          if (prevMovePct >= -0.30 && volMult >= 0.65 && spikeVolMult <= 6.0) {
             isLongPump = true;
             isRocketSignal = true;
-            radarTag = `[🚀 MARSCOIN ROKET SPIKE | 3dk: +%${curMovePct.toFixed(2)} | 1s: +%${chg1hCalc.toFixed(1)} | Pos1h: %${pos1h.toFixed(0)} | RSI: ${rsi3m.toFixed(0)} | Kanal: %${rangePos.toFixed(0)}]`;
+            radarTag = `[🚀 3dk KIRILIM | 3dk: +%${curMovePct.toFixed(2)} | 24s: +%${chg24Val.toFixed(1)} | Hacim: ${volMult.toFixed(2)}x | Taker: %${effectiveTaker.toFixed(0)}]`;
           }
         }
 
-        // 🔴 MARSCOIN 1S DESTEK KIRILIMI + 2-MUM ONAYLI ŞELALE SHORT MOTORU:
         let isShortDump = false;
-        if (hasRealLiquidity && noWickShort && hasSellerDominance && radarOkShort && continuationShort && btc15mNumeric <= 0.25 && btc5mNumeric <= 0.20) {
-          if (
-            curMovePct <= -0.14 &&
-            prevMovePct <= 0.12 &&
-            twoCandleMovePct <= -0.18 &&
-            volMult >= 0.62 && spikeVolMult <= 5.5 &&
-            effectiveTakerShort <= 50.0
-          ) {
+        if (hasRealLiquidity && noWickShort && hasSellerDominance && radarOkShort && continuationShort) {
+          if (prevMovePct <= 0.30 && volMult >= 0.60 && spikeVolMult <= 6.0) {
             isShortDump = true;
-            radarTag = `[🩸 MARSCOIN ŞELALE SHORT | 3dk: %${curMovePct.toFixed(2)} | 1s: %${chg1hCalc.toFixed(1)} | Pos1h: %${pos1h.toFixed(0)} | RSI: ${rsi3m.toFixed(0)} | Kanal: %${rangePos.toFixed(0)}]`;
+            radarTag = `[🩸 3dk KIRILIM SHORT | 3dk: %${curMovePct.toFixed(2)} | 24s: %${chg24Val.toFixed(1)} | Hacim: ${volMult.toFixed(2)}x | Taker: %${effectiveTakerShort.toFixed(0)}]`;
           }
         }
 
