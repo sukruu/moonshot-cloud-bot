@@ -2,7 +2,7 @@
  * ============================================================================
  * 🚀 MOONSHOT 7/24 BULUT TEST LABORATUVARI (SCREEN 1 - BİREBİR EKRAN MOTORU)
  * ============================================================================
- * Bakiye: $100.00 | Max Slot: 2 | Teminat: $15 | Kaldıraç: 20x | SL: %0.80 | TP1: %0.48
+ * Bakiye: $100.00 | Max Slot: 2 | Teminat: $15 | Kaldıraç: 40x | SL: %0.80 | TP1: %0.48
  * HTML Ekran 1 tasarımı, renkleri, panelleri ve kuralları ile 1-e-1 aynı.
  * ============================================================================
  */
@@ -28,7 +28,7 @@ try {
 let CONFIG = {
   initialBalance: 100.0,     // Bakiye 100 Dolar
   marginPerTrade: 15.0,      // Temel Teminat 15$ (2 slot, kasada serbest tampon kalır)
-  leverage: 20,              // Kaldıraç 20x (Sabit güvenli kaldıraç)
+  leverage: 40,              // Kaldıraç 40x
   maxSlots: 2,               // 2 Slot (18-26 Ekim kârlı defter)
   slPct: 0.80,               // Dengeli SL -%0.80 spot (Kayıp boyutunu küçültür, tavan -%0.85)
   bePct: 0.38,               // +%0.38 spot görünce erken başabaş koruması (+%0.14 spot) devreye girer (boğmaz)
@@ -116,7 +116,7 @@ function engineSnapshot() {
     userSlots: userRisk.maxSlots,
     userMargin: userRisk.marginPerTrade,
     gates: {
-      entry: '3dk kırılım + gün yönü + hacim (2 slot, 20x, TP1 +%0.48, TP2 +%0.85, Moon +%2.00, stop %0.80)',
+      entry: '3dk kırılım + gün yönü + hacim (2 slot, 40x, TP1 +%0.48, TP2 +%0.85, Moon +%2.00, stop %0.80)',
       book: 'OBI veto',
       judge: 'açık',
       flow: 'son 12 mum',
@@ -206,7 +206,7 @@ function sanitizeSettings(s) {
   const sl = num(s.sl), be = num(s.be), moon = num(s.moon), tp1 = num(s.tp1), tp2 = num(s.tp2);
   if (inRange(slots, 1, 4)) out.maxSlots = Math.round(slots);
   if (inRange(margin, 10, 25)) out.marginPerTrade = margin;
-  if (lev !== null) out.leverage = Math.min(20, Math.max(5, Math.round(lev)));
+  if (lev !== null) out.leverage = Math.min(40, Math.max(5, Math.round(lev)));
   if (inRange(sl, 0.55, 0.90)) out.slPct = sl;
   if (inRange(be, 0.25, 0.60)) out.bePct = be;
   if (inRange(moon, 1.2, 3.5)) out.moonPct = moon;
@@ -242,7 +242,7 @@ function loadSettings() {
     });
     clean.maxSlots = 2;
     clean.marginPerTrade = 15;
-    clean.leverage = 20;
+    clean.leverage = 40;
     clean.slPct = 0.80;
     clean.bePct = 0.38;
     clean.tp1Pct = 0.48;
@@ -3253,7 +3253,7 @@ function serveDashboardHtml() {
                   <div class="pos-card-header">
                     <div style="display:flex;align-items:center;gap:6px;">
                       <span class="pos-card-sym">\${p.symbol}</span>
-                      <span class="\${isLong ? 'badge-side-long' : 'badge-side-short'}">\${isLong ? '▲ LONG 20x' : '▼ SHORT 20x'}</span>
+                      <span class="\${isLong ? 'badge-side-long' : 'badge-side-short'}">\${isLong ? '▲ LONG ' : '▼ SHORT '}\${p.leverage || 40}x</span>
                       <span class="badge-strat" style="font-size:8.5px;padding:1px 5px;font-weight:800;">\${p.convictionLabel ? p.convictionLabel + ' ($' + p.margin + ')' : '$' + (p.margin || 15)}</span>
                     </div>
                     <span class="\${isWin ? 'badge-pnl-pos' : 'badge-pnl-neg'}" style="font-size:13px;font-weight:900;">\${roiStr} (\${pnlStr})</span>
@@ -3520,7 +3520,7 @@ function renderActiveCards(positions) {
         <div class="pos-card-header">
           <div style="display:flex;align-items:center;gap:6px;">
             <span class="pos-card-sym">${p.symbol}</span>
-            <span class="${isLong ? 'badge-side-long' : 'badge-side-short'}">${isLong ? '▲ LONG 20x' : '▼ SHORT 20x'}</span>
+            <span class="${isLong ? 'badge-side-long' : 'badge-side-short'}">${isLong ? '▲ LONG ' : '▼ SHORT '}${p.leverage || CONFIG.leverage}x</span>
             <span class="badge-strat" style="font-size:8.5px;padding:1px 5px;font-weight:800;">${p.convictionLabel ? p.convictionLabel + ' ($' + p.margin + ')' : '$' + (p.margin || 15)}</span>
           </div>
           <span class="${isWin ? 'badge-pnl-pos' : 'badge-pnl-neg'}" style="font-size:13px;font-weight:900;">${roiStr} (${pnlStr})</span>
