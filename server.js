@@ -723,8 +723,18 @@ const BINANCE_SPOT_MIRRORS = [
 const symbolFeed = new Map();
 let bookFeed = 'none';
 let lastFetchWarn = 0;
+let lastFeedError = '';
 let fapiDownUntil = 0;
 let isFapiProbing = false;
+
+const COMPACT_BOOK_SYMBOLS = [
+  'BTCUSDT','ETHUSDT','BNBUSDT','SOLUSDT','XRPUSDT','DOGEUSDT','ADAUSDT','AVAXUSDT',
+  'LINKUSDT','SUIUSDT','NEARUSDT','TAOUSDT','WIFUSDT','PEPEUSDT','APTUSDT','FETUSDT',
+  'ENAUSDT','SEIUSDT','TIAUSDT','INJUSDT','ARBUSDT','OPUSDT','FILUSDT','LTCUSDT',
+  'BCHUSDT','DOTUSDT','UNIUSDT','AAVEUSDT','RENDERUSDT','JUPUSDT','PENDLEUSDT','WLDUSDT',
+  'PYTHUSDT','ETHFIUSDT','QNTUSDT','ZECUSDT','GALAUSDT','STXUSDT','PEOPLEUSDT','TRXUSDT',
+  'TONUSDT','ORDIUSDT','HBARUSDT','ICPUSDT','ATOMUSDT','ETCUSDT','IMXUSDT','SANDUSDT'
+];
 const spotMirrorDownUntil = new Map();
 const binanceCache = new Map();
 const binanceInFlight = new Map();
@@ -763,92 +773,150 @@ function getCachePolicy(relativePath) {
   return { ttlMs: 2000, staleMs: 15000 };
 }
 
+function normalizeTickerList(data) {
+  if (!Array.isArray(data)) return data;
+  return data.map(t => {
+    if (t.priceChangePercent !== undefined && t.priceChangePercent !== null && t.priceChangePercent !== '') return t;
+    const open = parseFloat(t.openPrice) || 0;
+    const last = parseFloat(t.lastPrice) || 0;
+    const pct = open > 0 ? ((last - open) / open) * 100 : 0;
+    return { ...t, priceChangePercent: pct.toFixed(4), quoteVolume: t.quoteVolume || '0' };
+  });
+}
+
+async function fetchJson(targetUrl, timeoutMs) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(targetUrl, {
+      signal: controller.signal,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'application/json'
+      }
+    });
+    if (res.status === 429 || res.status === 418) {
+      let banMs = 60 * 1000;
+      try {
+        const txt = await res.text();
+        const m = txt.match(/banned until (\d+)/);
+        if (m) {
+          const until = parseInt(m[1], 10);
+          if (until > Date.now()) banMs = Math.min(until - Date.now() + 5000, 15 * 60 * 1000);
+        }
+      } catch (e) {}
+      return { status: res.status, banMs, data: null };
+    }
+    if (!res.ok) return { status: res.status, data: null };
+    const data = await res.json();
+    if (data && data.code && data.msg) return { status: data.code, data: null };
+    return { status: res.status, data };
+  } catch (e) {
+    return { status: e.name === 'AbortError' ? 'timeout' : 'fail', data: null };
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+function usableBook(data) {
+  return Array.isArray(data) && data.length > 0;
+}
+
+async function fetchCompactBook() {
+  const bases = BINANCE_SPOT_MIRRORS.slice(0, 2);
+  for (const base of bases) {
+    if ((spotMirrorDownUntil.get(base) || 0) > Date.now()) continue;
+    let chunk = COMPACT_BOOK_SYMBOLS;
+    for (let attempt = 0; attempt < 3 && chunk.length >= 8; attempt++) {
+      const q = encodeURIComponent(JSON.stringify(chunk));
+      const hit = await fetchJson(`${base}/api/v3/ticker/24hr?symbols=${q}`, 8000);
+      if (hit.banMs) {
+        spotMirrorDownUntil.set(base, Date.now() + hit.banMs);
+        break;
+      }
+      if (usableBook(hit.data)) return normalizeTickerList(hit.data);
+      if (hit.status === 400) {
+        chunk = chunk.slice(0, Math.ceil(chunk.length / 2));
+        continue;
+      }
+      break;
+    }
+  }
+  return null;
+}
+
 async function fetchBinanceRaw(relativePath) {
-  // Vadeli ayna cevap vermiyorsa (veya ABD IP 451 engeli varsa) tek bir probe dışındaki tüm istekler doğrudan Spot havuzuna geçer.
+  const errors = [];
+  const isBook = relativePath.includes('ticker/24hr') && !relativePath.includes('symbol=');
+  const hostName = (base) => base.replace('https://', '').split('.')[0];
+
   if (Date.now() >= fapiDownUntil && !isFapiProbing) {
     isFapiProbing = true;
     try {
-      const probeTimeoutMs = relativePath.includes('ticker/24hr') ? 20000 : 4500;
       for (const base of BINANCE_FAPI_MIRRORS) {
-        try {
-          const targetUrl = base + relativePath;
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), probeTimeoutMs);
-          const res = await fetch(targetUrl, {
-            signal: controller.signal,
-            headers: {
-              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36',
-              'Accept': 'application/json'
-            }
-          });
-          clearTimeout(timeoutId);
-          if (res.status === 429 || res.status === 418) break;
-          if (res.status === 451) continue;
-          if (!res.ok) continue;
-          const data = await res.json();
-          if (data) {
-            fapiDownUntil = 0;
-            noteFeed(relativePath, 'futures');
-            return data;
-          }
-        } catch (e) {}
+        const hit = await fetchJson(base + relativePath, isBook ? 6000 : 4000);
+        if (hit.banMs) {
+          fapiDownUntil = Date.now() + hit.banMs;
+          errors.push(`fapi ${hit.status}`);
+          break;
+        }
+        if (hit.status === 451) {
+          fapiDownUntil = Date.now() + 30 * 60 * 1000;
+          errors.push('fapi 451');
+          break;
+        }
+        if (hit.data && (!isBook || usableBook(hit.data))) {
+          fapiDownUntil = 0;
+          noteFeed(relativePath, 'futures');
+          lastFeedError = '';
+          return isBook ? normalizeTickerList(hit.data) : hit.data;
+        }
+        errors.push(`fapi ${hit.status}`);
       }
-      // Render ABD IP'sinde vadeli uçlar 451 veya timeout verdiğinde paralel istekleri 10 dk beklet
-      fapiDownUntil = Date.now() + 10 * 60 * 1000;
+      if (Date.now() >= fapiDownUntil) fapiDownUntil = Date.now() + 60 * 1000;
     } finally {
       isFapiProbing = false;
     }
+  } else if (Date.now() < fapiDownUntil) {
+    errors.push('fapi bekliyor');
   }
 
   const spotPath = relativePath.replace(/^\/fapi\/v1\//, '/api/v3/');
-  const now = Date.now();
-  for (const spotBase of BINANCE_SPOT_MIRRORS) {
-    const downUntil = spotMirrorDownUntil.get(spotBase) || 0;
-    if (now < downUntil) continue;
-
-    const spotUrl = spotBase + spotPath;
-    for (let attempt = 0; attempt < 2; attempt++) {
-      try {
-        const controller = new AbortController();
-        const timeoutMs = relativePath.includes('ticker/24hr') ? 20000 : 5000;
-        const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-        const res = await fetch(spotUrl, {
-          signal: controller.signal,
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36',
-            'Accept': 'application/json'
-          }
-        });
-        clearTimeout(timeoutId);
-        if (res.status === 400 || res.status === 404) return null; // Spot borsasında olmayan vadeli sembol
-        if (res.status === 451) {
-          spotMirrorDownUntil.set(spotBase, Date.now() + 30 * 60 * 1000);
-          break;
-        }
-        if (res.status === 429 || res.status === 418) {
-          let banMs = 60 * 1000;
-          try {
-            const txt = await res.text();
-            const m = txt.match(/banned until (\d+)/);
-            if (m) {
-              const until = parseInt(m[1], 10);
-              if (until > Date.now()) banMs = until - Date.now() + 5000;
-            }
-          } catch (e) {}
-          spotMirrorDownUntil.set(spotBase, Date.now() + banMs);
-          break;
-        }
-        if (res.ok) {
-          const data = await res.json();
-          if (data) {
-            noteFeed(relativePath, 'spot');
-            return data;
-          }
-        }
-      } catch (e) {}
+  const spotHosts = BINANCE_SPOT_MIRRORS.slice(0, isBook ? 3 : 2);
+  for (const spotBase of spotHosts) {
+    if ((spotMirrorDownUntil.get(spotBase) || 0) > Date.now()) continue;
+    let path = spotPath;
+    if (isBook && !path.includes('type=')) path += (path.includes('?') ? '&' : '?') + 'type=MINI';
+    const hit = await fetchJson(spotBase + path, isBook ? 12000 : 5000);
+    if (hit.banMs) {
+      spotMirrorDownUntil.set(spotBase, Date.now() + hit.banMs);
+      errors.push(`${hostName(spotBase)} ${hit.status}`);
+      continue;
     }
+    if (hit.status === 451) {
+      spotMirrorDownUntil.set(spotBase, Date.now() + 30 * 60 * 1000);
+      errors.push(`${hostName(spotBase)} 451`);
+      continue;
+    }
+    if (hit.data && (!isBook || usableBook(hit.data))) {
+      noteFeed(relativePath, 'spot');
+      lastFeedError = '';
+      return isBook ? normalizeTickerList(hit.data) : hit.data;
+    }
+    errors.push(`${hostName(spotBase)} ${hit.status}`);
   }
 
+  if (isBook) {
+    const compact = await fetchCompactBook();
+    if (compact) {
+      noteFeed(relativePath, 'spot');
+      lastFeedError = '';
+      return compact;
+    }
+    errors.push('kisa liste yok');
+  }
+
+  lastFeedError = errors.slice(0, 4).join(', ');
   return null;
 }
 
@@ -895,7 +963,7 @@ async function fetchBinance(url) {
         if (cached && cached.data) {
           return cached.data; // Kesinlikle taramayı durdurma, önbellekteki koin listesiyle devam et
         }
-        warnFetch('Binance fiyatı alınamadı. Tarama durdu, işlem açılmıyor.');
+        warnFetch(`Binance fiyatı alınamadı (${lastFeedError || 'yanıt yok'}).`);
       }
       return null;
     } finally {
@@ -1090,7 +1158,7 @@ async function scanLoop() {
     if (!tickers || !Array.isArray(tickers)) {
       if (Date.now() - lastScanHeartbeat > 60000) {
         lastScanHeartbeat = Date.now();
-        addLog('Fiyat listesi boş. Yeni işlem açılmıyor.', 'WARN');
+        addLog(`Fiyat listesi boş (${lastFeedError || 'yanıt yok'}). Yeni işlem açılmıyor.`, 'WARN');
       }
       return;
     }
