@@ -234,9 +234,9 @@ class JudicialAuditCourt {
       }
     } else { // SHORT
       const sellTaker = 100 - taker;
-      if (sellTaker < 50.0 || sellTaker > 86.0) {
+      if (sellTaker < 65.0 || sellTaker > 86.0) {
         judicialScore -= 35;
-        accusations.push(`Satıcı delili sağlıksız (%${sellTaker.toFixed(1)})`);
+        accusations.push(`Satıcı delili yetersiz/sağlıksız (%${sellTaker.toFixed(1)}, min %65)`);
       }
       if (chg3raw >= 0) {
         judicialScore -= 35;

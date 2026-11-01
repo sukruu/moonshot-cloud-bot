@@ -117,7 +117,7 @@ function engineSnapshot() {
     userSlots: userRisk.maxSlots,
     userMargin: userRisk.marginPerTrade,
     gates: {
-      entry: 'Saatlik ivme: 1s +%0.25–7.5, kapanmış 3dk kırılım, max 55dk (40x, TP1 +%0.85, Moon +%3)',
+      entry: 'Saat ivme LONG +%0.25–7.5 (gün +%8 üstü sıkı), SHORT 1s ≤−%0.8 & satıcı ≤%35, 3dk kırılım, max 55dk, MFE≥%0.70@15dk kısmi',
       book: 'OBI veto',
       judge: 'açık',
       flow: 'son 12 mum',
@@ -1234,9 +1234,9 @@ async function scanLoop() {
 
     // 5'li paralel kline taraması (3m Marscoin Motoru)
     const chunkSize = 5;
-    let signalFound = false;
+    const scanEntryCandidates = [];
 
-    for (let ci = 0; ci < topCandidates.length && !signalFound; ci += chunkSize) {
+    for (let ci = 0; ci < topCandidates.length; ci += chunkSize) {
       if (activePositions.length >= CONFIG.maxSlots) break;
       const chunk = topCandidates.slice(ci, ci + chunkSize);
 
@@ -1253,7 +1253,7 @@ async function scanLoop() {
 
       for (const data of chunkData) {
         if (!data || !data.k3m || data.k3m.length < 22) continue;
-        if (activePositions.length >= CONFIG.maxSlots || signalFound) break;
+        if (activePositions.length >= CONFIG.maxSlots) break;
 
         const { sym, lastP, k3m, chg, isVip } = data;
         if (activePositions.some(x => x.symbol === sym) || activeSyms.has(sym) || (coinCooldowns[sym] && coinCooldowns[sym] > Date.now())) continue;
@@ -1390,7 +1390,7 @@ async function scanLoop() {
 
         // Gün %12.5'i geçtiyse ve 3dk salınım stopun içindeyse girilmez. Stop gürültüye denk gelir.
         const hourImpulseLong = chg1hCalc >= 0.25 && chg1hCalc <= 7.5;
-        const hourImpulseShort = chg1hCalc <= -0.25 && chg1hCalc >= -7.5;
+        const hourImpulseShort = chg1hCalc <= -0.80 && chg1hCalc >= -7.5;
 
         const radarOkLong =
           !sig.includes("ŞELALE") &&
@@ -1492,7 +1492,7 @@ async function scanLoop() {
         const vol3hCheck = rInfo.vol3hM || ((quote90mCalc * 2) / 1e6);
         const hasRealLiquidity = isVip || (vol3hCheck >= 0.70 && vol24 >= 1.5);
         const hasBuyerDominance = effectiveTaker >= 51.0 && effectiveTaker <= 86.0;
-        const hasSellerDominance = effectiveTakerShort <= 49.0 && effectiveTakerShort >= 16.0;
+        const hasSellerDominance = effectiveTakerShort <= 35.0 && effectiveTakerShort >= 14.0;
 
         // Kırılım mumu kapanmış olmalı. Açık mumun tepesinden girilmez.
         const priorH = parseFloat(k3m[lastIdx - 2][2]);
@@ -1506,7 +1506,10 @@ async function scanLoop() {
 
         let isLongPump = false;
         let isRocketSignal = false;
-        if (hasRealLiquidity && noWickLong && hasBuyerDominance && radarOkLong && continuationLong) {
+        const extendedDayLongOk =
+          chg24Val <= 8.0 ||
+          (chg1hCalc >= 0.45 && effectiveTaker >= 52.0 && prevMovePct >= 0.28);
+        if (hasRealLiquidity && noWickLong && hasBuyerDominance && radarOkLong && continuationLong && extendedDayLongOk) {
           if (prevVolMult >= 0.90 && spikeVolMult <= 6.0) {
             isLongPump = true;
             isRocketSignal = true;
@@ -1523,7 +1526,11 @@ async function scanLoop() {
         }
 
         if (!isLongPump && !isShortDump) {
-          shadow('NO_TRIGGER', { volMult: Number(volMult.toFixed(2)) });
+          if (radarOkLong && continuationLong && !extendedDayLongOk) {
+            shadow('EXTENDED_DAY_LONG', { chg24h: Number(chg24Val.toFixed(1)), chg1h: Number(chg1hCalc.toFixed(2)) });
+          } else {
+            shadow('NO_TRIGGER', { volMult: Number(volMult.toFixed(2)) });
+          }
         }
 
         if (isLongPump || isShortDump) {
@@ -1653,6 +1660,13 @@ async function scanLoop() {
             ? curP * (1 - tradeSlPct / 100) 
             : curP * (1 + tradeSlPct / 100);
 
+          const flowBias = side === 'LONG' ? effectiveTaker : (100 - effectiveTakerShort);
+          const entryScore =
+            Math.abs(chg1hCalc) * 22 +
+            prevVolMult * 12 +
+            Math.min(data.volM || 0, 80) * 0.35 +
+            flowBias * 0.15;
+
           const position = {
             id: Date.now() + Math.random().toString(36).substring(2, 6),
             symbol: sym,
@@ -1665,6 +1679,7 @@ async function scanLoop() {
             tier1Locked: false,
             tp1Taken: false,
             tp2Taken: false,
+            midPartialTaken: false,
             tp1Pnl: 0,
             tp2Pnl: 0,
             mfe: 0.0,
@@ -1700,17 +1715,39 @@ async function scanLoop() {
             btc15mEntry: btc15mNumeric
           };
 
-          activePositions.push(position);
-          activeSyms.add(sym);
-          signalFound = true;
-          lastTradeOpenTime = Date.now();
-          persistState();
-          shadow('TAKEN', { slPct: Number(tradeSlPct.toFixed(2)) });
-
-          addLog(`🚀 POZİSYON AÇILDI: [${side}] ${sym} @ $${curP.toFixed(4)} | ${radarTag} | Teminat: $${tradeMargin.toFixed(1)} | SL: $${stopPrice.toFixed(4)} | TP1: +%${(tradeTp1Pct * volK).toFixed(2)} | TP2: +%${(tradeTp2Pct * volK).toFixed(2)} | Moon: +%${(tradeMoonPct * volK).toFixed(2)}`, 'TRADE');
-          break;
+          scanEntryCandidates.push({
+            entryScore,
+            position,
+            sym,
+            side,
+            curP,
+            radarTag,
+            tradeMargin,
+            stopPrice,
+            tradeSlPct,
+            tradeTp1Pct,
+            tradeTp2Pct,
+            tradeMoonPct,
+            volK,
+            markTaken: () => shadow('TAKEN', { slPct: Number(tradeSlPct.toFixed(2)) })
+          });
         }
       }
+    }
+
+    if (scanEntryCandidates.length > 0 && activePositions.length < CONFIG.maxSlots) {
+      scanEntryCandidates.sort((a, b) => b.entryScore - a.entryScore);
+      const pick = scanEntryCandidates[0];
+      activePositions.push(pick.position);
+      activeSyms.add(pick.sym);
+      lastTradeOpenTime = Date.now();
+      persistState();
+      pick.markTaken();
+
+      addLog(
+        `🚀 POZİSYON AÇILDI: [${pick.side}] ${pick.sym} @ $${pick.curP.toFixed(4)} | ${pick.radarTag} | Teminat: $${pick.tradeMargin.toFixed(1)} | SL: $${pick.stopPrice.toFixed(4)} | TP1: +%${(pick.tradeTp1Pct * pick.volK).toFixed(2)} | TP2: +%${(pick.tradeTp2Pct * pick.volK).toFixed(2)} | Moon: +%${(pick.tradeMoonPct * pick.volK).toFixed(2)} | Tarama puanı: ${pick.entryScore.toFixed(0)}`,
+        'TRADE'
+      );
     }
   } catch (err) {
     console.error("❌ scanLoop Hatası:", err);
@@ -1941,6 +1978,32 @@ async function fastRiskLoop() {
       // İvmesiz kalan ölü işlemleri saatlerce bekleyip tam stop (-$2.50) yemek yerine erkenden küçük bir çizikle (-%0.25 spot / -$0.75) keser!
       if (!exitReason && !pos.tp1Taken && mfe >= 0.35 && move <= 0.02) {
         exitReason = `⏱️ Kâr geri verildi (Zirve: +%${mfe.toFixed(2)} / girişe döndü)`;
+      }
+
+      // TP1 (%0.85) gelmeden zirve %0.70+ gördüyse: 15dk sonra kısmi kilit veya geri verme kesimi (ZRO dersi)
+      if (!exitReason && !pos.tp1Taken && durMin >= 15 && (mfe >= 0.70 || nMfe >= 0.70)) {
+        if (!pos.midPartialTaken && move >= 0.50 && move < tp1Goal) {
+          pos.midPartialTaken = true;
+          pos.initialMargin = pos.initialMargin || pos.margin;
+          const closedMargin = Number((pos.initialMargin * 0.25).toFixed(4));
+          const closedNominal = closedMargin * pos.leverage;
+          const closedFee = closedNominal * CONFIG.feeRate * 2;
+          const midProfit = (closedNominal * (move / 100)) - closedFee;
+          pos.tp1Pnl = (pos.tp1Pnl || 0) + midProfit;
+          balance += midProfit;
+          pos.margin = Number((pos.margin - closedMargin).toFixed(4));
+          const remNominal = pos.margin * pos.leverage;
+          const remFee = remNominal * CONFIG.feeRate * 2;
+          pos.pnl = (remNominal * (move / 100)) - remFee;
+          pos.roi = pos.margin > 0 ? (pos.pnl / pos.margin) * 100 : 0;
+          pos.beLocked = true;
+          pos.tier1Locked = true;
+          pos.stopPrice = lockSpot(0.10);
+          stateChanged = true;
+          addLog(`💰 [MFE %0.70 KISMI] ${pos.symbol} %25 kapatıldı (+$${midProfit.toFixed(2)}). Stop +%0.10 — TP1 bekleniyor.`, 'TRADE');
+        } else if (move <= 0.12) {
+          exitReason = `⏱️ TP1 altı zirve geri verildi (MFE: +%${mfe.toFixed(2)} / Anlık: +%${move.toFixed(2)})`;
+        }
       }
 
       const maxHold = Number(CONFIG.maxTradeMin) || 55;
