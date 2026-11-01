@@ -116,7 +116,7 @@ function engineSnapshot() {
     userSlots: userRisk.maxSlots,
     userMargin: userRisk.marginPerTrade,
     gates: {
-      entry: 'Kapanmış 3dk kırılım + tutunma (2 slot, 40x, TP1 +%0.48, yaklaşınca kilit +%0.22, stop %0.80)',
+      entry: 'Kapanmış kırılım, salınım < stop, gün tavanı %12.5 (40x, TP1 +%0.48, runner nefes alır)',
       book: 'OBI veto',
       judge: 'açık',
       flow: 'son 12 mum',
@@ -1387,19 +1387,21 @@ async function scanLoop() {
         }
         const atr3mPct = trCount > 0 ? trSum / trCount : 0.5;
 
-        // Giriş yönü: gün ve 3 saat aynı tarafta. 1s, 30dk, kanal, RSI ve ATR burada şart değil.
+        // Gün %12.5'i geçtiyse ve 3dk salınım stopun içindeyse girilmez. Stop gürültüye denk gelir.
         const radarOkLong =
           !sig.includes("ŞELALE") &&
           !sig.includes("AYI") &&
-          chg24Val >= 0.40 && chg24Val <= 35.0 &&
-          chg3hVal > 0;
+          chg24Val >= 0.40 && chg24Val <= 12.5 &&
+          chg3hVal > 0 &&
+          atr3mPct >= 0.12 && atr3mPct < 0.70;
 
         const radarOkShort =
           !sig.includes("ROKET") &&
           !sig.includes("BOĞA") &&
           btc15mNumeric <= 0.35 && btc5mNumeric <= 0.30 &&
-          chg24Val <= -0.40 && chg24Val >= -35.0 &&
-          chg3hVal < 0;
+          chg24Val <= -0.40 && chg24Val >= -12.5 &&
+          chg3hVal < 0 &&
+          atr3mPct >= 0.12 && atr3mPct < 0.70;
 
         if (!radarOkLong && !radarOkShort) {
           // 👻 Radar'a ÇOK YAKIN elenen adayları da kaydet (yeni 1s/30dk/pos1h/RSI/ATR filtrelerinin etkisi ölçülebilsin)
@@ -1409,11 +1411,13 @@ async function scanLoop() {
               const nSide = nearLong ? 'LONG' : 'SHORT';
               let why = 'RADAR_OTHER';
               if (nSide === 'LONG') {
-                if (chg24Val < 0.40 || chg24Val > 35) why = 'RADAR_24H';
+                if (chg24Val < 0.40 || chg24Val > 12.5) why = 'RADAR_24H';
+                else if (atr3mPct < 0.12 || atr3mPct >= 0.70) why = 'RADAR_ATR';
                 else if (chg3hVal <= 0) why = 'RADAR_3H';
                 else why = 'RADAR_SIGNAL';
               } else {
-                if (chg24Val > -0.40 || chg24Val < -35) why = 'RADAR_24H';
+                if (chg24Val > -0.40 || chg24Val < -12.5) why = 'RADAR_24H';
+                else if (atr3mPct < 0.12 || atr3mPct >= 0.70) why = 'RADAR_ATR';
                 else if (chg3hVal >= 0) why = 'RADAR_3H';
                 else why = 'RADAR_SIGNAL';
               }
@@ -1839,10 +1843,10 @@ async function fastRiskLoop() {
         // Kalan %45 pozisyon için Stop Loss derhal +%0.28 kâra kilitlenir (komisyon üstü net kâr)
         pos.beLocked = true;
         pos.tier1Locked = true;
-        pos.stopPrice = lockSpot(0.28);
+        pos.stopPrice = lockSpot(0.12);
         stateChanged = true;
 
-        addLog(`💰 [TP1 ALINDI] ${pos.symbol} %40 pozisyon kapatıldı. +${tp1Profit.toFixed(2)} kâr cebe indi. Kalan %60 stop +%0.28 kâra kilitlendi.`, 'TRADE');
+        addLog(`💰 [TP1 ALINDI] ${pos.symbol} %40 pozisyon kapatıldı. +${tp1Profit.toFixed(2)} kâr cebe indi. Kalan %60 stop ücretin üstünde, giriş+%0.12.`, 'TRADE');
       }
 
       // ========================================================
@@ -1885,11 +1889,7 @@ async function fastRiskLoop() {
       } else if (mfe >= 1.00 || nMfe >= 1.00) {
         targetStop = lockSpot(Math.max(0.72, mfe - 0.25));
       } else if (mfe >= 0.85 || nMfe >= 0.85) {
-        targetStop = lockSpot(0.60);
-      } else if (mfe >= 0.65 || nMfe >= 0.65) {
-        targetStop = lockSpot(0.35);
-      } else if (mfe >= 0.42 || nMfe >= 0.42) {
-        targetStop = lockSpot(0.22);
+        targetStop = lockSpot(0.55);
       }
 
       if (targetStop) {
@@ -1918,7 +1918,7 @@ async function fastRiskLoop() {
       // ========================================================
       // 🏆 6. ZİRVE KÂR NEŞTERİ (TP1/TP2 SONRASI +%0.62+ ZİRVEDEN %0.18 GERİ ÇEKİLMEDE ANINDA CEBE İNDİR!)
       // ========================================================
-      if (!exitReason && (pos.tp1Taken || pos.tp2Taken) && mfe >= 0.78 && move >= 0.45) {
+      if (!exitReason && (pos.tp1Taken || pos.tp2Taken) && mfe >= 1.05 && move >= 0.55) {
         const pullbackLimit = mfe >= 1.30 ? 0.32 : (mfe >= 0.95 ? 0.28 : 0.24);
         if ((mfe - move) >= pullbackLimit) {
           exitReason = `🏆 TP CEPTE + Zirve Kâr Neşteri (+%${pos.roi.toFixed(1)} ROI / Zirve: +%${mfe.toFixed(2)} Spot)`;
@@ -1929,6 +1929,10 @@ async function fastRiskLoop() {
       // ⏱️ 7. ÖLÜ İŞLEM NEŞTERİ (Dead Trade Scalpel)
       // ========================================================
       // İvmesiz kalan ölü işlemleri saatlerce bekleyip tam stop (-$2.50) yemek yerine erkenden küçük bir çizikle (-%0.25 spot / -$0.75) keser!
+      if (!exitReason && !pos.tp1Taken && mfe >= 0.35 && move <= 0.02) {
+        exitReason = `⏱️ Kâr geri verildi (Zirve: +%${mfe.toFixed(2)} / girişe döndü)`;
+      }
+
       if (!exitReason && !pos.beLocked) {
         if (durMin >= 8 && nMfe < 0.20 && nMove <= -0.25) {
           exitReason = `⏱️ Ölü İşlem Neşteri (${Math.round(durMin)}dk İvmesiz / MFE: +%${mfe.toFixed(2)} / Erken Kesim)`;
@@ -2926,7 +2930,7 @@ function serveDashboardHtml() {
         <div style="background:linear-gradient(90deg, var(--green-bg) 0%, var(--panel) 100%); border-left:3px solid var(--green); border:1px solid var(--green-border); border-radius:5px; padding:6px 8px; margin-bottom:5px; display:flex; justify-content:space-between; align-items:center; box-shadow:var(--shadow-sm);">
           <div>
             <div style="font-size:10px;font-weight:800;color:var(--green);letter-spacing:0.3px;">🛡️ OTOMATİK BAŞABAŞ</div>
-            <div style="font-size:8.5px;color:var(--muted);margin-top:1px;">İlk kâr alınca kalan +%0.28 kilitlenir</div>
+            <div style="font-size:8.5px;color:var(--muted);margin-top:1px;">İlk kâr alınca kalan giriş+%0.12, runner açık</div>
           </div>
           <div style="display:flex;align-items:baseline;gap:2px;background:var(--panel2);padding:2px 6px;border-radius:4px;border:1px solid var(--green-border);">
             <input type="number" id="inpBe" value="${CONFIG.bePct.toFixed(2)}" step="0.1" style="width:52px;background:none;border:none;color:var(--green);font-family:'JetBrains Mono';font-size:13px;font-weight:650;text-align:right;outline:none;">
