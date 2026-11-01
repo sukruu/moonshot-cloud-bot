@@ -228,7 +228,7 @@ class JudicialAuditCourt {
         judicialScore -= 35;
         accusations.push(`3s yön ters (%${chg3raw.toFixed(1)})`);
       }
-      if (chg24 < 0.40 || chg24 > 35.0) {
+      if (chg24 < 0.40 || chg24 > 12.5) {
         judicialScore -= 35;
         accusations.push(`24s yön ters veya tükenmiş (%${chg24.toFixed(1)})`);
       }
@@ -242,7 +242,7 @@ class JudicialAuditCourt {
         judicialScore -= 35;
         accusations.push(`3s düşüş yönü yok (%${chg3raw.toFixed(1)})`);
       }
-      if (chg24 > -0.40 || chg24 < -35.0) {
+      if (chg24 > -0.40 || chg24 < -12.5) {
         judicialScore -= 35;
         accusations.push(`24s düşüş yönü yok veya tükenmiş (%${chg24.toFixed(1)})`);
       }

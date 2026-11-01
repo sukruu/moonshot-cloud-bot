@@ -32,9 +32,10 @@ let CONFIG = {
   maxSlots: 2,               // 2 Slot (18-26 Ekim kârlı defter)
   slPct: 0.80,               // Dengeli SL -%0.80 spot (Kayıp boyutunu küçültür, tavan -%0.85)
   bePct: 0.38,               // Panel değeri. Stop, TP1 gelmeden oynatılmaz.
-  moonPct: 2.00,             // +%2.00 spotta (%25 runner) roket vur-kaç hedefini alır (+%40 ROI)
-  tp1Pct: 0.48,              // +%0.48 spotta (+%9.6 ROI) %40 kârı anında cebe indirir
-  tp2Pct: 0.85,              // +%0.85 spotta (+%17 ROI) %35 kârı cebe indirir, %25 runner rokete gider
+  moonPct: 3.00,             // 1 saatlik ivmede runner tavanı +%3.00 spot
+  tp1Pct: 0.85,              // İlk dilim +%0.85 (%30 cebe, %70 runner)
+  tp2Pct: 1.35,              // İkinci dilim +%1.35
+  maxTradeMin: 55,           // Gün boyu değil: tek saatlik ivme penceresi
   feeRate: 0.0005,           // Binance Futures taker %0.05 (TEK YÖN)
   scanIntervalMs: 3000,
   riskIntervalMs: 1000,
@@ -46,7 +47,7 @@ let DYNAMIC = {
   vol3hMin: 0.8,
   candidateSlice: 30,
   regime: 'SCALP',
-  mode: 'HIZLI_VUR_KAC',
+  mode: 'SAATLIK_IVM',
   updatedAt: 0
 };
 
@@ -98,12 +99,12 @@ function applyCircuitBreaker() {
     circuitOn = false;
     CONFIG.maxSlots = userRisk.maxSlots;
     CONFIG.marginPerTrade = dynamicMargin;
-    DYNAMIC.mode = 'MARSCOIN_ROCKET';
+    DYNAMIC.mode = 'SAATLIK_IVM';
     addLog(`✅ Devre kesici kapandı. Slot ${CONFIG.maxSlots}, teminat $${CONFIG.marginPerTrade}.`, 'INFO');
   } else {
     CONFIG.maxSlots = userRisk.maxSlots || 2;
     CONFIG.marginPerTrade = dynamicMargin;
-    DYNAMIC.mode = 'MARSCOIN_ROCKET';
+    DYNAMIC.mode = 'SAATLIK_IVM';
   }
 }
 
@@ -116,7 +117,7 @@ function engineSnapshot() {
     userSlots: userRisk.maxSlots,
     userMargin: userRisk.marginPerTrade,
     gates: {
-      entry: 'Kapanmış kırılım, salınım < stop, gün tavanı %12.5 (40x, TP1 +%0.48, runner nefes alır)',
+      entry: 'Saatlik ivme: 1s +%0.25–7.5, kapanmış 3dk kırılım, max 55dk (40x, TP1 +%0.85, Moon +%3)',
       book: 'OBI veto',
       judge: 'açık',
       flow: 'son 12 mum',
@@ -245,9 +246,9 @@ function loadSettings() {
     clean.leverage = 40;
     clean.slPct = 0.80;
     clean.bePct = 0.38;
-    clean.tp1Pct = 0.48;
-    clean.tp2Pct = 0.85;
-    clean.moonPct = 2.00;
+    clean.tp1Pct = 0.85;
+    clean.tp2Pct = 1.35;
+    clean.moonPct = 3.00;
     Object.assign(CONFIG, clean);
     rememberUserRisk();
     settingsCustomized = true;
@@ -1388,11 +1389,15 @@ async function scanLoop() {
         const atr3mPct = trCount > 0 ? trSum / trCount : 0.5;
 
         // Gün %12.5'i geçtiyse ve 3dk salınım stopun içindeyse girilmez. Stop gürültüye denk gelir.
+        const hourImpulseLong = chg1hCalc >= 0.25 && chg1hCalc <= 7.5;
+        const hourImpulseShort = chg1hCalc <= -0.25 && chg1hCalc >= -7.5;
+
         const radarOkLong =
           !sig.includes("ŞELALE") &&
           !sig.includes("AYI") &&
           chg24Val >= 0.40 && chg24Val <= 12.5 &&
           chg3hVal > 0 &&
+          hourImpulseLong &&
           atr3mPct >= 0.12 && atr3mPct < 0.70;
 
         const radarOkShort =
@@ -1401,6 +1406,7 @@ async function scanLoop() {
           btc15mNumeric <= 0.35 && btc5mNumeric <= 0.30 &&
           chg24Val <= -0.40 && chg24Val >= -12.5 &&
           chg3hVal < 0 &&
+          hourImpulseShort &&
           atr3mPct >= 0.12 && atr3mPct < 0.70;
 
         if (!radarOkLong && !radarOkShort) {
@@ -1413,11 +1419,13 @@ async function scanLoop() {
               if (nSide === 'LONG') {
                 if (chg24Val < 0.40 || chg24Val > 12.5) why = 'RADAR_24H';
                 else if (atr3mPct < 0.12 || atr3mPct >= 0.70) why = 'RADAR_ATR';
+                else if (!hourImpulseLong) why = 'RADAR_1H';
                 else if (chg3hVal <= 0) why = 'RADAR_3H';
                 else why = 'RADAR_SIGNAL';
               } else {
                 if (chg24Val > -0.40 || chg24Val < -12.5) why = 'RADAR_24H';
                 else if (atr3mPct < 0.12 || atr3mPct >= 0.70) why = 'RADAR_ATR';
+                else if (!hourImpulseShort) why = 'RADAR_1H';
                 else if (chg3hVal >= 0) why = 'RADAR_3H';
                 else why = 'RADAR_SIGNAL';
               }
@@ -1502,7 +1510,7 @@ async function scanLoop() {
           if (prevVolMult >= 0.90 && spikeVolMult <= 6.0) {
             isLongPump = true;
             isRocketSignal = true;
-            radarTag = `[🚀 KIRILIM TUTUNDU | Kapanan 3dk: +%${prevMovePct.toFixed(2)} | Şimdi: %${curMovePct.toFixed(2)} | 24s: +%${chg24Val.toFixed(1)} | Hacim: ${prevVolMult.toFixed(2)}x | Taker: %${effectiveTaker.toFixed(0)}]`;
+            radarTag = `[🚀 SAAT İVMESİ | 1s: +%${chg1hCalc.toFixed(2)} | Kapanan 3dk: +%${prevMovePct.toFixed(2)} | 24s: +%${chg24Val.toFixed(1)} | Hacim: ${prevVolMult.toFixed(2)}x | Taker: %${effectiveTaker.toFixed(0)}]`;
           }
         }
 
@@ -1510,7 +1518,7 @@ async function scanLoop() {
         if (hasRealLiquidity && noWickShort && hasSellerDominance && radarOkShort && continuationShort) {
           if (prevVolMult >= 0.80 && spikeVolMult <= 6.0) {
             isShortDump = true;
-            radarTag = `[🩸 KIRILIM TUTUNDU SHORT | Kapanan 3dk: %${prevMovePct.toFixed(2)} | Şimdi: %${curMovePct.toFixed(2)} | 24s: %${chg24Val.toFixed(1)} | Hacim: ${prevVolMult.toFixed(2)}x | Taker: %${effectiveTakerShort.toFixed(0)}]`;
+            radarTag = `[🩸 SAAT İVMESİ SHORT | 1s: %${chg1hCalc.toFixed(2)} | Kapanan 3dk: %${prevMovePct.toFixed(2)} | 24s: %${chg24Val.toFixed(1)} | Hacim: ${prevVolMult.toFixed(2)}x | Taker: %${effectiveTakerShort.toFixed(0)}]`;
           }
         }
 
@@ -1825,7 +1833,7 @@ async function fastRiskLoop() {
       if (!exitReason && !pos.tp1Taken && (move >= tp1Goal || nMove >= tp1Goal)) {
         pos.tp1Taken = true;
         pos.initialMargin = pos.initialMargin || pos.margin;
-        const closedMargin = Number((pos.initialMargin * 0.40).toFixed(4));
+        const closedMargin = Number((pos.initialMargin * 0.30).toFixed(4));
         const closedNominal = closedMargin * pos.leverage;
         const closedFee = closedNominal * CONFIG.feeRate * 2;
         const tp1Profit = (closedNominal * (move / 100)) - closedFee;
@@ -1846,7 +1854,7 @@ async function fastRiskLoop() {
         pos.stopPrice = lockSpot(0.12);
         stateChanged = true;
 
-        addLog(`💰 [TP1 ALINDI] ${pos.symbol} %40 pozisyon kapatıldı. +${tp1Profit.toFixed(2)} kâr cebe indi. Kalan %60 stop ücretin üstünde, giriş+%0.12.`, 'TRADE');
+        addLog(`💰 [TP1 ALINDI] ${pos.symbol} %30 pozisyon kapatıldı. +${tp1Profit.toFixed(2)} kâr cebe indi. Kalan %70 runner (max ${CONFIG.maxTradeMin || 55} dk).`, 'TRADE');
       }
 
       // ========================================================
@@ -1888,6 +1896,8 @@ async function fastRiskLoop() {
         targetStop = lockSpot(Math.max(1.05, mfe - 0.30));
       } else if (mfe >= 1.00 || nMfe >= 1.00) {
         targetStop = lockSpot(Math.max(0.72, mfe - 0.25));
+      } else if (pos.tp1Taken && (mfe >= 0.95 || nMfe >= 0.95)) {
+        targetStop = lockSpot(Math.max(0.45, mfe - 0.28));
       } else if (mfe >= 0.85 || nMfe >= 0.85) {
         targetStop = lockSpot(0.55);
       }
@@ -1933,13 +1943,20 @@ async function fastRiskLoop() {
         exitReason = `⏱️ Kâr geri verildi (Zirve: +%${mfe.toFixed(2)} / girişe döndü)`;
       }
 
+      const maxHold = Number(CONFIG.maxTradeMin) || 55;
+      if (!exitReason && durMin >= maxHold) {
+        exitReason = pos.tp1Taken
+          ? `⏱️ 1 Saat Runner Kapandı (MFE: +%${mfe.toFixed(2)} / Anlık: +%${move.toFixed(2)})`
+          : `⏱️ 1 Saat Süre Doldu (MFE: +%${mfe.toFixed(2)} / Anlık: +%${move.toFixed(2)})`;
+      }
+
       if (!exitReason && !pos.beLocked) {
         if (durMin >= 8 && nMfe < 0.20 && nMove <= -0.25) {
           exitReason = `⏱️ Ölü İşlem Neşteri (${Math.round(durMin)}dk İvmesiz / MFE: +%${mfe.toFixed(2)} / Erken Kesim)`;
         } else if (durMin >= 15 && nMfe < 0.35 && nMove <= -0.20) {
           exitReason = `⏱️ İvmesizlik Neşteri (${Math.round(durMin)}dk Zayıf Akış / MFE: +%${mfe.toFixed(2)} / Erken Kesim)`;
-        } else if (durMin >= 30 && nMfe < 0.40) {
-          exitReason = `⏱️ Maksimum Süre Aşımı (${Math.round(durMin)}dk Yatay / MFE: +%${mfe.toFixed(2)} / Rotasyon Çıkışı)`;
+        } else if (durMin >= 40 && !pos.tp1Taken && nMfe < 0.45) {
+          exitReason = `⏱️ İvme Tükendi (${Math.round(durMin)}dk / MFE: +%${mfe.toFixed(2)} / Erken Kesim)`;
         }
       }
 
@@ -2941,7 +2958,7 @@ function serveDashboardHtml() {
         <div style="background:linear-gradient(90deg, var(--blue-bg) 0%, var(--panel) 100%); border-left:3px solid var(--blue); border:1px solid var(--blue-border); border-radius:5px; padding:6px 8px; margin-bottom:5px; display:flex; justify-content:space-between; align-items:center; box-shadow:var(--shadow-sm);">
           <div>
             <div style="font-size:10px;font-weight:800;color:var(--blue);letter-spacing:0.3px;">🎯 İLK KÂR ALMA (TP1)</div>
-            <div style="font-size:8.5px;color:var(--muted);margin-top:1px;">%40 Cebe, Kalan %60 Kilitli</div>
+            <div style="font-size:8.5px;color:var(--muted);margin-top:1px;">%30 Cebe, %70 Runner (max 55dk)</div>
           </div>
           <div style="display:flex;align-items:baseline;gap:2px;background:var(--panel2);padding:2px 6px;border-radius:4px;border:1px solid var(--blue-border);">
             <input type="number" id="inpTp1" value="${(CONFIG.tp1Pct || 0.50).toFixed(2)}" step="0.1" style="width:52px;background:none;border:none;color:var(--blue);font-family:'JetBrains Mono';font-size:13px;font-weight:650;text-align:right;outline:none;">
@@ -3964,7 +3981,7 @@ const server = http.createServer(async (req, res) => {
     history = [];
     coinLossCount = {};
     coinCooldowns = {};
-    DYNAMIC.mode = 'HIZLI_VUR_KAC';
+    DYNAMIC.mode = 'SAATLIK_IVM';
     DYNAMIC.vol3hMin = 1.0;
     DYNAMIC.candidateSlice = 35;
     circuitOn = false;
