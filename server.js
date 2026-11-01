@@ -2242,6 +2242,10 @@ function formatExitReasonCompact(reason) {
 
 function serveDashboardHtml() {
   const stats = getStats();
+  const gateSnap = engineSnapshot().gates || {};
+  const gateEntryLbl = (gateSnap.entry || 'motor').length > 38
+    ? (gateSnap.entry || '').slice(0, 36) + '…'
+    : (gateSnap.entry || 'motor');
   const vipKeys = Object.keys(VIP_TARGETS);
 
   return `<!DOCTYPE html>
@@ -2878,15 +2882,15 @@ function serveDashboardHtml() {
           <div class="agent-compact-list">
             <div class="agent-row">
               <span class="agent-name">Giriş</span>
-              <span class="status-pill green" id="gateEngine">1dk bant</span>
+              <span class="status-pill green" id="gateEngine">${gateEntryLbl}</span>
             </div>
             <div class="agent-row">
               <span class="agent-name">Emir defteri</span>
-              <span class="status-pill green" id="gateBook">OBI açık</span>
+              <span class="status-pill green" id="gateBook">${gateSnap.book || 'OBI'}</span>
             </div>
             <div class="agent-row">
               <span class="agent-name">Yargıç</span>
-              <span class="status-pill green" id="gateJudge">veto açık</span>
+              <span class="status-pill green" id="gateJudge">${gateSnap.judge || 'açık'}</span>
             </div>
             <div class="agent-row">
               <span class="agent-name">Devre kesici</span>
@@ -3248,6 +3252,17 @@ function serveDashboardHtml() {
         btcEl.innerText = data.stats.btcTrend;
         btcEl.style.color = data.stats.btcIsGreen ? 'var(--green)' : 'var(--red)';
 
+        const ts = data.teamStatus || {};
+        const g = ts.gates || {};
+        const ge = document.getElementById('gateEngine');
+        if (ge && g.entry) {
+          ge.innerText = g.entry.length > 38 ? g.entry.slice(0, 36) + '…' : g.entry;
+        }
+        const gb = document.getElementById('gateBook');
+        if (gb && g.book) gb.innerText = g.book;
+        const gj = document.getElementById('gateJudge');
+        if (gj && g.judge) gj.innerText = g.judge;
+
         const br = document.getElementById("gateBreaker");
         if (br) {
           br.innerText = data.stats.circuit ? ('AÇIK · $' + data.stats.liveMargin) : 'kapalı';
@@ -3325,7 +3340,7 @@ function serveDashboardHtml() {
         const activeCardsEl = document.getElementById("activeCardsMobile");
         if (activeCardsEl) {
           if (data.positions.length === 0) {
-            activeCardsEl.innerHTML = '<div class="empty-cards-msg">🔍 1dk bant taranıyor.</div>';
+            activeCardsEl.innerHTML = '<div class="empty-cards-msg">🔍 Saatlik ivme taranıyor.</div>';
           } else {
             activeCardsEl.innerHTML = data.positions.map((p, idx) => {
               const isLong = p.side === 'LONG';
@@ -3514,7 +3529,7 @@ function serveDashboardHtml() {
 
 function renderActiveRows(positions) {
   if (!positions || positions.length === 0) {
-    return '<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:24px;font-size:12px;">🔍 1dk bant taranıyor.</td></tr>';
+    return '<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:24px;font-size:12px;">🔍 Saatlik ivme taranıyor.</td></tr>';
   }
   return positions.map((p, idx) => {
     const isLong = p.side === 'LONG';
@@ -3588,7 +3603,7 @@ function renderHistoryRows(hist) {
 
 function renderActiveCards(positions) {
   if (!positions || positions.length === 0) {
-    return '<div class="empty-cards-msg">🔍 1dk bant taranıyor.</div>';
+    return '<div class="empty-cards-msg">🔍 Saatlik ivme taranıyor.</div>';
   }
   return positions.map((p, idx) => {
     const isLong = p.side === 'LONG';
