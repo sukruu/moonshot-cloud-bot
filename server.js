@@ -117,7 +117,7 @@ function engineSnapshot() {
     userSlots: userRisk.maxSlots,
     userMargin: userRisk.marginPerTrade,
     gates: {
-      entry: 'Saat ivme LONG +%0.25–7.5 (gün +%8 üstü sıkı), SHORT 1s ≤−%0.8 & satıcı ≤%35, 3dk kırılım, max 55dk, MFE≥%0.70@15dk kısmi',
+      entry: 'Saat ivme + 3dk kırılım hacim LONG≥1.05x; ölü neşter 12dk/−%0.35; ivmesiz 25dk; rotasyon 18dk',
       book: 'OBI veto',
       judge: 'açık',
       flow: 'son 12 mum',
@@ -1509,8 +1509,9 @@ async function scanLoop() {
         const extendedDayLongOk =
           chg24Val <= 8.0 ||
           (chg1hCalc >= 0.45 && effectiveTaker >= 52.0 && prevMovePct >= 0.28);
-        if (hasRealLiquidity && noWickLong && hasBuyerDominance && radarOkLong && continuationLong && extendedDayLongOk) {
-          if (prevVolMult >= 0.90 && spikeVolMult <= 6.0) {
+        const weakHourLowVolLong = chg1hCalc < 0.50 && prevVolMult < 1.35;
+        if (hasRealLiquidity && noWickLong && hasBuyerDominance && radarOkLong && continuationLong && extendedDayLongOk && !weakHourLowVolLong) {
+          if (prevVolMult >= 1.05 && spikeVolMult <= 6.0) {
             isLongPump = true;
             isRocketSignal = true;
             radarTag = `[🚀 SAAT İVMESİ | 1s: +%${chg1hCalc.toFixed(2)} | Kapanan 3dk: +%${prevMovePct.toFixed(2)} | 24s: +%${chg24Val.toFixed(1)} | Hacim: ${prevVolMult.toFixed(2)}x | Taker: %${effectiveTaker.toFixed(0)}]`;
@@ -1528,6 +1529,8 @@ async function scanLoop() {
         if (!isLongPump && !isShortDump) {
           if (radarOkLong && continuationLong && !extendedDayLongOk) {
             shadow('EXTENDED_DAY_LONG', { chg24h: Number(chg24Val.toFixed(1)), chg1h: Number(chg1hCalc.toFixed(2)) });
+          } else if (radarOkLong && continuationLong && (prevVolMult < 1.05 || weakHourLowVolLong)) {
+            shadow('LOW_BREAKOUT_VOL', { volMult: Number(prevVolMult.toFixed(2)), chg1h: Number(chg1hCalc.toFixed(2)) });
           } else {
             shadow('NO_TRIGGER', { volMult: Number(volMult.toFixed(2)) });
           }
@@ -1765,8 +1768,8 @@ function checkSlotRotation() {
 
   activePositions.forEach((pos, idx) => {
     const durMin = (now - pos.entryTime) / 60000;
-    // 🛡️ Sadece 20+ dakika boyunca hiç yürüyememiş ve yatay kalmış işlemleri rotasyona sok.
-    if (durMin >= 12 && (pos.mfe || 0) < 0.25 && Math.abs(pos.roi || 0) <= 2.5) {
+    // Uyuyan slot: en az 18dk, MFE <%0.20 — erken rotasyon komisyon kaybı yaratmasın
+    if (durMin >= 18 && (pos.mfe || 0) < 0.20 && Math.abs(pos.roi || 0) <= 2.5) {
       if (durMin > maxDuration) {
         maxDuration = durMin;
         stagnantIdx = idx;
@@ -2014,9 +2017,9 @@ async function fastRiskLoop() {
       }
 
       if (!exitReason && !pos.beLocked) {
-        if (durMin >= 8 && nMfe < 0.20 && nMove <= -0.25) {
+        if (durMin >= 12 && mfe < 0.15 && nMfe < 0.15 && nMove <= -0.35) {
           exitReason = `⏱️ Ölü İşlem Neşteri (${Math.round(durMin)}dk İvmesiz / MFE: +%${mfe.toFixed(2)} / Erken Kesim)`;
-        } else if (durMin >= 15 && nMfe < 0.35 && nMove <= -0.20) {
+        } else if (durMin >= 25 && mfe < 0.30 && nMfe < 0.28 && nMove <= -0.35) {
           exitReason = `⏱️ İvmesizlik Neşteri (${Math.round(durMin)}dk Zayıf Akış / MFE: +%${mfe.toFixed(2)} / Erken Kesim)`;
         } else if (durMin >= 40 && !pos.tp1Taken && nMfe < 0.45) {
           exitReason = `⏱️ İvme Tükendi (${Math.round(durMin)}dk / MFE: +%${mfe.toFixed(2)} / Erken Kesim)`;
@@ -2123,14 +2126,19 @@ function closeTrade(pos, exitReason) {
 
   // 🛡️ ÇOKLAMA / DALGA YORGUNLUĞU VE ARDIŞIK ZARAR KORUMASI (COOLDOWN)
   const isRealLoss = totalTradePnl <= -0.05;
+  const isMomentumScalpel =
+    exitReason.includes('Ölü İşlem') ||
+    exitReason.includes('İvmesizlik') ||
+    exitReason.includes('İvme Tükendi');
   if (isRealLoss) {
     coinLossCount[pos.symbol] = (coinLossCount[pos.symbol] || 0) + 1;
+    const restMin = isMomentumScalpel ? 90 : 45;
     if (coinLossCount[pos.symbol] >= 2) {
       coinCooldowns[pos.symbol] = now + (3 * 60 * 60 * 1000);
       addLog(`🚫 ${pos.symbol} ardışık ${coinLossCount[pos.symbol]} zarar verdi — koin 3 saat kilitlendi!`, 'TRADE');
     } else {
-      coinCooldowns[pos.symbol] = now + (45 * 60 * 1000);
-      addLog(`⚠️ ${pos.symbol} zarar yazdı (${totalTradePnl.toFixed(2)}) — koin 45 dakika dinlendiriliyor.`, 'TRADE');
+      coinCooldowns[pos.symbol] = now + (restMin * 60 * 1000);
+      addLog(`⚠️ ${pos.symbol} zarar yazdı (${totalTradePnl.toFixed(2)}) — koin ${restMin} dakika dinlendiriliyor.`, 'TRADE');
     }
   } else {
     coinLossCount[pos.symbol] = 0;
