@@ -2,7 +2,7 @@
  * ============================================================================
  * 🚀 MOONSHOT 7/24 BULUT TEST LABORATUVARI (SCREEN 1 - BİREBİR EKRAN MOTORU)
  * ============================================================================
- * Bakiye: $100.00 | Max Slot: 2 | Teminat: $15 | Kaldıraç: 40x | SL: %0.80 | TP1: %0.48
+ * Bakiye: $100.00 | Max Slot: 2 | Teminat: $15 | Kaldıraç: 40x | VUR KAÇ: TP1 %0.55, max 40dk, Long+Short
  * HTML Ekran 1 tasarımı, renkleri, panelleri ve kuralları ile 1-e-1 aynı.
  * ============================================================================
  */
@@ -31,11 +31,12 @@ let CONFIG = {
   leverage: 40,              // Kaldıraç 40x
   maxSlots: 2,               // 2 Slot (18-26 Ekim kârlı defter)
   slPct: 0.80,               // Dengeli SL -%0.80 spot (Kayıp boyutunu küçültür, tavan -%0.85)
-  bePct: 0.38,               // Panel değeri. Stop, TP1 gelmeden oynatılmaz.
-  moonPct: 3.00,             // 1 saatlik ivmede runner tavanı +%3.00 spot
-  tp1Pct: 0.85,              // İlk dilim +%0.85 (%30 cebe, %70 runner)
-  tp2Pct: 1.35,              // İkinci dilim +%1.35
-  maxTradeMin: 55,           // Gün boyu değil: tek saatlik ivme penceresi
+  bePct: 0.32,               // Panel. Stop TP1 öncesi oynatılmaz.
+  moonPct: 1.75,             // Vur kaç runner tavanı +%1.75 spot (~40x’te hızlı çık)
+  tp1Pct: 0.55,              // 40x vur kaç: +%0.55 spot ≈ net hedef (komisyon üstü)
+  tp2Pct: 0.95,              // İkinci dilim +%0.95
+  maxTradeMin: 40,           // Tutma: 40 dk, sonra kapat
+  tp1ClosePct: 0.45,         // TP1’de pozisyonun %45’i cebe
   feeRate: 0.0005,           // Binance Futures taker %0.05 (TEK YÖN)
   scanIntervalMs: 3000,
   riskIntervalMs: 1000,
@@ -47,7 +48,7 @@ let DYNAMIC = {
   vol3hMin: 0.8,
   candidateSlice: 30,
   regime: 'SCALP',
-  mode: 'SAATLIK_IVM',
+  mode: 'VUR_KAC',
   updatedAt: 0
 };
 
@@ -99,12 +100,12 @@ function applyCircuitBreaker() {
     circuitOn = false;
     CONFIG.maxSlots = userRisk.maxSlots;
     CONFIG.marginPerTrade = dynamicMargin;
-    DYNAMIC.mode = 'SAATLIK_IVM';
+    DYNAMIC.mode = 'VUR_KAC';
     addLog(`✅ Devre kesici kapandı. Slot ${CONFIG.maxSlots}, teminat $${CONFIG.marginPerTrade}.`, 'INFO');
   } else {
     CONFIG.maxSlots = userRisk.maxSlots || 2;
     CONFIG.marginPerTrade = dynamicMargin;
-    DYNAMIC.mode = 'SAATLIK_IVM';
+    DYNAMIC.mode = 'VUR_KAC';
   }
 }
 
@@ -117,7 +118,7 @@ function engineSnapshot() {
     userSlots: userRisk.maxSlots,
     userMargin: userRisk.marginPerTrade,
     gates: {
-      entry: 'SHORT 1s≤−%1 & hacim≥1.05x; LONG gün+%2.5 üstü 3dk≥%0.35; |1s|≤%2.5; 2.slot aynı yön puan≥90',
+      entry: '40x VUR KAÇ: TP1 +%0.55 (%45 cebe), max 40dk; slot2 zorunlu karşı yön (L+S); giriş filtreleri açık',
       book: 'OBI veto',
       judge: 'açık',
       flow: 'son 12 mum',
@@ -245,10 +246,11 @@ function loadSettings() {
     clean.marginPerTrade = 15;
     clean.leverage = 40;
     clean.slPct = 0.80;
-    clean.bePct = 0.38;
-    clean.tp1Pct = 0.85;
-    clean.tp2Pct = 1.35;
-    clean.moonPct = 3.00;
+    clean.bePct = 0.32;
+    clean.tp1Pct = 0.55;
+    clean.tp2Pct = 0.95;
+    clean.moonPct = 1.75;
+    clean.maxTradeMin = 40;
     Object.assign(CONFIG, clean);
     rememberUserRisk();
     settingsCustomized = true;
@@ -1549,7 +1551,6 @@ async function scanLoop() {
 
         if (isLongPump || isShortDump) {
           const side = isLongPump ? "LONG" : "SHORT";
-          const CORRELATED_SIDE_MIN_SCORE = 90;
 
           let scoutInfo = null;
           if (k3m && k3m.length >= 8) {
@@ -1645,16 +1646,10 @@ async function scanLoop() {
             continue;
           }
 
-          const flowBiasPre = side === 'LONG' ? effectiveTaker : (100 - effectiveTakerShort);
-          const entryScorePre =
-            Math.abs(chg1hCalc) * 22 +
-            prevVolMult * 12 +
-            Math.min(data.volM || 0, 80) * 0.35 +
-            flowBiasPre * 0.15;
           const openSameSide = activePositions.filter((p) => p.side === side);
-          if (openSameSide.length > 0 && entryScorePre < CORRELATED_SIDE_MIN_SCORE) {
-            addLog(`🛑 [KORELASYON VETO]: ${sym} ${side} — ${openSameSide.map((p) => p.symbol).join('+')} zaten açık (puan ${entryScorePre.toFixed(0)} < ${CORRELATED_SIDE_MIN_SCORE}).`, 'WARN');
-            shadow('CORRELATED_SIDE', { entryScore: Number(entryScorePre.toFixed(0)) });
+          if (openSameSide.length > 0) {
+            addLog(`🛑 [VUR KAÇ HEDGE]: ${sym} ${side} — slot dolu (${openSameSide.map((p) => `${p.symbol} ${p.side}`).join(', ')}). 2. slot sadece karşı yön.`, 'WARN');
+            shadow('HEDGE_SIDE_REQUIRED');
             continue;
           }
 
@@ -1764,17 +1759,14 @@ async function scanLoop() {
     }
 
     if (scanEntryCandidates.length > 0 && activePositions.length < CONFIG.maxSlots) {
-      const CORRELATED_SIDE_MIN_SCORE = 90;
       scanEntryCandidates.sort((a, b) => b.entryScore - a.entryScore);
       const openSides = activePositions.map((p) => p.side);
-      const allSameSideOpen = openSides.length > 0 && openSides.every((s) => s === openSides[0]);
       const pick = scanEntryCandidates.find((c) => {
-        if (!allSameSideOpen) return true;
-        if (c.side !== openSides[0]) return true;
-        return c.entryScore >= CORRELATED_SIDE_MIN_SCORE;
+        if (openSides.length === 0) return true;
+        return c.side !== openSides[0];
       });
       if (!pick) {
-        addLog(`⏸️ Aynı yönde ikinci slot için yeterli puanlı aday yok (min ${CORRELATED_SIDE_MIN_SCORE}).`, 'INFO');
+        addLog(`⏸️ Vur kaç: karşı yön aday yok (${openSides[0]} açık — diğer yön bekleniyor).`, 'INFO');
       } else {
       activePositions.push(pick.position);
       activeSyms.add(pick.sym);
@@ -1909,7 +1901,8 @@ async function fastRiskLoop() {
       if (!exitReason && !pos.tp1Taken && (move >= tp1Goal || nMove >= tp1Goal)) {
         pos.tp1Taken = true;
         pos.initialMargin = pos.initialMargin || pos.margin;
-        const closedMargin = Number((pos.initialMargin * 0.30).toFixed(4));
+        const tp1CloseFrac = Math.min(0.55, Math.max(0.30, Number(CONFIG.tp1ClosePct) || 0.45));
+        const closedMargin = Number((pos.initialMargin * tp1CloseFrac).toFixed(4));
         const closedNominal = closedMargin * pos.leverage;
         const closedFee = closedNominal * CONFIG.feeRate * 2;
         const tp1Profit = (closedNominal * (move / 100)) - closedFee;
@@ -1930,7 +1923,7 @@ async function fastRiskLoop() {
         pos.stopPrice = lockSpot(0.12);
         stateChanged = true;
 
-        addLog(`💰 [TP1 ALINDI] ${pos.symbol} %30 pozisyon kapatıldı. +${tp1Profit.toFixed(2)} kâr cebe indi. Kalan %70 runner (max ${CONFIG.maxTradeMin || 55} dk).`, 'TRADE');
+        addLog(`💰 [TP1 VUR KAÇ] ${pos.symbol} %${Math.round(tp1CloseFrac * 100)} kapatıldı. +${tp1Profit.toFixed(2)} cebe. Runner max ${CONFIG.maxTradeMin || 40} dk.`, 'TRADE');
       }
 
       // ========================================================
@@ -1974,8 +1967,10 @@ async function fastRiskLoop() {
         targetStop = lockSpot(Math.max(0.72, mfe - 0.25));
       } else if (pos.tp1Taken && (mfe >= 0.95 || nMfe >= 0.95)) {
         targetStop = lockSpot(Math.max(0.45, mfe - 0.28));
-      } else if (mfe >= 0.85 || nMfe >= 0.85) {
-        targetStop = lockSpot(0.55);
+      } else if (mfe >= 0.55 || nMfe >= 0.55) {
+        targetStop = lockSpot(Math.max(0.32, mfe - 0.18));
+      } else if (mfe >= 0.45 || nMfe >= 0.45) {
+        targetStop = lockSpot(0.22);
       }
 
       if (targetStop) {
@@ -1994,7 +1989,7 @@ async function fastRiskLoop() {
       // ========================================================
       // 🎯 5. MOONSHOT HEDEFİ (+%2.00 Spot ile Runner Tam Kapat!)
       // ========================================================
-      const moonGoal = Math.max(1.80, pos.moonPct || CONFIG.moonPct || 2.00);
+      const moonGoal = Math.max(1.20, pos.moonPct || CONFIG.moonPct || 1.75);
       if (!exitReason && nMove >= moonGoal) {
         exitReason = (pos.tp1Taken || pos.tp2Taken)
           ? `🎯 KADEMELİ MOONSHOT ALINDI (TP1+TP2+Runner: +%${pos.roi.toFixed(1)} ROI / +%${move.toFixed(2)} Spot)`
@@ -2004,10 +1999,10 @@ async function fastRiskLoop() {
       // ========================================================
       // 🏆 6. ZİRVE KÂR NEŞTERİ (TP1/TP2 SONRASI +%0.62+ ZİRVEDEN %0.18 GERİ ÇEKİLMEDE ANINDA CEBE İNDİR!)
       // ========================================================
-      if (!exitReason && (pos.tp1Taken || pos.tp2Taken) && mfe >= 1.05 && move >= 0.55) {
-        const pullbackLimit = mfe >= 1.30 ? 0.32 : (mfe >= 0.95 ? 0.28 : 0.24);
+      if (!exitReason && (pos.tp1Taken || pos.tp2Taken) && mfe >= 0.58 && move >= 0.28) {
+        const pullbackLimit = mfe >= 1.05 ? 0.26 : (mfe >= 0.75 ? 0.18 : 0.12);
         if ((mfe - move) >= pullbackLimit) {
-          exitReason = `🏆 TP CEPTE + Zirve Kâr Neşteri (+%${pos.roi.toFixed(1)} ROI / Zirve: +%${mfe.toFixed(2)} Spot)`;
+          exitReason = `⚡ Vur Kaç — TP cepte + geri çekilme (+%${pos.roi.toFixed(1)} ROI / Zirve: +%${mfe.toFixed(2)})`;
         }
       }
 
@@ -2015,13 +2010,13 @@ async function fastRiskLoop() {
       // ⏱️ 7. ÖLÜ İŞLEM NEŞTERİ (Dead Trade Scalpel)
       // ========================================================
       // İvmesiz kalan ölü işlemleri saatlerce bekleyip tam stop (-$2.50) yemek yerine erkenden küçük bir çizikle (-%0.25 spot / -$0.75) keser!
-      if (!exitReason && !pos.tp1Taken && mfe >= 0.35 && move <= 0.02) {
+      if (!exitReason && !pos.tp1Taken && mfe >= 0.40 && move <= 0.04) {
         exitReason = `⏱️ Kâr geri verildi (Zirve: +%${mfe.toFixed(2)} / girişe döndü)`;
       }
 
-      // TP1 (%0.85) gelmeden zirve %0.70+ gördüyse: 15dk sonra kısmi kilit veya geri verme kesimi (ZRO dersi)
-      if (!exitReason && !pos.tp1Taken && durMin >= 15 && (mfe >= 0.70 || nMfe >= 0.70)) {
-        if (!pos.midPartialTaken && move >= 0.50 && move < tp1Goal) {
+      // TP1 gelmeden zirve gördüyse: vur kaç kısmi (düşük eşik)
+      if (!exitReason && !pos.tp1Taken && durMin >= 8 && (mfe >= 0.48 || nMfe >= 0.48)) {
+        if (!pos.midPartialTaken && move >= 0.38 && move < tp1Goal) {
           pos.midPartialTaken = true;
           pos.initialMargin = pos.initialMargin || pos.margin;
           const closedMargin = Number((pos.initialMargin * 0.25).toFixed(4));
@@ -2045,11 +2040,11 @@ async function fastRiskLoop() {
         }
       }
 
-      const maxHold = Number(CONFIG.maxTradeMin) || 55;
+      const maxHold = Number(CONFIG.maxTradeMin) || 40;
       if (!exitReason && durMin >= maxHold) {
         exitReason = pos.tp1Taken
-          ? `⏱️ 1 Saat Runner Kapandı (MFE: +%${mfe.toFixed(2)} / Anlık: +%${move.toFixed(2)})`
-          : `⏱️ 1 Saat Süre Doldu (MFE: +%${mfe.toFixed(2)} / Anlık: +%${move.toFixed(2)})`;
+          ? `⏱️ Vur Kaç runner süresi doldu (${maxHold}dk / MFE: +%${mfe.toFixed(2)})`
+          : `⏱️ Vur Kaç süre doldu (${maxHold}dk / MFE: +%${mfe.toFixed(2)})`;
       }
 
       if (!exitReason && !pos.beLocked) {
@@ -4103,7 +4098,7 @@ const server = http.createServer(async (req, res) => {
     history = [];
     coinLossCount = {};
     coinCooldowns = {};
-    DYNAMIC.mode = 'SAATLIK_IVM';
+    DYNAMIC.mode = 'VUR_KAC';
     DYNAMIC.vol3hMin = 1.0;
     DYNAMIC.candidateSlice = 35;
     circuitOn = false;
