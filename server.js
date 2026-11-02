@@ -117,7 +117,7 @@ function engineSnapshot() {
     userSlots: userRisk.maxSlots,
     userMargin: userRisk.marginPerTrade,
     gates: {
-      entry: 'Saat ivme + 3dk kırılım hacim LONG≥1.05x; ölü neşter 12dk/−%0.35; ivmesiz 25dk; rotasyon 18dk',
+      entry: 'SHORT 1s≤−%1 & hacim≥1.05x; LONG gün+%2.5 üstü 3dk≥%0.35; |1s|≤%2.5; 2.slot aynı yön puan≥90',
       book: 'OBI veto',
       judge: 'açık',
       flow: 'son 12 mum',
@@ -1390,7 +1390,7 @@ async function scanLoop() {
 
         // Gün %12.5'i geçtiyse ve 3dk salınım stopun içindeyse girilmez. Stop gürültüye denk gelir.
         const hourImpulseLong = chg1hCalc >= 0.25 && chg1hCalc <= 7.5;
-        const hourImpulseShort = chg1hCalc <= -0.80 && chg1hCalc >= -7.5;
+        const hourImpulseShort = chg1hCalc <= -1.00 && chg1hCalc >= -7.5;
 
         const radarOkLong =
           !sig.includes("ŞELALE") &&
@@ -1509,8 +1509,9 @@ async function scanLoop() {
         const extendedDayLongOk =
           chg24Val <= 8.0 ||
           (chg1hCalc >= 0.45 && effectiveTaker >= 52.0 && prevMovePct >= 0.28);
+        const hotDayLongBreakOk = chg24Val <= 2.5 || prevMovePct >= 0.35;
         const weakHourLowVolLong = chg1hCalc < 0.50 && prevVolMult < 1.35;
-        if (hasRealLiquidity && noWickLong && hasBuyerDominance && radarOkLong && continuationLong && extendedDayLongOk && !weakHourLowVolLong) {
+        if (hasRealLiquidity && noWickLong && hasBuyerDominance && radarOkLong && continuationLong && extendedDayLongOk && hotDayLongBreakOk && !weakHourLowVolLong) {
           if (prevVolMult >= 1.05 && spikeVolMult <= 6.0) {
             isLongPump = true;
             isRocketSignal = true;
@@ -1520,7 +1521,7 @@ async function scanLoop() {
 
         let isShortDump = false;
         if (hasRealLiquidity && noWickShort && hasSellerDominance && radarOkShort && continuationShort) {
-          if (prevVolMult >= 0.80 && spikeVolMult <= 6.0) {
+          if (prevVolMult >= 1.05 && spikeVolMult <= 6.0) {
             isShortDump = true;
             radarTag = `[🩸 SAAT İVMESİ SHORT | 1s: %${chg1hCalc.toFixed(2)} | Kapanan 3dk: %${prevMovePct.toFixed(2)} | 24s: %${chg24Val.toFixed(1)} | Hacim: ${prevVolMult.toFixed(2)}x | Taker: %${effectiveTakerShort.toFixed(0)}]`;
           }
@@ -1529,15 +1530,26 @@ async function scanLoop() {
         if (!isLongPump && !isShortDump) {
           if (radarOkLong && continuationLong && !extendedDayLongOk) {
             shadow('EXTENDED_DAY_LONG', { chg24h: Number(chg24Val.toFixed(1)), chg1h: Number(chg1hCalc.toFixed(2)) });
-          } else if (radarOkLong && continuationLong && (prevVolMult < 1.05 || weakHourLowVolLong)) {
+          } else if (radarOkLong && continuationLong && (prevVolMult < 1.05 || weakHourLowVolLong || !hotDayLongBreakOk)) {
+            shadow('LOW_BREAKOUT_VOL', { volMult: Number(prevVolMult.toFixed(2)), chg1h: Number(chg1hCalc.toFixed(2)) });
+          } else if (radarOkShort && continuationShort && prevVolMult < 1.05) {
             shadow('LOW_BREAKOUT_VOL', { volMult: Number(prevVolMult.toFixed(2)), chg1h: Number(chg1hCalc.toFixed(2)) });
           } else {
             shadow('NO_TRIGGER', { volMult: Number(volMult.toFixed(2)) });
           }
         }
 
+        if (Math.abs(chg1hCalc) > 2.5) {
+          if (isLongPump || isShortDump) {
+            shadow('HOUR_CLIMAX', { chg1h: Number(chg1hCalc.toFixed(2)) });
+          }
+          isLongPump = false;
+          isShortDump = false;
+        }
+
         if (isLongPump || isShortDump) {
           const side = isLongPump ? "LONG" : "SHORT";
+          const CORRELATED_SIDE_MIN_SCORE = 90;
 
           let scoutInfo = null;
           if (k3m && k3m.length >= 8) {
@@ -1630,6 +1642,19 @@ async function scanLoop() {
           }
 
           if (activePositions.length >= CONFIG.maxSlots) {
+            continue;
+          }
+
+          const flowBiasPre = side === 'LONG' ? effectiveTaker : (100 - effectiveTakerShort);
+          const entryScorePre =
+            Math.abs(chg1hCalc) * 22 +
+            prevVolMult * 12 +
+            Math.min(data.volM || 0, 80) * 0.35 +
+            flowBiasPre * 0.15;
+          const openSameSide = activePositions.filter((p) => p.side === side);
+          if (openSameSide.length > 0 && entryScorePre < CORRELATED_SIDE_MIN_SCORE) {
+            addLog(`🛑 [KORELASYON VETO]: ${sym} ${side} — ${openSameSide.map((p) => p.symbol).join('+')} zaten açık (puan ${entryScorePre.toFixed(0)} < ${CORRELATED_SIDE_MIN_SCORE}).`, 'WARN');
+            shadow('CORRELATED_SIDE', { entryScore: Number(entryScorePre.toFixed(0)) });
             continue;
           }
 
@@ -1739,8 +1764,18 @@ async function scanLoop() {
     }
 
     if (scanEntryCandidates.length > 0 && activePositions.length < CONFIG.maxSlots) {
+      const CORRELATED_SIDE_MIN_SCORE = 90;
       scanEntryCandidates.sort((a, b) => b.entryScore - a.entryScore);
-      const pick = scanEntryCandidates[0];
+      const openSides = activePositions.map((p) => p.side);
+      const allSameSideOpen = openSides.length > 0 && openSides.every((s) => s === openSides[0]);
+      const pick = scanEntryCandidates.find((c) => {
+        if (!allSameSideOpen) return true;
+        if (c.side !== openSides[0]) return true;
+        return c.entryScore >= CORRELATED_SIDE_MIN_SCORE;
+      });
+      if (!pick) {
+        addLog(`⏸️ Aynı yönde ikinci slot için yeterli puanlı aday yok (min ${CORRELATED_SIDE_MIN_SCORE}).`, 'INFO');
+      } else {
       activePositions.push(pick.position);
       activeSyms.add(pick.sym);
       lastTradeOpenTime = Date.now();
@@ -1751,6 +1786,7 @@ async function scanLoop() {
         `🚀 POZİSYON AÇILDI: [${pick.side}] ${pick.sym} @ $${pick.curP.toFixed(4)} | ${pick.radarTag} | Teminat: $${pick.tradeMargin.toFixed(1)} | SL: $${pick.stopPrice.toFixed(4)} | TP1: +%${(pick.tradeTp1Pct * pick.volK).toFixed(2)} | TP2: +%${(pick.tradeTp2Pct * pick.volK).toFixed(2)} | Moon: +%${(pick.tradeMoonPct * pick.volK).toFixed(2)} | Tarama puanı: ${pick.entryScore.toFixed(0)}`,
         'TRADE'
       );
+      }
     }
   } catch (err) {
     console.error("❌ scanLoop Hatası:", err);
