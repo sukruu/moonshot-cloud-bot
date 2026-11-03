@@ -38,7 +38,7 @@ let CONFIG = {
   maxTradeMin: 32,           // Uzun tutma = geri verme
   tp1ClosePct: 0.55,         // TP1’de %55 cebe
   minEntryScore: 100,        // A+ only: zayıf aday açılmaz
-  maxTradesPerDay: 4,        // Günde en fazla 4 işlem (STRK/XPL kalitesi)
+  maxTradesPerDay: 0,        // 0 = günlük limit yok
   aPlusOnly: true,
   feeRate: 0.0005,           // Binance Futures taker %0.05 (TEK YÖN)
   scanIntervalMs: 3000,
@@ -121,7 +121,7 @@ function engineSnapshot() {
     userSlots: userRisk.maxSlots,
     userMargin: userRisk.marginPerTrade,
     gates: {
-      entry: 'A+ ONLY: günde max 4, puan≥100, long 3dk≥%0.5+hacim≥1.45x | short 3dk≤−%0.4+1s≤−%1+hacim≥1.45x',
+      entry: 'A+ giriş (puan≥100): long 3dk≥%0.5+hacim≥1.45x | short 3dk≤−%0.4+1s≤−%1 — günlük limit yok',
       book: 'OBI veto',
       judge: 'açık',
       flow: 'son 12 mum',
@@ -1182,11 +1182,11 @@ async function scanLoop() {
       addLog('⏸️ 3 ardışık zarar — 25 dk yeni işlem yok (kasa koruma).', 'RISK');
       return;
     }
-    const maxDay = Number(CONFIG.maxTradesPerDay) || 4;
-    if (countTradesToday() >= maxDay) {
+    const maxDay = Number(CONFIG.maxTradesPerDay) || 0;
+    if (maxDay > 0 && countTradesToday() >= maxDay) {
       if (Date.now() - lastScanHeartbeat > 120000) {
         lastScanHeartbeat = Date.now();
-        addLog(`⏸️ A+ günlük limit (${maxDay} işlem) doldu — yarın / yeni gün bekleniyor.`, 'INFO');
+        addLog(`⏸️ Günlük limit (${maxDay} işlem) doldu.`, 'INFO');
       }
       return;
     }
