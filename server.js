@@ -121,7 +121,7 @@ function engineSnapshot() {
     userSlots: userRisk.maxSlots,
     userMargin: userRisk.marginPerTrade,
     gates: {
-      entry: 'A+ giriş (puan≥100): long 3dk≥%0.5+hacim≥1.45x | short 3dk≤−%0.4+1s≤−%1 — günlük limit yok',
+      entry: 'A+ giriş puan≥100; işlem arası ~22sn; 4 zararda 8dk pause; koin cooldown kısa',
       book: 'OBI veto',
       judge: 'açık',
       flow: 'son 12 mum',
@@ -1176,10 +1176,10 @@ async function scanLoop() {
     if (Date.now() < tradingCooldownUntil) {
       return;
     }
-    const recentLossStreak = (history || []).slice(0, 3).filter((t) => (t.pnl || 0) < -0.5).length;
-    if (recentLossStreak >= 3) {
-      tradingCooldownUntil = Math.max(tradingCooldownUntil, Date.now() + 25 * 60 * 1000);
-      addLog('⏸️ 3 ardışık zarar — 25 dk yeni işlem yok (kasa koruma).', 'RISK');
+    const recentLossStreak = (history || []).slice(0, 4).filter((t) => (t.pnl || 0) < -0.5).length;
+    if (recentLossStreak >= 4) {
+      tradingCooldownUntil = Math.max(tradingCooldownUntil, Date.now() + 8 * 60 * 1000);
+      addLog('⏸️ 4 ardışık zarar — 8 dk duraklama.', 'RISK');
       return;
     }
     const maxDay = Number(CONFIG.maxTradesPerDay) || 0;
@@ -1190,7 +1190,7 @@ async function scanLoop() {
       }
       return;
     }
-    const gapMs = recentLossStreak >= 1 ? 120000 : (CONFIG.aPlusOnly ? 90000 : 45000);
+    const gapMs = recentLossStreak >= 2 ? 45000 : 22000;
     if (Date.now() - lastTradeOpenTime < gapMs) {
       return;
     }
@@ -1708,7 +1708,7 @@ async function scanLoop() {
           } catch(e) {}
 
           if (!judgeClearance || judgeClearance.approved !== true) {
-            coinCooldowns[sym] = now + (5 * 60 * 1000);
+            coinCooldowns[sym] = now + (2 * 60 * 1000);
             addLog(`🛡️ [YARGIÇ VETO]: ${sym} ${side} engellendi — ${(judgeClearance && judgeClearance.reason) || 'yargıç cevap vermedi'}`, 'WARN');
             shadow('JUDGE_VETO');
             continue;
@@ -2252,15 +2252,15 @@ function closeTrade(pos, exitReason) {
     exitReason.includes('İvmesizlik') ||
     exitReason.includes('İvme Tükendi');
   if (totalTradePnl < -0.5) {
-    const streak = (history || []).slice(0, 2).filter((t) => (t.pnl || 0) < -0.5).length;
-    if (streak >= 2) {
-      tradingCooldownUntil = Math.max(tradingCooldownUntil, now + 20 * 60 * 1000);
-      addLog('⏸️ Ardışık zarar — 20 dk işlem açma duraklatıldı.', 'RISK');
+    const streak = (history || []).slice(0, 3).filter((t) => (t.pnl || 0) < -0.5).length;
+    if (streak >= 3) {
+      tradingCooldownUntil = Math.max(tradingCooldownUntil, now + 6 * 60 * 1000);
+      addLog('⏸️ 3 ardışık zarar — 6 dk duraklama.', 'RISK');
     }
   }
   if (isRealLoss) {
     coinLossCount[pos.symbol] = (coinLossCount[pos.symbol] || 0) + 1;
-    const restMin = isMomentumScalpel ? 90 : 45;
+    const restMin = isMomentumScalpel ? 30 : 18;
     if (coinLossCount[pos.symbol] >= 2) {
       coinCooldowns[pos.symbol] = now + (3 * 60 * 60 * 1000);
       addLog(`🚫 ${pos.symbol} ardışık ${coinLossCount[pos.symbol]} zarar verdi — koin 3 saat kilitlendi!`, 'TRADE');
@@ -2270,9 +2270,9 @@ function closeTrade(pos, exitReason) {
     }
   } else {
     coinLossCount[pos.symbol] = 0;
-    const winLockMin = 30;
+    const winLockMin = 12;
     coinCooldowns[pos.symbol] = now + (winLockMin * 60 * 1000);
-    addLog(`🔒 ${pos.symbol} dalgası tamamlandı (${totalTradePnl >= 0 ? '+' : ''}${totalTradePnl.toFixed(2)}) — 30 dakika dinlendiriliyor.`, 'INFO');
+    addLog(`🔒 ${pos.symbol} dalgası tamamlandı (${totalTradePnl >= 0 ? '+' : ''}${totalTradePnl.toFixed(2)}) — ${winLockMin} dk dinlendiriliyor.`, 'INFO');
   }
 
   const tradeRecord = {
