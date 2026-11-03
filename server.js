@@ -37,7 +37,9 @@ let CONFIG = {
   tp2Pct: 0.82,              // İkinci dilim
   maxTradeMin: 32,           // Uzun tutma = geri verme
   tp1ClosePct: 0.55,         // TP1’de %55 cebe
-  minEntryScore: 92,         // Zayıf aday açılmaz
+  minEntryScore: 100,        // A+ only: zayıf aday açılmaz
+  maxTradesPerDay: 4,        // Günde en fazla 4 işlem (STRK/XPL kalitesi)
+  aPlusOnly: true,
   feeRate: 0.0005,           // Binance Futures taker %0.05 (TEK YÖN)
   scanIntervalMs: 3000,
   riskIntervalMs: 1000,
@@ -49,7 +51,7 @@ let DYNAMIC = {
   vol3hMin: 0.8,
   candidateSlice: 30,
   regime: 'SCALP',
-  mode: 'VUR_KAC',
+  mode: 'A_PLUS',
   updatedAt: 0
 };
 
@@ -106,7 +108,7 @@ function applyCircuitBreaker() {
   } else {
     CONFIG.maxSlots = userRisk.maxSlots || 2;
     CONFIG.marginPerTrade = dynamicMargin;
-    DYNAMIC.mode = 'VUR_KAC';
+    DYNAMIC.mode = 'A_PLUS';
   }
 }
 
@@ -119,7 +121,7 @@ function engineSnapshot() {
     userSlots: userRisk.maxSlots,
     userMargin: userRisk.marginPerTrade,
     gates: {
-      entry: 'KAR: TP1 %0.48 (%55 cebe), min puan 92, BTC uyumu, 3dk kırılım≥%0.32, hacim≥1.25x, gün long≤%8',
+      entry: 'A+ ONLY: günde max 4, puan≥100, long 3dk≥%0.5+hacim≥1.45x | short 3dk≤−%0.4+1s≤−%1+hacim≥1.45x',
       book: 'OBI veto',
       judge: 'açık',
       flow: 'son 12 mum',
@@ -191,6 +193,44 @@ let isBotActive = true;
 const TR_TZ = 'Europe/Istanbul';
 function trTime(ms) { return new Date(ms || Date.now()).toLocaleTimeString('tr-TR', { timeZone: TR_TZ }); }
 function trDateTime(ms) { return new Date(ms || Date.now()).toLocaleString('tr-TR', { timeZone: TR_TZ }); }
+
+function istanbulDayKey(ms = Date.now()) {
+  return new Date(ms).toLocaleDateString('en-CA', { timeZone: TR_TZ });
+}
+
+function countTradesToday() {
+  const today = istanbulDayKey();
+  return (history || []).filter((h) => {
+    if (h.entryTimeMs) return istanbulDayKey(h.entryTimeMs) === today;
+    const ds = h.entryTimeStr || h.dateFullStr || '';
+    const m = ds.match(/(\d{2})\.(\d{2})\.(\d{4})/);
+    if (!m) return false;
+    return `${m[3]}-${m[2]}-${m[1]}` === today;
+  }).length;
+}
+
+function passesAPlusEntry(side, ctx) {
+  if (!CONFIG.aPlusOnly) return true;
+  const {
+    prevMovePct, prevVolMult, chg1hCalc, chg3hVal, sig
+  } = ctx;
+  const whaleLong = sig.includes('BALİNA') || sig.includes('GÜÇLÜ BOĞA') || sig.includes('ROKET');
+  const whaleShort = sig.includes('BALİNA') || sig.includes('GÜÇLÜ AYI') || sig.includes('AYI');
+  if (side === 'LONG') {
+    return (
+      prevMovePct >= 0.50 &&
+      prevVolMult >= 1.45 &&
+      (prevVolMult >= 1.85 || whaleLong) &&
+      (chg1hCalc >= 0.30 || (chg3hVal >= 2.5 && prevMovePct >= 0.55))
+    );
+  }
+  return (
+    prevMovePct <= -0.40 &&
+    prevVolMult >= 1.45 &&
+    chg1hCalc <= -1.0 &&
+    (prevVolMult >= 2.2 || whaleShort)
+  );
+}
 
 function addLog(msg, type = "INFO") {
   const time = trTime();
@@ -1142,7 +1182,15 @@ async function scanLoop() {
       addLog('⏸️ 3 ardışık zarar — 25 dk yeni işlem yok (kasa koruma).', 'RISK');
       return;
     }
-    const gapMs = recentLossStreak >= 1 ? 90000 : 45000;
+    const maxDay = Number(CONFIG.maxTradesPerDay) || 4;
+    if (countTradesToday() >= maxDay) {
+      if (Date.now() - lastScanHeartbeat > 120000) {
+        lastScanHeartbeat = Date.now();
+        addLog(`⏸️ A+ günlük limit (${maxDay} işlem) doldu — yarın / yeni gün bekleniyor.`, 'INFO');
+      }
+      return;
+    }
+    const gapMs = recentLossStreak >= 1 ? 120000 : (CONFIG.aPlusOnly ? 90000 : 45000);
     if (Date.now() - lastTradeOpenTime < gapMs) {
       return;
     }
@@ -1564,6 +1612,17 @@ async function scanLoop() {
 
         if (isLongPump || isShortDump) {
           const side = isLongPump ? "LONG" : "SHORT";
+          const aPlusOk = passesAPlusEntry(side, {
+            prevMovePct, prevVolMult, chg1hCalc, chg3hVal, sig
+          });
+          if (!aPlusOk) {
+            shadow('A_PLUS_VETO', {
+              prev3m: Number(prevMovePct.toFixed(2)),
+              volMult: Number(prevVolMult.toFixed(2)),
+              chg1h: Number(chg1hCalc.toFixed(2))
+            });
+            continue;
+          }
 
           let scoutInfo = null;
           if (k3m && k3m.length >= 8) {
@@ -1665,7 +1724,7 @@ async function scanLoop() {
             prevVolMult * 12 +
             Math.min(data.volM || 0, 80) * 0.35 +
             flowBiasPre * 0.15;
-          const minScore = Number(CONFIG.minEntryScore) || 92;
+          const minScore = Number(CONFIG.minEntryScore) || 100;
           if (entryScorePre < minScore) {
             shadow('LOW_ENTRY_SCORE', { entryScore: Number(entryScorePre.toFixed(0)) });
             continue;
@@ -1751,9 +1810,9 @@ async function scanLoop() {
             tp1Pct: tradeTp1Pct,
             tp2Pct: tradeTp2Pct,
             moonPct: tradeMoonPct,
-            convictionTier: isRocketSignal ? 'A_PLUS' : 'B_STANDARD',
-            convictionScore: isRocketSignal ? 90 : 75,
-            convictionLabel: isRocketSignal ? '🚀 MARSCOIN ROKET' : '🐋 BALİNA MOMENTUM',
+            convictionTier: 'A_PLUS',
+            convictionScore: 95,
+            convictionLabel: '🏆 A+ SNIPER (STRK/XPL profili)',
             radarTag: radarTag,
             chg3h: chg3hVal,
             vol3hM: vol3hCheck,
@@ -2221,6 +2280,7 @@ function closeTrade(pos, exitReason) {
     time: trTime(),
     dateFullStr: trDateTime(),
     entryTimeStr: trDateTime(pos.entryTime),
+    entryTimeMs: pos.entryTime || now,
     symbol: pos.symbol,
     side: pos.side,
     entryPrice: pos.entryPrice,
@@ -4136,7 +4196,7 @@ const server = http.createServer(async (req, res) => {
     history = [];
     coinLossCount = {};
     coinCooldowns = {};
-    DYNAMIC.mode = 'VUR_KAC';
+    DYNAMIC.mode = 'A_PLUS';
     DYNAMIC.vol3hMin = 1.0;
     DYNAMIC.candidateSlice = 35;
     circuitOn = false;
