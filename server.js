@@ -1847,7 +1847,7 @@ async function scanLoop() {
     if (scanEntryCandidates.length > 0 && activePositions.length < CONFIG.maxSlots) {
       scanEntryCandidates.sort((a, b) => b.entryScore - a.entryScore);
       const openSides = activePositions.map((p) => p.side);
-      const minScore = Number(CONFIG.minEntryScore) || 92;
+      const minScore = Number(CONFIG.minEntryScore) || 100;
       const chopBtc = Math.abs(btc15mNumeric) < 0.12;
       const pick = scanEntryCandidates.find((c) => {
         if (c.entryScore < minScore) return false;
