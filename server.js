@@ -121,7 +121,7 @@ function engineSnapshot() {
     userSlots: userRisk.maxSlots,
     userMargin: userRisk.marginPerTrade,
     gates: {
-      entry: 'MARSCOIN SÜRÜ: 3 slot, 24s ±%35, 3dk kırılım, hacim ≥0.65x, TP1 +%0.48',
+      entry: 'MARSCOIN SÜRÜ + tarayıcı kalkanı: ters taker/hacim yok, RSI tepe-dip yok, BTC 15m net tersse yok',
       book: 'OBI veto',
       judge: 'açık',
       flow: 'son 12 mum',
@@ -207,6 +207,25 @@ function countTradesToday() {
     if (!m) return false;
     return `${m[3]}-${m[2]}-${m[1]}` === today;
   }).length;
+}
+
+function scannerShield(side, ctx) {
+  const rsi = Number(ctx.rsi3m);
+  const taker = Number(ctx.taker);
+  const btc = Number(ctx.btc15);
+  const vol = Number(ctx.volMult);
+  if (side === 'LONG') {
+    if (rsi > 74) return `RSI tepe (${rsi.toFixed(0)})`;
+    if (taker < 48) return `taker ters (%${taker.toFixed(0)} alıcı)`;
+    if (btc < -0.20) return `BTC 15m düşüş (%${btc.toFixed(2)})`;
+    if (vol >= 2.2 && taker < 50) return `hacim ters yönde (${vol.toFixed(1)}x)`;
+  } else {
+    if (rsi < 26) return `RSI dip (${rsi.toFixed(0)})`;
+    if (taker > 54) return `taker ters (%${taker.toFixed(0)} alıcı)`;
+    if (btc > 0.20) return `BTC 15m yükseliş (%${btc.toFixed(2)})`;
+    if (vol >= 2.2 && taker > 52) return `hacim ters yönde (${vol.toFixed(1)}x)`;
+  }
+  return null;
 }
 
 function passesAPlusEntry(side, ctx) {
@@ -1596,6 +1615,16 @@ async function scanLoop() {
 
         if (isLongPump || isShortDump) {
           const side = isLongPump ? "LONG" : "SHORT";
+          const shieldWhy = scannerShield(side, {
+            rsi3m,
+            taker: side === 'LONG' ? effectiveTaker : effectiveTakerShort,
+            btc15: btc15mNumeric,
+            volMult
+          });
+          if (shieldWhy) {
+            shadow('SCANNER_SHIELD', { why: shieldWhy });
+            continue;
+          }
 
           let scoutInfo = null;
           if (k3m && k3m.length >= 8) {
