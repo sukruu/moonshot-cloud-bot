@@ -37,7 +37,7 @@ let CONFIG = {
   tp2Pct: 0.82,              // İkinci dilim
   maxTradeMin: 32,           // Uzun tutma = geri verme
   tp1ClosePct: 0.55,         // TP1’de %55 cebe
-  minEntryScore: 100,        // A+ only: zayıf aday açılmaz
+  minEntryScore: 88,         // Taze kırılım; bitmiş şelale/roket yok
   maxTradesPerDay: 0,        // 0 = günlük limit yok
   aPlusOnly: true,
   feeRate: 0.0005,           // Binance Futures taker %0.05 (TEK YÖN)
@@ -121,7 +121,7 @@ function engineSnapshot() {
     userSlots: userRisk.maxSlots,
     userMargin: userRisk.marginPerTrade,
     gates: {
-      entry: 'A+ giriş puan≥100; işlem arası ~22sn; 4 zararda 8dk pause; koin cooldown kısa',
+      entry: 'Taze kırılım puan≥88; 3s zaten ≤−%5 veya gün ≤−%8 short yok; 1s ≥+%2.2 long yok',
       book: 'OBI veto',
       judge: 'açık',
       flow: 'son 12 mum',
@@ -217,18 +217,20 @@ function passesAPlusEntry(side, ctx) {
   const whaleLong = sig.includes('BALİNA') || sig.includes('GÜÇLÜ BOĞA') || sig.includes('ROKET');
   const whaleShort = sig.includes('BALİNA') || sig.includes('GÜÇLÜ AYI') || sig.includes('AYI');
   if (side === 'LONG') {
+    if (chg1hCalc >= 2.2) return false;
     return (
-      prevMovePct >= 0.50 &&
-      prevVolMult >= 1.45 &&
-      (prevVolMult >= 1.85 || whaleLong) &&
-      (chg1hCalc >= 0.30 || (chg3hVal >= 2.5 && prevMovePct >= 0.55))
+      prevMovePct >= 0.40 &&
+      prevVolMult >= 1.20 &&
+      (prevVolMult >= 1.50 || whaleLong) &&
+      (chg1hCalc >= 0.25 || (chg3hVal >= 2.0 && prevMovePct >= 0.45))
     );
   }
+  if (chg3hVal <= -5.0 || (ctx.chg24Val || 0) <= -8.0) return false;
   return (
-    prevMovePct <= -0.40 &&
-    prevVolMult >= 1.45 &&
-    chg1hCalc <= -1.0 &&
-    (prevVolMult >= 2.2 || whaleShort)
+    prevMovePct <= -0.32 &&
+    prevVolMult >= 1.20 &&
+    chg1hCalc <= -0.85 &&
+    (prevVolMult >= 1.55 || whaleShort)
   );
 }
 
@@ -332,13 +334,32 @@ function initStorage() {
 
     if (fs.existsSync(HISTORY_FILE)) {
       history = JSON.parse(fs.readFileSync(HISTORY_FILE, 'utf8'));
-      if (Array.isArray(history) && history.length > 0) {
+      if (!Array.isArray(history)) history = [];
+      const stamp = (h) => {
+        const n = Number(h.entryTimeMs) || 0;
+        if (n > 0) return n;
+        const ds = String(h.entryTimeStr || h.dateFullStr || '');
+        const m = ds.match(/(\d{2})\.(\d{2})\.(\d{4})\s+(\d{2}):(\d{2}):(\d{2})/);
+        if (!m) return 0;
+        return Date.UTC(+m[3], +m[2] - 1, +m[1], +m[4] - 3, +m[5], +m[6]);
+      };
+      const newestMs = history.reduce((mx, h) => Math.max(mx, stamp(h)), 0);
+      const staleBook = history.length > 0 && newestMs > 0 && (Date.now() - newestMs) > 36 * 60 * 60 * 1000;
+      if (staleBook) {
+        history = [];
+        balance = CONFIG.initialBalance;
+        activePositions = [];
+        addLog('Eski işlem defteri (36 saatten eski) yok sayıldı. Kasa $100.', 'RESET');
+      } else if (history.length > 0) {
         const totalPnl = history.reduce((acc, h) => acc + (h.pnl || 0), 0);
         const activeTpPnl = Array.isArray(activePositions) ? activePositions.reduce((acc, p) => acc + (p.tp1Pnl || 0) + (p.tp2Pnl || 0), 0) : 0;
         balance = CONFIG.initialBalance + totalPnl + activeTpPnl;
       }
     }
 
+    if (history.length === 0 && activePositions.length === 0) {
+      balance = CONFIG.initialBalance;
+    }
     rebuildCoinLossHistory();
     rewriteCsvFile();
   } catch (err) {
@@ -1613,7 +1634,7 @@ async function scanLoop() {
         if (isLongPump || isShortDump) {
           const side = isLongPump ? "LONG" : "SHORT";
           const aPlusOk = passesAPlusEntry(side, {
-            prevMovePct, prevVolMult, chg1hCalc, chg3hVal, sig
+            prevMovePct, prevVolMult, chg1hCalc, chg3hVal, chg24Val, sig
           });
           if (!aPlusOk) {
             shadow('A_PLUS_VETO', {

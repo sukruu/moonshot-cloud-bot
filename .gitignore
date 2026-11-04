@@ -2,3 +2,7 @@ node_modules/
 .DS_Store
 *.log
 live_history*.csv
+trades_history.json
+trades_history.csv
+bot_state.json
+settings.json
