@@ -228,21 +228,21 @@ class JudicialAuditCourt {
         judicialScore -= 35;
         accusations.push(`3s yön ters (%${chg3raw.toFixed(1)})`);
       }
-      if (chg24 < 0.40 || chg24 > 8.0) {
+      if (chg24 < 0.40 || chg24 > 35.0) {
         judicialScore -= 35;
-        accusations.push(`24s yön ters veya tükenmiş (%${chg24.toFixed(1)}, long max %8)`);
+        accusations.push(`24s yön ters veya tükenmiş (%${chg24.toFixed(1)})`);
       }
     } else { // SHORT
       const sellTaker = 100 - taker;
-      if (sellTaker < 65.0 || sellTaker > 86.0) {
+      if (sellTaker < 50.0 || sellTaker > 86.0) {
         judicialScore -= 35;
-        accusations.push(`Satıcı delili yetersiz/sağlıksız (%${sellTaker.toFixed(1)}, min %65)`);
+        accusations.push(`Satıcı delili sağlıksız (%${sellTaker.toFixed(1)})`);
       }
       if (chg3raw >= 0) {
         judicialScore -= 35;
         accusations.push(`3s düşüş yönü yok (%${chg3raw.toFixed(1)})`);
       }
-      if (chg24 > -0.40 || chg24 < -12.5) {
+      if (chg24 > -0.40 || chg24 < -35.0) {
         judicialScore -= 35;
         accusations.push(`24s düşüş yönü yok veya tükenmiş (%${chg24.toFixed(1)})`);
       }
