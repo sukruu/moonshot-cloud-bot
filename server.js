@@ -121,7 +121,7 @@ function engineSnapshot() {
     userSlots: userRisk.maxSlots,
     userMargin: userRisk.marginPerTrade,
     gates: {
-      entry: 'MARSCOIN SÜRÜ + tarayıcı kalkanı: ters taker/hacim yok, RSI tepe-dip yok, BTC 15m net tersse yok',
+      entry: 'Sürü + salınım <%0.50, gün >%8 ise taze 3s şart, aynı koin 4 saat yok',
       book: 'OBI veto',
       judge: 'açık',
       flow: 'son 12 mum',
@@ -1578,7 +1578,10 @@ async function scanLoop() {
         const noWickShort = candleSpan > 0 ? (lowerWick / candleSpan <= 0.40) : true;
 
         const vol3hCheck = rInfo.vol3hM || ((quote90mCalc * 2) / 1e6);
-        const hasRealLiquidity = isVip || (vol3hCheck >= 0.70 && vol24 >= 1.5);
+        const hasRealLiquidity = vol3hCheck >= 0.80 && (isVip || vol24 >= 1.5);
+        const noiseOk = atr3mPct < 0.50;
+        const freshLong = chg24Val <= 8 || (chg3hVal >= 1.0 && effectiveTaker >= 65 && atr3mPct < 0.45 && curMovePct >= 0.22);
+        const freshShort = chg24Val >= -12 || (chg3hVal <= -0.80 && effectiveTakerShort <= 49 && atr3mPct < 0.50);
         const hasBuyerDominance = effectiveTaker >= 51.0 && effectiveTaker <= 86.0;
         const hasSellerDominance = effectiveTakerShort <= 49.0 && effectiveTakerShort >= 16.0;
 
@@ -1593,7 +1596,7 @@ async function scanLoop() {
 
         let isLongPump = false;
         let isRocketSignal = false;
-        if (hasRealLiquidity && noWickLong && hasBuyerDominance && radarOkLong && continuationLong) {
+        if (hasRealLiquidity && noiseOk && freshLong && noWickLong && hasBuyerDominance && radarOkLong && continuationLong) {
           if (prevMovePct >= -0.30 && volMult >= 0.65 && spikeVolMult <= 6.0) {
             isLongPump = true;
             isRocketSignal = true;
@@ -1602,7 +1605,7 @@ async function scanLoop() {
         }
 
         let isShortDump = false;
-        if (hasRealLiquidity && noWickShort && hasSellerDominance && radarOkShort && continuationShort) {
+        if (hasRealLiquidity && noiseOk && freshShort && noWickShort && hasSellerDominance && radarOkShort && continuationShort) {
           if (prevMovePct <= 0.30 && volMult >= 0.60 && spikeVolMult <= 6.0) {
             isShortDump = true;
             radarTag = `[🩸 MARSCOIN SÜRÜ SHORT | 3dk: %${curMovePct.toFixed(2)} | 24s: %${chg24Val.toFixed(1)} | Hacim: ${volMult.toFixed(2)}x | Taker: %${effectiveTakerShort.toFixed(0)}]`;
@@ -2247,17 +2250,17 @@ function closeTrade(pos, exitReason) {
   }
   if (isRealLoss) {
     coinLossCount[pos.symbol] = (coinLossCount[pos.symbol] || 0) + 1;
-    const restMin = isMomentumScalpel ? 30 : 18;
+    const restMin = 240;
     if (coinLossCount[pos.symbol] >= 2) {
-      coinCooldowns[pos.symbol] = now + (3 * 60 * 60 * 1000);
-      addLog(`🚫 ${pos.symbol} ardışık ${coinLossCount[pos.symbol]} zarar verdi — koin 3 saat kilitlendi!`, 'TRADE');
+      coinCooldowns[pos.symbol] = now + (6 * 60 * 60 * 1000);
+      addLog(`🚫 ${pos.symbol} ardışık ${coinLossCount[pos.symbol]} zarar verdi — koin 6 saat kilitlendi!`, 'TRADE');
     } else {
       coinCooldowns[pos.symbol] = now + (restMin * 60 * 1000);
       addLog(`⚠️ ${pos.symbol} zarar yazdı (${totalTradePnl.toFixed(2)}) — koin ${restMin} dakika dinlendiriliyor.`, 'TRADE');
     }
   } else {
     coinLossCount[pos.symbol] = 0;
-    const winLockMin = 12;
+    const winLockMin = 240;
     coinCooldowns[pos.symbol] = now + (winLockMin * 60 * 1000);
     addLog(`🔒 ${pos.symbol} dalgası tamamlandı (${totalTradePnl >= 0 ? '+' : ''}${totalTradePnl.toFixed(2)}) — ${winLockMin} dk dinlendiriliyor.`, 'INFO');
   }
