@@ -121,7 +121,7 @@ function engineSnapshot() {
     userSlots: userRisk.maxSlots,
     userMargin: userRisk.marginPerTrade,
     gates: {
-      entry: 'Sürü + salınım <%0.50, gün >%8 ise taze 3s şart, aynı koin 4 saat yok',
+      entry: 'Sürü + 3s hareket ≥%0.35, 8dk gitmezse kes, aynı gün 2 zarar = koin yok',
       book: 'OBI veto',
       judge: 'açık',
       flow: 'son 12 mum',
@@ -198,6 +198,27 @@ function trDateTime(ms) { return new Date(ms || Date.now()).toLocaleString('tr-T
 function istanbulDayKey(ms = Date.now()) {
   return new Date(ms).toLocaleDateString('en-CA', { timeZone: TR_TZ });
 }
+
+function coinLostTwiceToday(sym) {
+  const today = istanbulDayKey();
+  const rows = (history || []).filter((h) => {
+    if (!h || h.symbol !== sym) return false;
+    if (h.entryTimeMs) return istanbulDayKey(h.entryTimeMs) === today;
+    const ds = h.entryTimeStr || h.dateFullStr || '';
+    const m = ds.match(/(\d{2})\.(\d{2})\.(\d{4})/);
+    return !!m && `${m[3]}-${m[2]}-${m[1]}` === today;
+  });
+  rows.sort((a, b) => (a.entryTimeMs || a.id || 0) - (b.entryTimeMs || b.id || 0));
+  let streak = 0;
+  for (const t of rows) {
+    const pnl = Number(t.pnl) || 0;
+    if (pnl > 0.05) streak = 0;
+    else if (pnl <= -0.05) streak += 1;
+  }
+  return streak >= 2;
+}
+
+const dayBanLogged = new Set();
 
 function countTradesToday() {
   const today = istanbulDayKey();
@@ -1363,6 +1384,14 @@ async function scanLoop() {
 
         const { sym, lastP, k3m, chg, isVip } = data;
         if (activePositions.some(x => x.symbol === sym) || activeSyms.has(sym) || (coinCooldowns[sym] && coinCooldowns[sym] > Date.now())) continue;
+        if (coinLostTwiceToday(sym)) {
+          const banKey = `${sym}|${istanbulDayKey()}`;
+          if (!dayBanLogged.has(banKey)) {
+            dayBanLogged.add(banKey);
+            addLog(`🚫 ${sym} bugün iki zarar yazdı, arada kazanç yok — gün sonuna kadar yok.`, 'RISK');
+          }
+          continue;
+        }
         // 🛡️ 12 saatlik ceza süresi dolduysa deneme süresine (probation) al
         if (coinLossCount[sym] >= 2) {
           if (coinCooldowns[sym] && coinCooldowns[sym] > Date.now()) continue;
@@ -1585,6 +1614,8 @@ async function scanLoop() {
         const vol3hCheck = rInfo.vol3hM || ((quote90mCalc * 2) / 1e6);
         const hasRealLiquidity = vol3hCheck >= 0.80 && (isVip || vol24 >= 1.5);
         const noiseOk = atr3mPct < 0.50;
+        const tapeAliveLong = chg3hVal >= 0.35;
+        const tapeAliveShort = chg3hVal <= -0.35;
         const freshLong = chg24Val <= 8 || (chg3hVal >= 1.0 && effectiveTaker >= 65 && atr3mPct < 0.45 && curMovePct >= 0.22);
         const freshShort = chg24Val >= -12 || (chg3hVal <= -0.80 && effectiveTakerShort <= 49 && atr3mPct < 0.50);
         const hasBuyerDominance = effectiveTaker >= 51.0 && effectiveTaker <= 86.0;
@@ -1601,7 +1632,7 @@ async function scanLoop() {
 
         let isLongPump = false;
         let isRocketSignal = false;
-        if (hasRealLiquidity && noiseOk && freshLong && noWickLong && hasBuyerDominance && radarOkLong && continuationLong) {
+        if (hasRealLiquidity && noiseOk && tapeAliveLong && freshLong && noWickLong && hasBuyerDominance && radarOkLong && continuationLong) {
           if (prevMovePct >= -0.30 && volMult >= 0.65 && spikeVolMult <= 6.0) {
             isLongPump = true;
             isRocketSignal = true;
@@ -1610,7 +1641,7 @@ async function scanLoop() {
         }
 
         let isShortDump = false;
-        if (hasRealLiquidity && noiseOk && freshShort && noWickShort && hasSellerDominance && radarOkShort && continuationShort) {
+        if (hasRealLiquidity && noiseOk && tapeAliveShort && freshShort && noWickShort && hasSellerDominance && radarOkShort && continuationShort) {
           if (prevMovePct <= 0.30 && volMult >= 0.60 && spikeVolMult <= 6.0) {
             isShortDump = true;
             radarTag = `[🩸 MARSCOIN SÜRÜ SHORT | 3dk: %${curMovePct.toFixed(2)} | 24s: %${chg24Val.toFixed(1)} | Hacim: ${volMult.toFixed(2)}x | Taker: %${effectiveTakerShort.toFixed(0)}]`;
@@ -2130,6 +2161,10 @@ async function fastRiskLoop() {
         exitReason = pos.tp1Taken
           ? `⏱️ Vur Kaç runner süresi doldu (${maxHold}dk / MFE: +%${mfe.toFixed(2)})`
           : `⏱️ Vur Kaç süre doldu (${maxHold}dk / MFE: +%${mfe.toFixed(2)})`;
+      }
+
+      if (!exitReason && !pos.tp1Taken && !pos.beLocked && durMin >= 8 && mfe < 0.18 && move < 0) {
+        exitReason = `⏱️ 8dk gitmedi (MFE: +%${mfe.toFixed(2)} / Anlık: %${move.toFixed(2)})`;
       }
 
       if (!exitReason && !pos.beLocked) {
