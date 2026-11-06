@@ -177,6 +177,7 @@ let coinLossCount = {};  // 🛡️ Aynı koine ardışık zarar sayısı (2 zar
 let resetEpoch = 0;      // 🛡️ Bilinçli sıfırlama zaman damgası (Zombi geçmiş kurtarmayı engeller)
 let lastTradeOpenTime = 0;
 let tradingCooldownUntil = 0; // Ardışık zarar sonrası tarama duraklatma
+let lossPauseServedKey = ''; // Aynı 4'lü zarar serisi 8 dk'yı bir kez yer, bitince tekrar kilitlenmez
 let rollingTickerPrices = {};
 let radarMap = {};
 let logs = [];
@@ -1216,10 +1217,14 @@ async function scanLoop() {
     if (Date.now() < tradingCooldownUntil) {
       return;
     }
-    const recentLossStreak = (history || []).slice(0, 4).filter((t) => (t.pnl || 0) < -0.5).length;
-    if (recentLossStreak >= 4) {
+    const recentFour = (history || []).slice(0, 4);
+    const recentLossStreak = recentFour.filter((t) => (t.pnl || 0) < -0.5).length;
+    const newest = recentFour[0] || {};
+    const streakKey = String(newest.id || newest.dateFullStr || newest.entryTimeStr || '');
+    if (recentLossStreak >= 4 && streakKey && streakKey !== lossPauseServedKey) {
+      lossPauseServedKey = streakKey;
       tradingCooldownUntil = Math.max(tradingCooldownUntil, Date.now() + 8 * 60 * 1000);
-      addLog('⏸️ 4 ardışık zarar — 8 dk duraklama.', 'RISK');
+      addLog('⏸️ 4 ardışık zarar — 8 dk duraklama. Bu seri için bir kez.', 'RISK');
       return;
     }
     const maxDay = Number(CONFIG.maxTradesPerDay) || 0;
