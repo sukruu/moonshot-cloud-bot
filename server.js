@@ -121,7 +121,7 @@ function engineSnapshot() {
     userSlots: userRisk.maxSlots,
     userMargin: userRisk.marginPerTrade,
     gates: {
-      entry: 'Sürü + 3s hareket ≥%0.35, 8dk gitmezse kes, aynı gün 2 zarar = koin yok',
+      entry: 'Tepeden kovalama yok, zayıf mum yok, 2 zarar = 40 dk ara',
       book: 'OBI veto',
       judge: 'açık',
       flow: 'son 12 mum',
@@ -1630,10 +1630,31 @@ async function scanLoop() {
         const continuationLong = curP > curO && curMovePct >= 0.14 && (brokePrevHigh || isBreakoutHoldLong || curP >= prevC);
         const continuationShort = curP < curO && curMovePct <= -0.12 && (brokePrevLow || isBreakoutHoldShort || curP <= prevC);
 
+        const high3h = Number(rInfo.high3h) || 0;
+        const low3h = Number(rInfo.low3h) || 0;
+        const roomLong = high3h > 0 ? ((high3h - curP) / curP) * 100 : 99;
+        const roomShort = low3h > 0 ? ((curP - low3h) / curP) * 100 : 99;
+        const brokeHigh = high3h > 0 && curP >= high3h * 0.999;
+        const brokeLow = low3h > 0 && curP <= low3h * 1.001;
+        const chaseOkLong = roomLong >= 0.35 || ((volMult >= 3 || curMovePct >= 0.55) && brokeHigh);
+        const chaseOkShort = roomShort >= 0.35 || ((volMult >= 3 || curMovePct <= -0.55) && brokeLow);
+        const strongLong = (sig.includes('GÜÇLÜ BOĞA') || sig.includes('ROKET') || sig.includes('BALİNA')) && chg3hVal >= 2 && volMult >= 0.75 && roomLong >= 0.20;
+        const strongShort = (sig.includes('GÜÇLÜ AYI') || sig.includes('ŞELALE') || sig.includes('BALİNA')) && chg3hVal <= -2 && volMult >= 0.75 && roomShort >= 0.20;
+        const pushLong = strongLong || (chaseOkLong && (
+          (curMovePct >= 0.40 && volMult >= 1.05 && effectiveTaker >= 56) ||
+          (chg3hVal >= 1.0 && volMult >= 1.10 && effectiveTaker >= 54 && roomLong >= 0.35) ||
+          (volMult >= 6 && effectiveTaker >= 58 && brokeHigh && curMovePct >= 0.15)
+        ));
+        const pushShort = strongShort || (chaseOkShort && (
+          (curMovePct <= -0.40 && volMult >= 1.05 && effectiveTakerShort <= 44) ||
+          (chg3hVal <= -1.0 && volMult >= 1.10 && effectiveTakerShort <= 44 && roomShort >= 0.35) ||
+          (volMult >= 6 && effectiveTakerShort <= 42 && brokeLow && curMovePct <= -0.15)
+        ));
+
         let isLongPump = false;
         let isRocketSignal = false;
-        if (hasRealLiquidity && noiseOk && tapeAliveLong && freshLong && noWickLong && hasBuyerDominance && radarOkLong && continuationLong) {
-          if (prevMovePct >= -0.30 && volMult >= 0.65 && spikeVolMult <= 6.0) {
+        if (hasRealLiquidity && noiseOk && tapeAliveLong && freshLong && noWickLong && hasBuyerDominance && radarOkLong && continuationLong && pushLong) {
+          if (prevMovePct >= -0.30 && spikeVolMult <= 6.0) {
             isLongPump = true;
             isRocketSignal = true;
             radarTag = `[🚀 MARSCOIN SÜRÜ | 3dk: +%${curMovePct.toFixed(2)} | 24s: +%${chg24Val.toFixed(1)} | Hacim: ${volMult.toFixed(2)}x | Taker: %${effectiveTaker.toFixed(0)}]`;
@@ -1641,8 +1662,8 @@ async function scanLoop() {
         }
 
         let isShortDump = false;
-        if (hasRealLiquidity && noiseOk && tapeAliveShort && freshShort && noWickShort && hasSellerDominance && radarOkShort && continuationShort) {
-          if (prevMovePct <= 0.30 && volMult >= 0.60 && spikeVolMult <= 6.0) {
+        if (hasRealLiquidity && noiseOk && tapeAliveShort && freshShort && noWickShort && hasSellerDominance && radarOkShort && continuationShort && pushShort) {
+          if (prevMovePct <= 0.30 && spikeVolMult <= 6.0) {
             isShortDump = true;
             radarTag = `[🩸 MARSCOIN SÜRÜ SHORT | 3dk: %${curMovePct.toFixed(2)} | 24s: %${chg24Val.toFixed(1)} | Hacim: ${volMult.toFixed(2)}x | Taker: %${effectiveTakerShort.toFixed(0)}]`;
           }
@@ -2163,6 +2184,11 @@ async function fastRiskLoop() {
           : `⏱️ Vur Kaç süre doldu (${maxHold}dk / MFE: +%${mfe.toFixed(2)})`;
       }
 
+      const entry3hAbs = Math.abs(Number(pos.chg3h) || 0);
+      if (!exitReason && !pos.tp1Taken && !pos.beLocked && durMin >= 4 && mfe < 0.12 && move <= -0.12 && entry3hAbs < 1.2) {
+        exitReason = `⏱️ 4dk ters (MFE: +%${mfe.toFixed(2)} / Anlık: %${move.toFixed(2)})`;
+      }
+
       if (!exitReason && !pos.tp1Taken && !pos.beLocked && durMin >= 8 && mfe < 0.18 && move < 0) {
         exitReason = `⏱️ 8dk gitmedi (MFE: +%${mfe.toFixed(2)} / Anlık: %${move.toFixed(2)})`;
       }
@@ -2281,12 +2307,9 @@ function closeTrade(pos, exitReason) {
     exitReason.includes('Ölü İşlem') ||
     exitReason.includes('İvmesizlik') ||
     exitReason.includes('İvme Tükendi');
-  if (totalTradePnl < -0.5) {
-    const streak = (history || []).slice(0, 3).filter((t) => (t.pnl || 0) < -0.5).length;
-    if (streak >= 3) {
-      tradingCooldownUntil = Math.max(tradingCooldownUntil, now + 6 * 60 * 1000);
-      addLog('⏸️ 3 ardışık zarar — 6 dk duraklama.', 'RISK');
-    }
+  if (isRealLoss && history[0] && (Number(history[0].pnl) || 0) <= -0.05) {
+    tradingCooldownUntil = Math.max(tradingCooldownUntil, now + 40 * 60 * 1000);
+    addLog('⏸️ İki zarar üst üste — 40 dk yeni işlem yok.', 'RISK');
   }
   if (isRealLoss) {
     coinLossCount[pos.symbol] = (coinLossCount[pos.symbol] || 0) + 1;
