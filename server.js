@@ -121,7 +121,7 @@ function engineSnapshot() {
     userSlots: userRisk.maxSlots,
     userMargin: userRisk.marginPerTrade,
     gates: {
-      entry: 'Tepeden kovalama yok, zayıf mum yok, 2 zarar = 40 dk ara',
+      entry: '3dk mum ≥%0.30 ve 3s aynı yön, tutmayan kırılım −%0.35’te kesilir',
       book: 'OBI veto',
       judge: 'açık',
       flow: 'son 12 mum',
@@ -1636,20 +1636,10 @@ async function scanLoop() {
         const roomShort = low3h > 0 ? ((curP - low3h) / curP) * 100 : 99;
         const brokeHigh = high3h > 0 && curP >= high3h * 0.999;
         const brokeLow = low3h > 0 && curP <= low3h * 1.001;
-        const chaseOkLong = roomLong >= 0.35 || ((volMult >= 3 || curMovePct >= 0.55) && brokeHigh);
-        const chaseOkShort = roomShort >= 0.35 || ((volMult >= 3 || curMovePct <= -0.55) && brokeLow);
-        const strongLong = (sig.includes('GÜÇLÜ BOĞA') || sig.includes('ROKET') || sig.includes('BALİNA')) && chg3hVal >= 2 && volMult >= 0.75 && roomLong >= 0.20;
-        const strongShort = (sig.includes('GÜÇLÜ AYI') || sig.includes('ŞELALE') || sig.includes('BALİNA')) && chg3hVal <= -2 && volMult >= 0.75 && roomShort >= 0.20;
-        const pushLong = strongLong || (chaseOkLong && (
-          (curMovePct >= 0.40 && volMult >= 1.05 && effectiveTaker >= 56) ||
-          (chg3hVal >= 1.0 && volMult >= 1.10 && effectiveTaker >= 54 && roomLong >= 0.35) ||
-          (volMult >= 6 && effectiveTaker >= 58 && brokeHigh && curMovePct >= 0.15)
-        ));
-        const pushShort = strongShort || (chaseOkShort && (
-          (curMovePct <= -0.40 && volMult >= 1.05 && effectiveTakerShort <= 44) ||
-          (chg3hVal <= -1.0 && volMult >= 1.10 && effectiveTakerShort <= 44 && roomShort >= 0.35) ||
-          (volMult >= 6 && effectiveTakerShort <= 42 && brokeLow && curMovePct <= -0.15)
-        ));
+        const liveLong = curMovePct >= 0.30 && volMult >= 0.90 && effectiveTaker >= 55 && chg3hVal >= 0.80;
+        const liveShort = curMovePct <= -0.30 && volMult >= 0.90 && effectiveTakerShort <= 45 && chg3hVal <= -0.80;
+        const pushLong = liveLong && (roomLong >= 0.25 || (brokeHigh && chg3hVal >= 1.2 && volMult >= 2.5));
+        const pushShort = liveShort && (roomShort >= 0.25 || (brokeLow && chg3hVal <= -1.2 && volMult >= 2.5));
 
         let isLongPump = false;
         let isRocketSignal = false;
@@ -2185,6 +2175,10 @@ async function fastRiskLoop() {
       }
 
       const entry3hAbs = Math.abs(Number(pos.chg3h) || 0);
+      if (!exitReason && !pos.tp1Taken && !pos.beLocked && durMin >= 5 && mfe < 0.40 && move <= -0.35) {
+        exitReason = `⏱️ Kırılım tutmadı (MFE: +%${mfe.toFixed(2)} / Anlık: %${move.toFixed(2)})`;
+      }
+
       if (!exitReason && !pos.tp1Taken && !pos.beLocked && durMin >= 4 && mfe < 0.12 && move <= -0.12 && entry3hAbs < 1.2) {
         exitReason = `⏱️ 4dk ters (MFE: +%${mfe.toFixed(2)} / Anlık: %${move.toFixed(2)})`;
       }
