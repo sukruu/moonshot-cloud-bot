@@ -121,7 +121,7 @@ function engineSnapshot() {
     userSlots: userRisk.maxSlots,
     userMargin: userRisk.marginPerTrade,
     gates: {
-      entry: '3dk mum ≥%0.30 ve 3s aynı yön, tutmayan kırılım −%0.35’te kesilir',
+      entry: '3s tepesi ve dibi yok, gün %5 üstü yok, 1dk kırmızıysa çık',
       book: 'OBI veto',
       judge: 'açık',
       flow: 'son 12 mum',
@@ -1591,7 +1591,7 @@ async function scanLoop() {
         const spikeVolMult = (curPaceVol / avgVol20);
 
         // Aktif veya bir önceki 3dk mumunda aşırı (+%1.55+) fırlamışsa fitil tepesinden kovalama!
-        if (Math.abs(curMovePct) > 1.55 || Math.abs(prevMovePct) > 1.35 || Math.abs(twoCandleMovePct) > 2.45) {
+        if (Math.abs(curMovePct) > 0.75 || Math.abs(prevMovePct) > 1.35 || Math.abs(twoCandleMovePct) > 2.45) {
           shadow('CLIMAX');
           continue;
         }
@@ -1616,8 +1616,8 @@ async function scanLoop() {
         const noiseOk = atr3mPct < 0.50;
         const tapeAliveLong = chg3hVal >= 0.35;
         const tapeAliveShort = chg3hVal <= -0.35;
-        const freshLong = chg24Val <= 8 || (chg3hVal >= 1.0 && effectiveTaker >= 65 && atr3mPct < 0.45 && curMovePct >= 0.22);
-        const freshShort = chg24Val >= -12 || (chg3hVal <= -0.80 && effectiveTakerShort <= 49 && atr3mPct < 0.50);
+        const freshLong = chg24Val <= 5;
+        const freshShort = chg24Val >= -5;
         const hasBuyerDominance = effectiveTaker >= 51.0 && effectiveTaker <= 86.0;
         const hasSellerDominance = effectiveTakerShort <= 49.0 && effectiveTakerShort >= 16.0;
 
@@ -1634,12 +1634,12 @@ async function scanLoop() {
         const low3h = Number(rInfo.low3h) || 0;
         const roomLong = high3h > 0 ? ((high3h - curP) / curP) * 100 : 99;
         const roomShort = low3h > 0 ? ((curP - low3h) / curP) * 100 : 99;
-        const brokeHigh = high3h > 0 && curP >= high3h * 0.999;
-        const brokeLow = low3h > 0 && curP <= low3h * 1.001;
-        const liveLong = curMovePct >= 0.30 && volMult >= 0.90 && effectiveTaker >= 55 && chg3hVal >= 0.80;
-        const liveShort = curMovePct <= -0.30 && volMult >= 0.90 && effectiveTakerShort <= 45 && chg3hVal <= -0.80;
-        const pushLong = liveLong && (roomLong >= 0.25 || (brokeHigh && chg3hVal >= 1.2 && volMult >= 2.5));
-        const pushShort = liveShort && (roomShort >= 0.25 || (brokeLow && chg3hVal <= -1.2 && volMult >= 2.5));
+        const clearedHigh = high3h > 0 && curP >= high3h * 1.0025;
+        const clearedLow = low3h > 0 && curP <= low3h * 0.9975;
+        const liveLong = curMovePct >= 0.30 && curMovePct <= 0.75 && volMult >= 0.90 && effectiveTaker >= 55 && chg3hVal >= 0.80;
+        const liveShort = curMovePct <= -0.30 && curMovePct >= -0.75 && volMult >= 0.90 && effectiveTakerShort <= 45 && chg3hVal <= -0.80;
+        const pushLong = liveLong && (roomLong >= 0.25 || (clearedHigh && volMult >= 2.5));
+        const pushShort = liveShort && (roomShort >= 0.25 || (clearedLow && volMult >= 2.5));
 
         let isLongPump = false;
         let isRocketSignal = false;
@@ -2172,6 +2172,10 @@ async function fastRiskLoop() {
         exitReason = pos.tp1Taken
           ? `⏱️ Vur Kaç runner süresi doldu (${maxHold}dk / MFE: +%${mfe.toFixed(2)})`
           : `⏱️ Vur Kaç süre doldu (${maxHold}dk / MFE: +%${mfe.toFixed(2)})`;
+      }
+
+      if (!exitReason && !pos.tp1Taken && !pos.beLocked && durMin >= 1 && mfe < 0.08 && move <= -0.15) {
+        exitReason = `⏱️ 1dk kırmızı (MFE: +%${mfe.toFixed(2)} / Anlık: %${move.toFixed(2)})`;
       }
 
       const entry3hAbs = Math.abs(Number(pos.chg3h) || 0);
