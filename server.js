@@ -27,16 +27,16 @@ try {
 // --- EKRAN 1 BİREBİR AYARLARI ---
 let CONFIG = {
   initialBalance: 100.0,     // Bakiye 100 Dolar
-  marginPerTrade: 15.0,      // Temel Teminat 15$ (2 slot, kasada serbest tampon kalır)
-  leverage: 40,              // Kaldıraç 40x
-  maxSlots: 3,               // Sürü: aynı anda 3 Marscoin kırılımı
-  slPct: 0.80,               // Dengeli SL -%0.80 spot (Kayıp boyutunu küçültür, tavan -%0.85)
-  bePct: 0.32,               // Panel. Stop TP1 öncesi oynatılmaz.
-  moonPct: 1.75,             // Vur kaç runner tavanı +%1.75 spot (~40x’te hızlı çık)
-  tp1Pct: 0.48,              // 40x: çoğu MFE %0.4 bandında — önce cebe al
-  tp2Pct: 0.82,              // İkinci dilim
-  maxTradeMin: 32,           // Uzun tutma = geri verme
-  tp1ClosePct: 0.55,         // TP1’de %55 cebe
+  marginPerTrade: 12.0,      // Temel Teminat 12$ (3 Slot ile $36 marjin, kasada $64 nakit tampon)
+  leverage: 20,              // Kaldıraç 20x (Komisyonu ve stop hasarını yarıya indirir, nefes alanı açar)
+  maxSlots: 3,               // 3 Slot
+  slPct: 0.80,               // Hard Stop -%0.80 spot (Nefes alanı, erken panik kesimi yok)
+  bePct: 0.38,               // +%0.38 spot görülünce stop maliyetin üstüne (+%0.12 spot) çekilir
+  moonPct: 1.80,             // +%1.80 spot runner tavanı
+  tp1Pct: 0.48,              // +%0.48 spotta (+%9.6 ROI) %50 pozisyon cebe
+  tp2Pct: 0.85,              // +%0.85 spotta (+%17.0 ROI) %30 pozisyon cebe, %20 runner
+  maxTradeMin: 35,           // 35 dk sonra ivmesiz ise kapat
+  tp1ClosePct: 0.50,         // TP1'de %50 cebe
   minEntryScore: 0,          // Sürü: puan kapısı yok
   maxTradesPerDay: 0,        // 0 = günlük limit yok
   aPlusOnly: false,
@@ -49,29 +49,20 @@ let CONFIG = {
 // Giriş genişliği. Ajan toplantısı bunu değiştirmez.
 let DYNAMIC = {
   vol3hMin: 0.8,
-  candidateSlice: 55,
+  candidateSlice: 35,
   regime: 'SCALP',
   mode: 'MARSCOIN_SURU',
   updatedAt: 0
 };
 
-let userRisk = { maxSlots: 3, marginPerTrade: 15 };
+let userRisk = { maxSlots: 3, marginPerTrade: 12 };
 let circuitOn = false;
 
 function getDynamicMargin() {
   if (circuitOn) {
     return Math.min(Number(userRisk.marginPerTrade) || 12, 10);
   }
-  // 🛡️ KASA ZİRVE KALKANI (Ardışık Zarar Koruması):
-  // Son 2 işlem üst üste zarar kapattıysa, yeni bir kazanan işleme kadar teminatı $14.0'a çek!
-  const recentTwo = Array.isArray(history) ? history.slice(0, 2) : [];
-  if (recentTwo.length === 2 && (recentTwo[0].pnl || 0) < -0.05 && (recentTwo[1].pnl || 0) < -0.05) {
-    return 14.0;
-  }
-  // Kasanın %15'i teminat (taban $15, tavan $20). $100 kasada tam $15.
-  const currentBal = Math.max(balance, 30.0);
-  const compoundMargin = currentBal * 0.15;
-  return Number(Math.max(15.0, Math.min(compoundMargin, 20.0)).toFixed(1));
+  return Number(userRisk.marginPerTrade) || 12;
 }
 
 function rememberUserRisk() {
@@ -121,7 +112,7 @@ function engineSnapshot() {
     userSlots: userRisk.maxSlots,
     userMargin: userRisk.marginPerTrade,
     gates: {
-      entry: '3s tepesi ve dibi yok, gün %5 üstü yok, 1dk kırmızıysa çık',
+      entry: '20x Marscoin Kırılım Motoru (TP1 +%0.48 / TP2 +%0.85 / BE +%0.38 / SL -%0.80)',
       book: 'OBI veto',
       judge: 'açık',
       flow: 'son 12 mum',
@@ -328,14 +319,14 @@ function loadSettings() {
       sl: saved.slPct, be: saved.bePct, moon: saved.moonPct, tp1: saved.tp1Pct, tp2: saved.tp2Pct
     });
     clean.maxSlots = 3;
-    clean.marginPerTrade = 15;
-    clean.leverage = 40;
+    clean.marginPerTrade = 12;
+    clean.leverage = 20;
     clean.slPct = 0.80;
-    clean.bePct = 0.32;
+    clean.bePct = 0.38;
     clean.tp1Pct = 0.48;
-    clean.tp2Pct = 0.82;
-    clean.moonPct = 1.75;
-    clean.maxTradeMin = 32;
+    clean.tp2Pct = 0.85;
+    clean.moonPct = 1.80;
+    clean.maxTradeMin = 35;
     Object.assign(CONFIG, clean);
     rememberUserRisk();
     settingsCustomized = true;
@@ -2159,7 +2150,7 @@ async function fastRiskLoop() {
           pos.roi = pos.margin > 0 ? (pos.pnl / pos.margin) * 100 : 0;
           pos.beLocked = true;
           pos.tier1Locked = true;
-          pos.stopPrice = lockSpot(0.10);
+          pos.stopPrice = lockSpot(0.12);
           stateChanged = true;
           addLog(`💰 [MFE %0.70 KISMI] ${pos.symbol} %25 kapatıldı (+$${midProfit.toFixed(2)}). Stop +%0.10 — TP1 bekleniyor.`, 'TRADE');
         } else if (move <= 0.12) {
@@ -2174,30 +2165,10 @@ async function fastRiskLoop() {
           : `⏱️ Vur Kaç süre doldu (${maxHold}dk / MFE: +%${mfe.toFixed(2)})`;
       }
 
-      if (!exitReason && !pos.tp1Taken && !pos.beLocked && durMin >= 1 && mfe < 0.08 && move <= -0.15) {
-        exitReason = `⏱️ 1dk kırmızı (MFE: +%${mfe.toFixed(2)} / Anlık: %${move.toFixed(2)})`;
-      }
-
-      const entry3hAbs = Math.abs(Number(pos.chg3h) || 0);
-      if (!exitReason && !pos.tp1Taken && !pos.beLocked && durMin >= 5 && mfe < 0.40 && move <= -0.35) {
-        exitReason = `⏱️ Kırılım tutmadı (MFE: +%${mfe.toFixed(2)} / Anlık: %${move.toFixed(2)})`;
-      }
-
-      if (!exitReason && !pos.tp1Taken && !pos.beLocked && durMin >= 4 && mfe < 0.12 && move <= -0.12 && entry3hAbs < 1.2) {
-        exitReason = `⏱️ 4dk ters (MFE: +%${mfe.toFixed(2)} / Anlık: %${move.toFixed(2)})`;
-      }
-
-      if (!exitReason && !pos.tp1Taken && !pos.beLocked && durMin >= 8 && mfe < 0.18 && move < 0) {
-        exitReason = `⏱️ 8dk gitmedi (MFE: +%${mfe.toFixed(2)} / Anlık: %${move.toFixed(2)})`;
-      }
-
-      if (!exitReason && !pos.beLocked) {
-        if (durMin >= 12 && mfe < 0.15 && nMfe < 0.15 && nMove <= -0.35) {
-          exitReason = `⏱️ Ölü İşlem Neşteri (${Math.round(durMin)}dk İvmesiz / MFE: +%${mfe.toFixed(2)} / Erken Kesim)`;
-        } else if (durMin >= 25 && mfe < 0.30 && nMfe < 0.28 && nMove <= -0.35) {
-          exitReason = `⏱️ İvmesizlik Neşteri (${Math.round(durMin)}dk Zayıf Akış / MFE: +%${mfe.toFixed(2)} / Erken Kesim)`;
-        } else if (durMin >= 40 && !pos.tp1Taken && nMfe < 0.45) {
-          exitReason = `⏱️ İvme Tükendi (${Math.round(durMin)}dk / MFE: +%${mfe.toFixed(2)} / Erken Kesim)`;
+      // 🛡️ SADECE GERÇEKTEN YATAY VE ÖLÜ KALMIŞ İŞLEMLER İÇİN ZAMAN AŞIMI (28+ DK)
+      if (!exitReason && !pos.tp1Taken && !pos.beLocked) {
+        if (durMin >= 28 && mfe < 0.22 && move < 0) {
+          exitReason = `⏱️ Yatay Zaman Aşımı (${Math.round(durMin)}dk / MFE: +%${mfe.toFixed(2)} / Anlık: %${move.toFixed(2)})`;
         }
       }
 
