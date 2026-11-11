@@ -1189,6 +1189,7 @@ async function updateRadar() {
             chg3h,
             chg15m,
             vol3hM: volUsdt / 1e6,
+            vol15m: vol15,
             range3h: `$${low3h.toFixed(4)} - $${high3h.toFixed(4)}`,
             low3h,
             high3h,
@@ -1229,6 +1230,58 @@ async function updateRadar() {
   } finally {
     isRadarRunning = false;
   }
+}
+
+async function scanRadarBoard(tf) {
+  const tickers = await fetchBinance('/fapi/v1/ticker/24hr');
+  if (!Array.isArray(tickers)) return [];
+  const tickerMap = {};
+  const symbols = [];
+  for (const t of tickers) {
+    if (!isTradableCryptoSymbol(t.symbol)) continue;
+    const lastP = parseFloat(t.lastPrice) || 0;
+    const vol24 = parseFloat(t.quoteVolume) || 0;
+    if (lastP < 0.008 || vol24 < 1e6) continue;
+    tickerMap[t.symbol] = { chg24h: parseFloat(t.priceChangePercent) || 0, vol24hM: vol24 / 1e6 };
+    symbols.push(t.symbol);
+  }
+  symbols.sort((a, b) => tickerMap[b].vol24hM - tickerMap[a].vol24hM);
+  const picked = symbols.slice(0, 80);
+  const out = [];
+  for (let i = 0; i < picked.length; i += 10) {
+    const chunk = picked.slice(i, i + 10);
+    const part = await Promise.all(chunk.map(async sym => {
+      const klines = await fetchBinance(`/fapi/v1/klines?symbol=${sym}&interval=${tf}&limit=2`);
+      if (!klines || !klines.length) return null;
+      const k = klines[klines.length - 1];
+      const openP = parseFloat(k[1]) || 0;
+      const closeP = parseFloat(k[4]) || 0;
+      const vol = parseFloat(k[7]) || 0;
+      const takerBuy = parseFloat(k[10]) || 0;
+      const chg = openP > 0 ? ((closeP - openP) / openP) * 100 : 0;
+      const taker = vol > 0 ? (takerBuy / vol) * 100 : 50;
+      const info = tickerMap[sym] || {};
+      const pump = tf === '1d' ? 15 : (tf === '4h' ? 8 : 5);
+      let signal = '⚖️ NÖTR';
+      if (chg >= pump) signal = '🚀 SÜPER ROKET';
+      else if (chg >= pump / 2.5) signal = '🟢 GÜÇLÜ BOĞA';
+      else if (chg <= -pump) signal = '🩸 ŞELALE';
+      else if (chg <= -pump / 2.5) signal = '🔴 GÜÇLÜ AYI';
+      return {
+        symbol: sym,
+        lastPrice: closeP,
+        chg15m: chg,
+        vol15m: vol,
+        vol24hM: info.vol24hM || 0,
+        chg24h: info.chg24h || 0,
+        taker15m: taker,
+        takerBuyRatio: taker,
+        signal
+      };
+    }));
+    part.forEach(row => { if (row) out.push(row); });
+  }
+  return out;
 }
 
 // 2. CANLI TARAMA (350+ KOİN BALİNA & MOONSHOT AVCISI)
@@ -3088,14 +3141,12 @@ function serveDashboardHtml() {
 </head>
 <body>
   <div class="container">
-    <!-- TABS -->
-    <!-- <div class="tabs">
-      <div class="tab-btn active">⚡ 1. CANLI SİMÜLASYON (TEST LAB)</div>
-      <div class="tab-btn" onclick="alert('Gerçek Binance API modu bulut test sürümünde güvenlik için pasiftir. Test Lab 7/24 çalışmaktadır.')">⚡ 2. GERÇEK BINANCE İŞLEMLERİ (CANLI API)</div>
-      <a href="/api/download-csv" class="tab-btn" style="text-decoration:none;">🔍 3. 15DK RADAR & EXCEL AKTARICI</a>
-    </div> -->
+    <div class="tabs">
+      <button class="tab-btn active" id="tabLive" onclick="switchView('liveView')">📡 1. CANLI SİMÜLASYON</button>
+      <button class="tab-btn" id="tabRadar" onclick="switchView('scanner15mView')" style="color:#38bdf8;">🔍 3. 15DK RADAR & EXCEL AKTARICI</button>
+    </div>
 
-    <div class="dashboard">
+    <div class="dashboard" id="liveView">
       <!-- SOL PANEL: MOTOR KONTROLÜ -->
       <div class="panel">
         <h2>
@@ -3323,9 +3374,141 @@ function serveDashboardHtml() {
         </div>
       </div>
     </div>
+
+    <div id="scanner15mView" style="display:none; width:100%; margin-top:8px;">
+      <div class="panel" style="margin-bottom:12px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+          <div>
+            <h2 style="margin:0;">🔍 <span id="radarTimeframeTitle">15 DAKİKALIK</span> MOMENTUM RADARI</h2>
+            <div style="font-size:12px; color:var(--muted); margin-top:4px;">Canlı taranan koinler. Bot yalnızca 15dk hareketi %0.8 ile %2.4 arasındaki liderlere girer.</div>
+          </div>
+          <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+            <select id="selRadarTimeframe" onchange="loadRadar()" style="background:var(--panel2); color:var(--text); border:1px solid var(--border); border-radius:6px; padding:6px 8px; font-weight:800;">
+              <option value="15m">15 Dakika</option>
+              <option value="1h">1 Saat</option>
+              <option value="4h">4 Saat</option>
+              <option value="1d">Günlük</option>
+            </select>
+            <select id="sel15mMinVol" onchange="renderRadar()" style="background:var(--panel2); color:var(--text); border:1px solid var(--border); border-radius:6px; padding:6px 8px; font-weight:800;">
+              <option value="0">Tüm koinler</option>
+              <option value="1" selected>Min $1M</option>
+              <option value="5">Min $5M</option>
+              <option value="10">Min $10M</option>
+            </select>
+            <button class="theme-toggle-btn" onclick="loadRadar()">🚀 Şimdi Tara</button>
+            <button class="theme-toggle-btn" onclick="exportRadarExcel()">📥 Excel / CSV</button>
+          </div>
+        </div>
+        <div id="radarStatusLine" style="margin-top:8px; font-size:12px; color:var(--muted);">Radar bekleniyor.</div>
+      </div>
+      <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap:12px;">
+        <div class="panel">
+          <h2 style="color:var(--green);">EN ÇOK YÜKSELEN 15</h2>
+          <div class="table-container" style="max-height:520px; overflow:auto;"><table><thead><tr><th>#</th><th>Sembol</th><th>Fiyat</th><th>Değişim</th><th>Hacim</th><th>24s</th><th>Alıcı</th><th>Sinyal</th></tr></thead><tbody id="tbody15mGainers"></tbody></table></div>
+        </div>
+        <div class="panel">
+          <h2 style="color:var(--red);">EN ÇOK DÜŞEN 15</h2>
+          <div class="table-container" style="max-height:520px; overflow:auto;"><table><thead><tr><th>#</th><th>Sembol</th><th>Fiyat</th><th>Değişim</th><th>Hacim</th><th>24s</th><th>Satıcı</th><th>Sinyal</th></tr></thead><tbody id="tbody15mLosers"></tbody></table></div>
+        </div>
+      </div>
+      <div class="panel" style="margin-top:12px;">
+        <h2>TÜM LİSTE <span id="badgeAllCoinsCount" style="font-size:12px; color:var(--muted);"></span></h2>
+        <input id="inp15mSearch" oninput="renderRadar()" placeholder="Koin ara" style="background:var(--panel2); border:1px solid var(--border); color:var(--text); border-radius:6px; padding:6px 10px; margin-bottom:8px;">
+        <div class="table-container" style="max-height:420px; overflow:auto;"><table><thead><tr><th>#</th><th>Sembol</th><th>Fiyat</th><th>Değişim</th><th>Hacim</th><th>24s</th><th>24s Hacim</th><th>Alıcı</th><th>Sinyal</th></tr></thead><tbody id="tbody15mAll"></tbody></table></div>
+      </div>
+    </div>
   </div>
 
   <script>
+    let radarCache = [];
+    function switchView(id) {
+      var live = document.getElementById('liveView');
+      var radar = document.getElementById('scanner15mView');
+      if (live) live.style.display = id === 'liveView' ? '' : 'none';
+      if (radar) radar.style.display = id === 'scanner15mView' ? 'block' : 'none';
+      var tabLive = document.getElementById('tabLive');
+      var tabRadar = document.getElementById('tabRadar');
+      if (tabLive) tabLive.classList.toggle('active', id === 'liveView');
+      if (tabRadar) tabRadar.classList.toggle('active', id === 'scanner15mView');
+      if (id === 'scanner15mView') loadRadar();
+    }
+    function radarNum(p) {
+      var n = Number(p) || 0;
+      if (n < 0.0001) return n.toFixed(6);
+      if (n < 0.01) return n.toFixed(5);
+      if (n < 1) return n.toFixed(4);
+      return n.toFixed(2);
+    }
+    function radarVol(v) {
+      var n = Number(v) || 0;
+      if (n >= 1e6) return '$' + (n / 1e6).toFixed(2) + 'M';
+      if (n >= 1e3) return '$' + (n / 1e3).toFixed(1) + 'K';
+      return '$' + Math.round(n);
+    }
+    function radarRows(list, side) {
+      return list.map(function (item, idx) {
+        var chg = Number(item.chg15m) || 0;
+        var color = chg >= 0 ? 'var(--green)' : 'var(--red)';
+        var sign = chg >= 0 ? '+' : '';
+        var day = Number(item.chg24h) || 0;
+        var dayColor = day >= 0 ? 'var(--green)' : 'var(--red)';
+        var taker = Number(item.takerBuyRatio) || Number(item.taker15m) || 50;
+        var press = side === 'short' ? (100 - taker) : taker;
+        var pressLbl = side === 'short' ? ' satıcı' : ' alıcı';
+        var star = item.bot ? ' ★' : '';
+        return '<tr><td>' + (idx + 1) + '</td><td style="font-weight:900;">' + item.symbol + star + '</td><td>$' + radarNum(item.lastPrice) + '</td><td style="color:' + color + ';font-weight:900;">' + sign + '%' + chg.toFixed(2) + '</td><td>' + radarVol(item.vol15m || (item.vol3hM || 0) * 1e6) + '</td><td style="color:' + dayColor + ';">' + (day >= 0 ? '+' : '') + '%' + day.toFixed(2) + '</td><td>%' + press.toFixed(1) + pressLbl + '</td><td>' + (item.signal || '') + '</td></tr>';
+      }).join('');
+    }
+    function renderRadar() {
+      var minVol = Number((document.getElementById('sel15mMinVol') || {}).value || 0);
+      var q = ((document.getElementById('inp15mSearch') || {}).value || '').toUpperCase();
+      var rows = radarCache.filter(function (x) { return (Number(x.vol24hM) || 0) >= minVol; });
+      var gainers = rows.slice().sort(function (a, b) { return (b.chg15m || 0) - (a.chg15m || 0); }).slice(0, 15);
+      var losers = rows.slice().sort(function (a, b) { return (a.chg15m || 0) - (b.chg15m || 0); }).slice(0, 15);
+      var all = rows.slice().sort(function (a, b) { return Math.abs(b.chg15m || 0) - Math.abs(a.chg15m || 0); });
+      if (q) all = all.filter(function (x) { return String(x.symbol).indexOf(q) !== -1; });
+      var g = document.getElementById('tbody15mGainers');
+      var l = document.getElementById('tbody15mLosers');
+      var a = document.getElementById('tbody15mAll');
+      if (g) g.innerHTML = radarRows(gainers, 'long') || '<tr><td colspan="8">Veri yok</td></tr>';
+      if (l) l.innerHTML = radarRows(losers, 'short') || '<tr><td colspan="8">Veri yok</td></tr>';
+      if (a) a.innerHTML = all.map(function (item, idx) {
+        var chg = Number(item.chg15m) || 0;
+        var day = Number(item.chg24h) || 0;
+        return '<tr><td>' + (idx + 1) + '</td><td>' + item.symbol + (item.bot ? ' ★' : '') + '</td><td>$' + radarNum(item.lastPrice) + '</td><td>' + (chg >= 0 ? '+' : '') + '%' + chg.toFixed(2) + '</td><td>' + radarVol(item.vol15m || 0) + '</td><td>' + (day >= 0 ? '+' : '') + '%' + day.toFixed(2) + '</td><td>$' + (Number(item.vol24hM) || 0).toFixed(1) + 'M</td><td>%' + (Number(item.taker15m) || Number(item.takerBuyRatio) || 0).toFixed(1) + '</td><td>' + (item.signal || '') + '</td></tr>';
+      }).join('') || '<tr><td colspan="9">Veri yok</td></tr>';
+      var badge = document.getElementById('badgeAllCoinsCount');
+      if (badge) badge.textContent = all.length + ' koin';
+    }
+    async function loadRadar() {
+      var line = document.getElementById('radarStatusLine');
+      var tfEl = document.getElementById('selRadarTimeframe');
+      var tf = tfEl ? tfEl.value : '15m';
+      var title = document.getElementById('radarTimeframeTitle');
+      if (title) title.textContent = tf === '15m' ? '15 DAKİKALIK' : (tf === '1h' ? '1 SAATLİK' : (tf === '4h' ? '4 SAATLİK' : 'GÜNLÜK'));
+      if (line) line.textContent = 'Taranıyor...';
+      try {
+        var res = await fetch('/api/radar?tf=' + encodeURIComponent(tf));
+        var data = await res.json();
+        radarCache = data.items || [];
+        renderRadar();
+        if (line) line.textContent = (data.count || radarCache.length) + ' koin. Yıldız, botun girebileceği 15dk lideri.';
+      } catch (e) {
+        if (line) line.textContent = 'Radar alınamadı.';
+      }
+    }
+    function exportRadarExcel() {
+      if (!radarCache.length) { loadRadar(); return; }
+      var lines = ['Sira;Sembol;Fiyat;Degisim;Hacim;24s;24sHacimM;Alici;Sinyal;BotLideri'];
+      radarCache.slice().sort(function (a, b) { return (b.chg15m || 0) - (a.chg15m || 0); }).forEach(function (item, idx) {
+        lines.push([idx + 1, item.symbol, item.lastPrice, (Number(item.chg15m) || 0).toFixed(2), Math.round(item.vol15m || 0), (Number(item.chg24h) || 0).toFixed(2), (Number(item.vol24hM) || 0).toFixed(2), (Number(item.taker15m) || Number(item.takerBuyRatio) || 0).toFixed(1), '"' + String(item.signal || '') + '"', item.bot ? 'EVET' : ''].join(';'));
+      });
+      var blob = new Blob(['\uFEFF' + lines.join('\\n')], { type: 'text/csv;charset=utf-8;' });
+      var link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = 'binance_radar.csv';
+      link.click();
+    }
     const LS_HIST = "moon_cloud_history";
     const LS_BAL = "moon_cloud_balance";
     window.isResetting = false;
@@ -4069,6 +4252,18 @@ const server = http.createServer(async (req, res) => {
       uptimeSeconds: Math.floor((Date.now() - startTime) / 1000),
       pingStats
     }, null, 2));
+    return;
+  }
+
+  if (pathname === '/api/radar') {
+    const tf = parsedUrl.searchParams.get('tf') || '15m';
+    const items = tf === '15m' ? radarList : await scanRadarBoard(tf);
+    const tagged = items.map(x => ({
+      ...x,
+      bot: tf === '15m' && (radarLeaderLong.has(x.symbol) || radarLeaderShort.has(x.symbol))
+    }));
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ tf, count: tagged.length, items: tagged }));
     return;
   }
 
