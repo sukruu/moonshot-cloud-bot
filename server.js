@@ -112,7 +112,7 @@ function engineSnapshot() {
     userSlots: userRisk.maxSlots,
     userMargin: userRisk.marginPerTrade,
     gates: {
-      entry: '20x Marscoin Kırılım Motoru (TP1 +%0.48 / TP2 +%0.85 / BE +%0.38 / SL -%0.80)',
+      entry: '15dk lideri, hareket %0.8-%2.4, tepe ve dip yok',
       book: 'OBI veto',
       judge: 'açık',
       flow: 'son 12 mum',
@@ -1075,6 +1075,8 @@ async function fetchBinance(url) {
 
 // 1. RADAR (3S & 15DK ÇOKLU ZAMAN, ALICI BASKISI VE SİNYAL MOTORU)
 let radarList = [];
+let radarLeaderLong = new Set();
+let radarLeaderShort = new Set();
 let btcPriceHistory = [];
 async function updateRadar() {
   if (isRadarRunning) return;
@@ -1144,7 +1146,7 @@ async function updateRadar() {
     const chunkSize = 15;
     const scanned = [];
     const freshRadarMap = {};
-    for (let i = 0; i < Math.min(valid.length, 45); i += chunkSize) {
+    for (let i = 0; i < Math.min(valid.length, 90); i += chunkSize) {
       const chunk = valid.slice(i, i + chunkSize);
       await Promise.all(chunk.map(async item => {
         const sym = item.symbol;
@@ -1206,7 +1208,22 @@ async function updateRadar() {
 
     if (scanned.length > 0) {
       radarMap = freshRadarMap;
-      radarList = scanned.sort((a, b) => Math.abs(b.chg3h) - Math.abs(a.chg3h));
+      radarList = scanned.sort((a, b) => Math.abs(b.chg15m) - Math.abs(a.chg15m));
+      const liquid = scanned.filter(x => (x.vol24hM || 0) >= 1);
+      radarLeaderLong = new Set(
+        liquid
+          .filter(x => x.chg15m >= 0.80 && x.chg15m <= 2.40 && (x.taker15m || 50) >= 54)
+          .sort((a, b) => b.chg15m - a.chg15m)
+          .slice(0, 8)
+          .map(x => x.symbol)
+      );
+      radarLeaderShort = new Set(
+        liquid
+          .filter(x => x.chg15m <= -0.80 && x.chg15m >= -2.40 && (x.taker15m || 50) <= 46)
+          .sort((a, b) => a.chg15m - b.chg15m)
+          .slice(0, 8)
+          .map(x => x.symbol)
+      );
     }
   } catch (err) {
   } finally {
@@ -1323,6 +1340,7 @@ async function scanLoop() {
       if (rInfo) {
         if (rInfo.signal && rInfo.signal.includes("BALİNA")) radarBoost += 60;
         else if (rInfo.signal && (rInfo.signal.includes("ROKET") || rInfo.signal.includes("BOĞA") || rInfo.signal.includes("SIÇRAMA") || rInfo.signal.includes("AYI") || rInfo.signal.includes("ŞELALE"))) radarBoost += 35;
+        if (radarLeaderLong.has(sym) || radarLeaderShort.has(sym)) radarBoost += 80;
         if (Math.abs(rInfo.chg15m || 0) >= 0.8) radarBoost += Math.min(40, Math.abs(rInfo.chg15m) * 10);
         const buyTaker = rInfo.takerBuyRatio || 50;
         const sellTaker = 100 - buyTaker;
@@ -1629,8 +1647,8 @@ async function scanLoop() {
         const clearedLow = low3h > 0 && curP <= low3h * 0.9975;
         const liveLong = curMovePct >= 0.30 && curMovePct <= 0.75 && volMult >= 0.90 && effectiveTaker >= 55 && chg3hVal >= 0.80;
         const liveShort = curMovePct <= -0.30 && curMovePct >= -0.75 && volMult >= 0.90 && effectiveTakerShort <= 45 && chg3hVal <= -0.80;
-        const pushLong = liveLong && (roomLong >= 0.25 || (clearedHigh && volMult >= 2.5));
-        const pushShort = liveShort && (roomShort >= 0.25 || (clearedLow && volMult >= 2.5));
+        const pushLong = liveLong && radarLeaderLong.has(sym) && (roomLong >= 0.25 || (clearedHigh && volMult >= 2.5));
+        const pushShort = liveShort && radarLeaderShort.has(sym) && (roomShort >= 0.25 || (clearedLow && volMult >= 2.5));
 
         let isLongPump = false;
         let isRocketSignal = false;
