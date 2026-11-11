@@ -30,12 +30,12 @@ let CONFIG = {
   marginPerTrade: 12.0,      // Temel Teminat 12$ (3 Slot ile $36 marjin, kasada $64 nakit tampon)
   leverage: 20,              // Kaldıraç 20x (Komisyonu ve stop hasarını yarıya indirir, nefes alanı açar)
   maxSlots: 3,               // 3 Slot
-  slPct: 0.35,               // Vur kaç stop. -%0.35 spot
-  bePct: 0.18,               // +%0.18 görülünce geri verirse çık
-  moonPct: 0.25,             // +%0.25 spotta tamamı kapanır
-  tp1Pct: 0.25,              // +%0.25 spotta tamamı cebe
-  tp2Pct: 0.25,
-  maxTradeMin: 4,            // 4 dk'da kâr gelmezse çık
+  slPct: 0.20,               // Vur kaç stop. Kayıp, kârdan küçük kalsın
+  bePct: 0.16,               // +%0.30 görününce +%0.16'da kâr kilit
+  moonPct: 0.42,             // +%0.42 spotta tamamı kapanır
+  tp1Pct: 0.42,
+  tp2Pct: 0.42,
+  maxTradeMin: 3,
   tp1ClosePct: 0.50,         // TP1'de %50 cebe
   minEntryScore: 0,          // Sürü: puan kapısı yok
   maxTradesPerDay: 0,        // 0 = günlük limit yok
@@ -112,7 +112,7 @@ function engineSnapshot() {
     userSlots: userRisk.maxSlots,
     userMargin: userRisk.marginPerTrade,
     gates: {
-      entry: 'Yükselen coine short, düşen coine long. +%0.25 cebe',
+      entry: 'Vur kaç: hareketle gir, +%0.42 cebe, zarar %0.20',
       book: 'OBI veto',
       judge: 'açık',
       flow: 'son 12 mum',
@@ -226,12 +226,12 @@ function scannerShield(side, ctx) {
   const rsi = Number(ctx.rsi3m);
   const taker = Number(ctx.taker);
   const vol = Number(ctx.volMult);
-  if (side === 'SHORT') {
-    if (taker < 55) return `yükselişte alıcı yok (%${taker.toFixed(0)})`;
-    if (rsi < 40) return `RSI dip, short yok (${rsi.toFixed(0)})`;
+  if (side === 'LONG') {
+    if (taker < 55) return `alıcı yok (%${taker.toFixed(0)})`;
+    if (rsi > 72) return `RSI tepe (${rsi.toFixed(0)})`;
   } else {
-    if (taker > 45) return `düşüşte satıcı yok (%${taker.toFixed(0)})`;
-    if (rsi > 60) return `RSI tepe, long yok (${rsi.toFixed(0)})`;
+    if (taker > 45) return `satıcı yok (%${taker.toFixed(0)})`;
+    if (rsi < 28) return `RSI dip (${rsi.toFixed(0)})`;
   }
   if (vol >= 8 && Math.abs(taker - 50) < 3) return `hacim var yön yok`;
   return null;
@@ -317,12 +317,12 @@ function loadSettings() {
     clean.maxSlots = 3;
     clean.marginPerTrade = 12;
     clean.leverage = 20;
-    clean.slPct = 0.35;
-    clean.bePct = 0.18;
-    clean.tp1Pct = 0.25;
-    clean.tp2Pct = 0.25;
-    clean.moonPct = 0.25;
-    clean.maxTradeMin = 4;
+    clean.slPct = 0.20;
+    clean.bePct = 0.16;
+    clean.tp1Pct = 0.42;
+    clean.tp2Pct = 0.42;
+    clean.moonPct = 0.42;
+    clean.maxTradeMin = 3;
     Object.assign(CONFIG, clean);
     rememberUserRisk();
     settingsCustomized = true;
@@ -1391,9 +1391,9 @@ async function scanLoop() {
         else if (rInfo.signal && (rInfo.signal.includes("ROKET") || rInfo.signal.includes("BOĞA") || rInfo.signal.includes("SIÇRAMA") || rInfo.signal.includes("AYI") || rInfo.signal.includes("ŞELALE"))) radarBoost += 35;
         const c15 = Number(rInfo.chg15m) || 0;
         const t15 = Number(rInfo.taker15m) || 50;
-        if (c15 >= 0.40 && c15 <= 2.40 && t15 >= 55) radarBoost += 70;
-        if (c15 <= -0.40 && c15 >= -2.40 && t15 <= 45) radarBoost += 70;
-        if (Math.abs(c15) > 2.40) radarBoost -= 40;
+        if (c15 >= 0.25 && c15 <= 1.40 && t15 >= 55) radarBoost += 70;
+        if (c15 <= -0.25 && c15 >= -1.40 && t15 <= 45) radarBoost += 70;
+        if (Math.abs(c15) > 1.40) radarBoost -= 40;
         const buyTaker = rInfo.takerBuyRatio || 50;
         const sellTaker = 100 - buyTaker;
         if (buyTaker >= 54.0 || sellTaker >= 54.0 || (rInfo.taker15m || 50) >= 55.0 || (100 - (rInfo.taker15m || 50)) >= 55.0) radarBoost += 20;
@@ -1584,8 +1584,8 @@ async function scanLoop() {
         }
         const atr3mPct = trCount > 0 ? trSum / trCount : 0.5;
 
-        const radarOkLong = chg15mCalc >= 0.40 && chg15mCalc <= 2.40 && chg24Val <= 5 && chg24Val > -3;
-        const radarOkShort = chg15mCalc <= -0.40 && chg15mCalc >= -2.40 && chg24Val >= -5 && chg24Val < 3;
+        const radarOkLong = chg15mCalc >= 0.25 && chg15mCalc <= 1.40 && chg24Val <= 4 && chg24Val > -2;
+        const radarOkShort = chg15mCalc <= -0.25 && chg15mCalc >= -1.40 && chg24Val >= -4 && chg24Val < 2;
 
         if (!radarOkLong && !radarOkShort) {
           // 👻 Radar'a ÇOK YAKIN elenen adayları da kaydet (yeni 1s/30dk/pos1h/RSI/ATR filtrelerinin etkisi ölçülebilsin)
@@ -1668,21 +1668,21 @@ async function scanLoop() {
         const noiseOk = atr3mPct < 0.50;
         const buyers = taker15mCalc >= 55;
         const sellers = taker15mCalc <= 45;
-        const goLong = volMult >= 0.75 && curP > curO && curMovePct >= 0.15 && curMovePct <= 0.40 && buyers && noWickLong;
-        const goShort = volMult >= 0.75 && curP < curO && curMovePct <= -0.15 && curMovePct >= -0.40 && sellers && noWickShort;
+        const goLong = volMult >= 0.80 && curP > curO && curMovePct >= 0.10 && curMovePct <= 0.28 && buyers && noWickLong;
+        const goShort = volMult >= 0.80 && curP < curO && curMovePct <= -0.10 && curMovePct >= -0.28 && sellers && noWickShort;
 
         let isLongPump = false;
         let isRocketSignal = false;
         if (hasRealLiquidity && radarOkLong && goLong) {
           isLongPump = true;
           isRocketSignal = true;
-          radarTag = `[SHORT | yükselişe ters | 15dk +%${chg15mCalc.toFixed(2)} | 3dk +%${curMovePct.toFixed(2)} | Alıcı %${taker15mCalc.toFixed(0)}]`;
+          radarTag = `[LONG | hareketle | 15dk +%${chg15mCalc.toFixed(2)} | 3dk +%${curMovePct.toFixed(2)} | Alıcı %${taker15mCalc.toFixed(0)}]`;
         }
 
         let isShortDump = false;
         if (hasRealLiquidity && radarOkShort && goShort) {
           isShortDump = true;
-          radarTag = `[LONG | düşüşe ters | 15dk %${chg15mCalc.toFixed(2)} | 3dk %${curMovePct.toFixed(2)} | Alıcı %${taker15mCalc.toFixed(0)}]`;
+          radarTag = `[SHORT | hareketle | 15dk %${chg15mCalc.toFixed(2)} | 3dk %${curMovePct.toFixed(2)} | Alıcı %${taker15mCalc.toFixed(0)}]`;
         }
 
         if (!isLongPump && !isShortDump) {
@@ -1690,7 +1690,7 @@ async function scanLoop() {
         }
 
         if (isLongPump || isShortDump) {
-          const side = isLongPump ? "SHORT" : "LONG";
+          const side = isLongPump ? "LONG" : "SHORT";
           const shieldWhy = scannerShield(side, {
             rsi3m,
             taker: taker15mCalc,
@@ -1742,7 +1742,7 @@ async function scanLoop() {
           // Stop = 1.6 × 3dk ATR (taban %0.78, tavan %2.0). Stop genişledikçe teminat aynı oranda küçülür,
           // böylece işlem başına dolar riski sabit kalır. Kâr kademeleri (BE, kilit, TP1, TP2, Moon) volK ile ölçeklenir.
           const baseMargin = getDynamicMargin();
-          const tradeSlPct = 0.35;
+          const tradeSlPct = 0.20;
           const volK = 1.0;
           let tradeMargin = Number(baseMargin.toFixed(2));
 
@@ -1975,16 +1975,20 @@ async function fastRiskLoop() {
         }
       }
 
-      if (!exitReason && move >= 0.25) {
+      if (!exitReason && move >= 0.42) {
         exitReason = `Vur kaç kâr alındı (+%${move.toFixed(2)})`;
       }
 
-      if (!exitReason && mfe >= 0.18 && move <= 0.08) {
-        exitReason = `Vur kaç: kâr geri geldi (zirve +%${mfe.toFixed(2)}, anlık +%${move.toFixed(2)})`;
+      if (!exitReason && mfe >= 0.30 && move <= 0.16) {
+        exitReason = `Vur kaç kâr kilit (+%${move.toFixed(2)}, zirve +%${mfe.toFixed(2)})`;
       }
 
-      if (!exitReason && durMin >= 4 && mfe < 0.18) {
-        exitReason = `Vur kaç: 4 dk'da kâr gelmedi (%${move.toFixed(2)})`;
+      if (!exitReason && durMin >= 0.75 && mfe < 0.08 && move <= -0.08) {
+        exitReason = `Vur kaç: gitmedi, küçük kes (%${move.toFixed(2)})`;
+      }
+
+      if (!exitReason && durMin >= 2 && mfe < 0.12) {
+        exitReason = `Vur kaç: 2 dk'da kâr gelmedi (%${move.toFixed(2)})`;
       }
 
       // ========================================================
