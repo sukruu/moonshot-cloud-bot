@@ -112,7 +112,7 @@ function engineSnapshot() {
     userSlots: userRisk.maxSlots,
     userMargin: userRisk.marginPerTrade,
     gates: {
-      entry: 'Yükselen long, düşen short. +%0.25 cebe',
+      entry: 'Yükselen coine short, düşen coine long. +%0.25 cebe',
       book: 'OBI veto',
       judge: 'açık',
       flow: 'son 12 mum',
@@ -226,15 +226,14 @@ function scannerShield(side, ctx) {
   const rsi = Number(ctx.rsi3m);
   const taker = Number(ctx.taker);
   const vol = Number(ctx.volMult);
-  if (side === 'LONG') {
-    if (rsi > 74) return `RSI tepe (${rsi.toFixed(0)})`;
-    if (taker < 48) return `taker ters (%${taker.toFixed(0)} alıcı)`;
-    if (vol >= 2.2 && taker < 50) return `hacim ters yönde (${vol.toFixed(1)}x)`;
+  if (side === 'SHORT') {
+    if (taker < 55) return `yükselişte alıcı yok (%${taker.toFixed(0)})`;
+    if (rsi < 40) return `RSI dip, short yok (${rsi.toFixed(0)})`;
   } else {
-    if (rsi < 26) return `RSI dip (${rsi.toFixed(0)})`;
-    if (taker > 50) return `taker ters (%${taker.toFixed(0)} alıcı)`;
-    if (vol >= 2.2 && taker > 52) return `hacim ters yönde (${vol.toFixed(1)}x)`;
+    if (taker > 45) return `düşüşte satıcı yok (%${taker.toFixed(0)})`;
+    if (rsi > 60) return `RSI tepe, long yok (${rsi.toFixed(0)})`;
   }
+  if (vol >= 8 && Math.abs(taker - 50) < 3) return `hacim var yön yok`;
   return null;
 }
 
@@ -1677,13 +1676,13 @@ async function scanLoop() {
         if (hasRealLiquidity && radarOkLong && goLong) {
           isLongPump = true;
           isRocketSignal = true;
-          radarTag = `[LONG | 15dk +%${chg15mCalc.toFixed(2)} | 1s +%${chg1hCalc.toFixed(2)} | 3dk +%${curMovePct.toFixed(2)} | Alıcı %${taker15mCalc.toFixed(0)}]`;
+          radarTag = `[SHORT | yükselişe ters | 15dk +%${chg15mCalc.toFixed(2)} | 3dk +%${curMovePct.toFixed(2)} | Alıcı %${taker15mCalc.toFixed(0)}]`;
         }
 
         let isShortDump = false;
         if (hasRealLiquidity && radarOkShort && goShort) {
           isShortDump = true;
-          radarTag = `[SHORT | 15dk %${chg15mCalc.toFixed(2)} | 1s %${chg1hCalc.toFixed(2)} | 3dk %${curMovePct.toFixed(2)} | Alıcı %${taker15mCalc.toFixed(0)}]`;
+          radarTag = `[LONG | düşüşe ters | 15dk %${chg15mCalc.toFixed(2)} | 3dk %${curMovePct.toFixed(2)} | Alıcı %${taker15mCalc.toFixed(0)}]`;
         }
 
         if (!isLongPump && !isShortDump) {
@@ -1691,7 +1690,7 @@ async function scanLoop() {
         }
 
         if (isLongPump || isShortDump) {
-          const side = isLongPump ? "LONG" : "SHORT";
+          const side = isLongPump ? "SHORT" : "LONG";
           const shieldWhy = scannerShield(side, {
             rsi3m,
             taker: taker15mCalc,
@@ -1703,79 +1702,8 @@ async function scanLoop() {
             continue;
           }
 
-          let scoutInfo = null;
-          if (k3m && k3m.length >= 8) {
-            let quote = 0;
-            let takerBuy = 0;
-            const recent = k3m.slice(-12);
-            for (const k of recent) {
-              quote += parseFloat(k[7]) || 0;
-              takerBuy += parseFloat(k[10]) || 0;
-            }
-            const takerPct = quote > 0 ? (takerBuy / quote) * 100 : 50;
-            const netFlowM = ((takerBuy * 2) - quote) / 1e6;
-            const open0 = parseFloat(recent[0][1]) || 0;
-            const closeN = parseFloat(recent[recent.length - 1][4]) || 0;
-            const priceChg = open0 > 0 ? ((closeN - open0) / open0) * 100 : 0;
-            let cvdDivergence = 'NONE';
-            if (priceChg >= 0.50 && takerPct <= 48.0) cvdDivergence = 'BEARISH_DIVERGENCE';
-            else if (priceChg <= -0.50 && takerPct >= 52.0) cvdDivergence = 'BULLISH_DIVERGENCE';
-            scoutInfo = {
-              cvdDivergence,
-              isApprovedLong: takerPct >= 49.5 && netFlowM >= -0.05,
-              isApprovedShort: takerPct <= 50.5 && netFlowM <= 0.05,
-              netFlowM: Number(netFlowM.toFixed(3)),
-              takerPct
-            };
-          }
-          if (scoutInfo) {
-            if (side === 'LONG' && scoutInfo.cvdDivergence === 'BEARISH_DIVERGENCE') {
-              addLog(`🛑 [AKIŞ VETO]: ${sym} LONG — son 12 mumda fiyat yükselirken alıcı zayıf.`, 'WARN');
-              shadow('FLOW_VETO');
-              continue;
-            }
-            if (side === 'SHORT' && scoutInfo.cvdDivergence === 'BULLISH_DIVERGENCE') {
-              addLog(`🛑 [AKIŞ VETO]: ${sym} SHORT — son 12 mumda fiyat düşerken alıcı güçlü.`, 'WARN');
-              shadow('FLOW_VETO');
-              continue;
-            }
-            if (side === 'LONG' && scoutInfo.isApprovedLong === false) {
-              addLog(`🛑 [AKIŞ VETO]: ${sym} LONG — son 12 mumda net alıcı yok.`, 'WARN');
-              shadow('FLOW_VETO');
-              continue;
-            }
-            if (side === 'SHORT' && scoutInfo.isApprovedShort === false) {
-              addLog(`🛑 [AKIŞ VETO]: ${sym} SHORT — son 12 mumda net satıcı yok.`, 'WARN');
-              shadow('FLOW_VETO');
-              continue;
-            }
-          }
-
-          let depthData = null;
-          try {
-            depthData = await fetchBinance(`/fapi/v1/depth?symbol=${sym}&limit=10`);
-          } catch(e) {}
-          if (depthData && Array.isArray(depthData.bids) && Array.isArray(depthData.asks)) {
-            const bidVol = depthData.bids.reduce((acc, b) => acc + ((parseFloat(b[0]) || 0) * (parseFloat(b[1]) || 0)), 0);
-            const askVol = depthData.asks.reduce((acc, a) => acc + ((parseFloat(a[0]) || 0) * (parseFloat(a[1]) || 0)), 0);
-            const totalDepth = bidVol + askVol;
-            if (totalDepth > 0) {
-              const obi = (bidVol - askVol) / totalDepth;
-              if (side === 'LONG' && obi < -0.35) {
-                addLog(`🛑 [OBI VETO]: ${sym} LONG — Satış duvarı (OBI: ${obi.toFixed(2)}).`, 'WARN');
-                shadow('OBI_VETO', { obi: Number(obi.toFixed(2)) });
-                continue;
-              }
-              if (side === 'SHORT' && obi > 0.35) {
-                addLog(`🛑 [OBI VETO]: ${sym} SHORT — Alış duvarı (OBI: +${obi.toFixed(2)}).`, 'WARN');
-                shadow('OBI_VETO', { obi: Number(obi.toFixed(2)) });
-                continue;
-              }
-            }
-          }
-
           const judgeTakerInput = taker15mCalc;
-          const judgeChg15Input = side === 'LONG' ? chg15Long : chg15Short;
+          const judgeChg15Input = chg15mCalc;
           let judgeClearance = null;
           try {
             judgeClearance = evaluatePreTradeClearance(sym, side, {
