@@ -218,33 +218,31 @@ class JudicialAuditCourt {
     const chg24 = chg24raw;
     const chg15 = chg15raw;
 
-    const chg3raw = Number(candidateInfo.chg3h || 0);
     if (side === 'LONG') {
-      if (taker < 50.0 || taker > 86.0) {
+      if (taker < 55.0) {
         judicialScore -= 35;
-        accusations.push(`Sağlıksız Taker oranı (%${taker.toFixed(1)})`);
+        accusations.push(`Alıcı yok (%${taker.toFixed(1)})`);
       }
-      if (chg3raw <= 0) {
+      if (chg15 < 0.30) {
         judicialScore -= 35;
-        accusations.push(`3s yön ters (%${chg3raw.toFixed(1)})`);
+        accusations.push(`15dk yükselmiyor (%${chg15.toFixed(2)})`);
       }
-      if (chg24 < 0.40 || chg24 > 35.0) {
+      if (chg24 > 5.0) {
         judicialScore -= 35;
-        accusations.push(`24s yön ters veya tükenmiş (%${chg24.toFixed(1)})`);
+        accusations.push(`Gün bitmiş (+%${chg24.toFixed(1)})`);
       }
-    } else { // SHORT
-      const sellTaker = 100 - taker;
-      if (sellTaker < 50.0 || sellTaker > 86.0) {
+    } else {
+      if (taker > 45.0) {
         judicialScore -= 35;
-        accusations.push(`Satıcı delili sağlıksız (%${sellTaker.toFixed(1)})`);
+        accusations.push(`Satıcı yok (alıcı %${taker.toFixed(1)})`);
       }
-      if (chg3raw >= 0) {
+      if (chg15 > -0.30) {
         judicialScore -= 35;
-        accusations.push(`3s düşüş yönü yok (%${chg3raw.toFixed(1)})`);
+        accusations.push(`15dk düşmüyor (%${chg15.toFixed(2)})`);
       }
-      if (chg24 > -0.40 || chg24 < -35.0) {
+      if (chg24 < -5.0) {
         judicialScore -= 35;
-        accusations.push(`24s düşüş yönü yok veya tükenmiş (%${chg24.toFixed(1)})`);
+        accusations.push(`Gün bitmiş (%${chg24.toFixed(1)})`);
       }
     }
 

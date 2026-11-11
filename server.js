@@ -112,7 +112,7 @@ function engineSnapshot() {
     userSlots: userRisk.maxSlots,
     userMargin: userRisk.marginPerTrade,
     gates: {
-      entry: 'Vur kaç: +%0.25 cebe, 4 dk gitmezse çık',
+      entry: 'Yükselen long, düşen short. +%0.25 cebe',
       book: 'OBI veto',
       judge: 'açık',
       flow: 'son 12 mum',
@@ -225,17 +225,14 @@ function countTradesToday() {
 function scannerShield(side, ctx) {
   const rsi = Number(ctx.rsi3m);
   const taker = Number(ctx.taker);
-  const btc = Number(ctx.btc15);
   const vol = Number(ctx.volMult);
   if (side === 'LONG') {
     if (rsi > 74) return `RSI tepe (${rsi.toFixed(0)})`;
     if (taker < 48) return `taker ters (%${taker.toFixed(0)} alıcı)`;
-    if (btc < -0.20) return `BTC 15m düşüş (%${btc.toFixed(2)})`;
     if (vol >= 2.2 && taker < 50) return `hacim ters yönde (${vol.toFixed(1)}x)`;
   } else {
     if (rsi < 26) return `RSI dip (${rsi.toFixed(0)})`;
-    if (taker > 54) return `taker ters (%${taker.toFixed(0)} alıcı)`;
-    if (btc > 0.20) return `BTC 15m yükseliş (%${btc.toFixed(2)})`;
+    if (taker > 50) return `taker ters (%${taker.toFixed(0)} alıcı)`;
     if (vol >= 2.2 && taker > 52) return `hacim ters yönde (${vol.toFixed(1)}x)`;
   }
   return null;
@@ -1672,8 +1669,8 @@ async function scanLoop() {
         const noiseOk = atr3mPct < 0.50;
         const buyers = taker15mCalc >= 55;
         const sellers = taker15mCalc <= 45;
-        const goLong = volMult >= 0.75 && curP > curO && curMovePct >= 0.15 && curMovePct <= 0.40 && buyers && chg1hCalc >= 0 && chg3hVal >= 0 && noWickLong;
-        const goShort = volMult >= 0.75 && curP < curO && curMovePct <= -0.15 && curMovePct >= -0.40 && sellers && chg1hCalc <= 0 && chg3hVal <= 0 && noWickShort;
+        const goLong = volMult >= 0.75 && curP > curO && curMovePct >= 0.15 && curMovePct <= 0.40 && buyers && noWickLong;
+        const goShort = volMult >= 0.75 && curP < curO && curMovePct <= -0.15 && curMovePct >= -0.40 && sellers && noWickShort;
 
         let isLongPump = false;
         let isRocketSignal = false;
@@ -1697,7 +1694,7 @@ async function scanLoop() {
           const side = isLongPump ? "LONG" : "SHORT";
           const shieldWhy = scannerShield(side, {
             rsi3m,
-            taker: side === 'LONG' ? effectiveTaker : effectiveTakerShort,
+            taker: taker15mCalc,
             btc15: btc15mNumeric,
             volMult
           });
@@ -1777,7 +1774,7 @@ async function scanLoop() {
             }
           }
 
-          const judgeTakerInput = side === 'LONG' ? effectiveTaker : effectiveTakerShort;
+          const judgeTakerInput = taker15mCalc;
           const judgeChg15Input = side === 'LONG' ? chg15Long : chg15Short;
           let judgeClearance = null;
           try {
