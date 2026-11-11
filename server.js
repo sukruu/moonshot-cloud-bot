@@ -30,12 +30,12 @@ let CONFIG = {
   marginPerTrade: 12.0,      // Temel Teminat 12$ (3 Slot ile $36 marjin, kasada $64 nakit tampon)
   leverage: 20,              // Kaldıraç 20x (Komisyonu ve stop hasarını yarıya indirir, nefes alanı açar)
   maxSlots: 3,               // 3 Slot
-  slPct: 0.80,               // Hard Stop -%0.80 spot (Nefes alanı, erken panik kesimi yok)
-  bePct: 0.38,               // +%0.38 spot görülünce stop maliyetin üstüne (+%0.12 spot) çekilir
-  moonPct: 1.80,             // +%1.80 spot runner tavanı
-  tp1Pct: 0.48,              // +%0.48 spotta (+%9.6 ROI) %50 pozisyon cebe
-  tp2Pct: 0.85,              // +%0.85 spotta (+%17.0 ROI) %30 pozisyon cebe, %20 runner
-  maxTradeMin: 35,           // 35 dk sonra ivmesiz ise kapat
+  slPct: 0.35,               // Vur kaç stop. -%0.35 spot
+  bePct: 0.18,               // +%0.18 görülünce geri verirse çık
+  moonPct: 0.25,             // +%0.25 spotta tamamı kapanır
+  tp1Pct: 0.25,              // +%0.25 spotta tamamı cebe
+  tp2Pct: 0.25,
+  maxTradeMin: 4,            // 4 dk'da kâr gelmezse çık
   tp1ClosePct: 0.50,         // TP1'de %50 cebe
   minEntryScore: 0,          // Sürü: puan kapısı yok
   maxTradesPerDay: 0,        // 0 = günlük limit yok
@@ -112,7 +112,7 @@ function engineSnapshot() {
     userSlots: userRisk.maxSlots,
     userMargin: userRisk.marginPerTrade,
     gates: {
-      entry: 'Alıcıyla yükselen long, satıcıyla düşen short',
+      entry: 'Vur kaç: +%0.25 cebe, 4 dk gitmezse çık',
       book: 'OBI veto',
       judge: 'açık',
       flow: 'son 12 mum',
@@ -321,12 +321,12 @@ function loadSettings() {
     clean.maxSlots = 3;
     clean.marginPerTrade = 12;
     clean.leverage = 20;
-    clean.slPct = 0.80;
-    clean.bePct = 0.38;
-    clean.tp1Pct = 0.48;
-    clean.tp2Pct = 0.85;
-    clean.moonPct = 1.80;
-    clean.maxTradeMin = 35;
+    clean.slPct = 0.35;
+    clean.bePct = 0.18;
+    clean.tp1Pct = 0.25;
+    clean.tp2Pct = 0.25;
+    clean.moonPct = 0.25;
+    clean.maxTradeMin = 4;
     Object.assign(CONFIG, clean);
     rememberUserRisk();
     settingsCustomized = true;
@@ -1672,8 +1672,8 @@ async function scanLoop() {
         const noiseOk = atr3mPct < 0.50;
         const buyers = taker15mCalc >= 55;
         const sellers = taker15mCalc <= 45;
-        const goLong = volMult >= 0.75 && curP > curO && curMovePct >= 0.18 && curMovePct <= 0.70 && buyers && chg1hCalc >= 0 && chg3hVal >= 0 && noWickLong;
-        const goShort = volMult >= 0.75 && curP < curO && curMovePct <= -0.18 && curMovePct >= -0.70 && sellers && chg1hCalc <= 0 && chg3hVal <= 0 && noWickShort;
+        const goLong = volMult >= 0.75 && curP > curO && curMovePct >= 0.15 && curMovePct <= 0.40 && buyers && chg1hCalc >= 0 && chg3hVal >= 0 && noWickLong;
+        const goShort = volMult >= 0.75 && curP < curO && curMovePct <= -0.15 && curMovePct >= -0.40 && sellers && chg1hCalc <= 0 && chg3hVal <= 0 && noWickShort;
 
         let isLongPump = false;
         let isRocketSignal = false;
@@ -1817,8 +1817,7 @@ async function scanLoop() {
           // Stop = 1.6 × 3dk ATR (taban %0.78, tavan %2.0). Stop genişledikçe teminat aynı oranda küçülür,
           // böylece işlem başına dolar riski sabit kalır. Kâr kademeleri (BE, kilit, TP1, TP2, Moon) volK ile ölçeklenir.
           const baseMargin = getDynamicMargin();
-          const baseSlPct = Math.min(0.85, Math.max(0.65, Number(CONFIG.slPct) || 0.80));
-          const tradeSlPct = Math.min(0.85, Math.max(0.70, baseSlPct));
+          const tradeSlPct = 0.35;
           const volK = 1.0;
           let tradeMargin = Number(baseMargin.toFixed(2));
 
@@ -2049,6 +2048,18 @@ async function fastRiskLoop() {
         } else {
           exitReason = `🛑 Moonshot Stop Loss (-%${(pos.slPct || CONFIG.slPct).toFixed(2)})`;
         }
+      }
+
+      if (!exitReason && move >= 0.25) {
+        exitReason = `Vur kaç kâr alındı (+%${move.toFixed(2)})`;
+      }
+
+      if (!exitReason && mfe >= 0.18 && move <= 0.08) {
+        exitReason = `Vur kaç: kâr geri geldi (zirve +%${mfe.toFixed(2)}, anlık +%${move.toFixed(2)})`;
+      }
+
+      if (!exitReason && durMin >= 4 && mfe < 0.18) {
+        exitReason = `Vur kaç: 4 dk'da kâr gelmedi (%${move.toFixed(2)})`;
       }
 
       // ========================================================
