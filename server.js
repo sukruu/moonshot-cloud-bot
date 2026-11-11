@@ -112,7 +112,7 @@ function engineSnapshot() {
     userSlots: userRisk.maxSlots,
     userMargin: userRisk.marginPerTrade,
     gates: {
-      entry: '15dk lideri, hareket %0.8-%2.4, tepe ve dip yok',
+      entry: 'Alıcıyla yükselen long, satıcıyla düşen short',
       book: 'OBI veto',
       judge: 'açık',
       flow: 'son 12 mum',
@@ -1393,8 +1393,11 @@ async function scanLoop() {
       if (rInfo) {
         if (rInfo.signal && rInfo.signal.includes("BALİNA")) radarBoost += 60;
         else if (rInfo.signal && (rInfo.signal.includes("ROKET") || rInfo.signal.includes("BOĞA") || rInfo.signal.includes("SIÇRAMA") || rInfo.signal.includes("AYI") || rInfo.signal.includes("ŞELALE"))) radarBoost += 35;
-        if (radarLeaderLong.has(sym) || radarLeaderShort.has(sym)) radarBoost += 80;
-        if (Math.abs(rInfo.chg15m || 0) >= 0.8) radarBoost += Math.min(40, Math.abs(rInfo.chg15m) * 10);
+        const c15 = Number(rInfo.chg15m) || 0;
+        const t15 = Number(rInfo.taker15m) || 50;
+        if (c15 >= 0.40 && c15 <= 2.40 && t15 >= 55) radarBoost += 70;
+        if (c15 <= -0.40 && c15 >= -2.40 && t15 <= 45) radarBoost += 70;
+        if (Math.abs(c15) > 2.40) radarBoost -= 40;
         const buyTaker = rInfo.takerBuyRatio || 50;
         const sellTaker = 100 - buyTaker;
         if (buyTaker >= 54.0 || sellTaker >= 54.0 || (rInfo.taker15m || 50) >= 55.0 || (100 - (rInfo.taker15m || 50)) >= 55.0) radarBoost += 20;
@@ -1585,17 +1588,8 @@ async function scanLoop() {
         }
         const atr3mPct = trCount > 0 ? trSum / trCount : 0.5;
 
-        const radarOkLong =
-          !sig.includes("ŞELALE") &&
-          !sig.includes("AYI") &&
-          chg24Val >= 0.40 && chg24Val <= 35.0 &&
-          chg3hVal > 0;
-
-        const radarOkShort =
-          !sig.includes("ROKET") &&
-          !sig.includes("BOĞA") &&
-          chg24Val <= -0.40 && chg24Val >= -35.0 &&
-          chg3hVal < 0;
+        const radarOkLong = chg15mCalc >= 0.40 && chg15mCalc <= 2.40 && chg24Val <= 5 && chg24Val > -3;
+        const radarOkShort = chg15mCalc <= -0.40 && chg15mCalc >= -2.40 && chg24Val >= -5 && chg24Val < 3;
 
         if (!radarOkLong && !radarOkShort) {
           // 👻 Radar'a ÇOK YAKIN elenen adayları da kaydet (yeni 1s/30dk/pos1h/RSI/ATR filtrelerinin etkisi ölçülebilsin)
@@ -1676,49 +1670,23 @@ async function scanLoop() {
         const vol3hCheck = rInfo.vol3hM || ((quote90mCalc * 2) / 1e6);
         const hasRealLiquidity = vol3hCheck >= 0.80 && (isVip || vol24 >= 1.5);
         const noiseOk = atr3mPct < 0.50;
-        const tapeAliveLong = chg3hVal >= 0.35;
-        const tapeAliveShort = chg3hVal <= -0.35;
-        const freshLong = chg24Val <= 5;
-        const freshShort = chg24Val >= -5;
-        const hasBuyerDominance = effectiveTaker >= 51.0 && effectiveTaker <= 86.0;
-        const hasSellerDominance = effectiveTakerShort <= 49.0 && effectiveTakerShort >= 16.0;
-
-        const priorH = parseFloat(k3m[lastIdx - 2][2]);
-        const priorL = parseFloat(k3m[lastIdx - 2][3]);
-        const brokePrevHigh = prevC > priorH || curP > priorH;
-        const brokePrevLow = prevC < priorL || curP < priorL;
-        const isBreakoutHoldLong = prevMovePct >= 0.28 && prevMovePct <= 0.85 && curMovePct >= 0.12 && curP >= prevC && twoCandleMovePct >= 0.38;
-        const isBreakoutHoldShort = prevMovePct <= -0.28 && prevMovePct >= -0.85 && curMovePct <= -0.12 && curP <= prevC && twoCandleMovePct <= -0.38;
-        const continuationLong = curP > curO && curMovePct >= 0.14 && (brokePrevHigh || isBreakoutHoldLong || curP >= prevC);
-        const continuationShort = curP < curO && curMovePct <= -0.12 && (brokePrevLow || isBreakoutHoldShort || curP <= prevC);
-
-        const high3h = Number(rInfo.high3h) || 0;
-        const low3h = Number(rInfo.low3h) || 0;
-        const roomLong = high3h > 0 ? ((high3h - curP) / curP) * 100 : 99;
-        const roomShort = low3h > 0 ? ((curP - low3h) / curP) * 100 : 99;
-        const clearedHigh = high3h > 0 && curP >= high3h * 1.0025;
-        const clearedLow = low3h > 0 && curP <= low3h * 0.9975;
-        const liveLong = curMovePct >= 0.30 && curMovePct <= 0.75 && volMult >= 0.90 && effectiveTaker >= 55 && chg3hVal >= 0.80;
-        const liveShort = curMovePct <= -0.30 && curMovePct >= -0.75 && volMult >= 0.90 && effectiveTakerShort <= 45 && chg3hVal <= -0.80;
-        const pushLong = liveLong && radarLeaderLong.has(sym) && (roomLong >= 0.25 || (clearedHigh && volMult >= 2.5));
-        const pushShort = liveShort && radarLeaderShort.has(sym) && (roomShort >= 0.25 || (clearedLow && volMult >= 2.5));
+        const buyers = taker15mCalc >= 55;
+        const sellers = taker15mCalc <= 45;
+        const goLong = volMult >= 0.75 && curP > curO && curMovePct >= 0.18 && curMovePct <= 0.70 && buyers && chg1hCalc >= 0 && chg3hVal >= 0 && noWickLong;
+        const goShort = volMult >= 0.75 && curP < curO && curMovePct <= -0.18 && curMovePct >= -0.70 && sellers && chg1hCalc <= 0 && chg3hVal <= 0 && noWickShort;
 
         let isLongPump = false;
         let isRocketSignal = false;
-        if (hasRealLiquidity && noiseOk && tapeAliveLong && freshLong && noWickLong && hasBuyerDominance && radarOkLong && continuationLong && pushLong) {
-          if (prevMovePct >= -0.30 && spikeVolMult <= 6.0) {
-            isLongPump = true;
-            isRocketSignal = true;
-            radarTag = `[🚀 MARSCOIN SÜRÜ | 3dk: +%${curMovePct.toFixed(2)} | 24s: +%${chg24Val.toFixed(1)} | Hacim: ${volMult.toFixed(2)}x | Taker: %${effectiveTaker.toFixed(0)}]`;
-          }
+        if (hasRealLiquidity && radarOkLong && goLong) {
+          isLongPump = true;
+          isRocketSignal = true;
+          radarTag = `[LONG | 15dk +%${chg15mCalc.toFixed(2)} | 1s +%${chg1hCalc.toFixed(2)} | 3dk +%${curMovePct.toFixed(2)} | Alıcı %${taker15mCalc.toFixed(0)}]`;
         }
 
         let isShortDump = false;
-        if (hasRealLiquidity && noiseOk && tapeAliveShort && freshShort && noWickShort && hasSellerDominance && radarOkShort && continuationShort && pushShort) {
-          if (prevMovePct <= 0.30 && spikeVolMult <= 6.0) {
-            isShortDump = true;
-            radarTag = `[🩸 MARSCOIN SÜRÜ SHORT | 3dk: %${curMovePct.toFixed(2)} | 24s: %${chg24Val.toFixed(1)} | Hacim: ${volMult.toFixed(2)}x | Taker: %${effectiveTakerShort.toFixed(0)}]`;
-          }
+        if (hasRealLiquidity && radarOkShort && goShort) {
+          isShortDump = true;
+          radarTag = `[SHORT | 15dk %${chg15mCalc.toFixed(2)} | 1s %${chg1hCalc.toFixed(2)} | 3dk %${curMovePct.toFixed(2)} | Alıcı %${taker15mCalc.toFixed(0)}]`;
         }
 
         if (!isLongPump && !isShortDump) {
@@ -2199,6 +2167,10 @@ async function fastRiskLoop() {
       // ⏱️ 7. ÖLÜ İŞLEM NEŞTERİ (Dead Trade Scalpel)
       // ========================================================
       // İvmesiz kalan ölü işlemleri saatlerce bekleyip tam stop (-$2.50) yemek yerine erkenden küçük bir çizikle (-%0.25 spot / -$0.75) keser!
+      if (!exitReason && !pos.tp1Taken && durMin >= 1 && mfe < 0.10 && move <= -0.12) {
+        exitReason = `Çıkış: 1 dk'da gitmedi (%${move.toFixed(2)})`;
+      }
+
       if (!exitReason && !pos.tp1Taken && mfe >= 0.40 && move <= 0.04) {
         exitReason = `⏱️ Kâr geri verildi (Zirve: +%${mfe.toFixed(2)} / girişe döndü)`;
       }
