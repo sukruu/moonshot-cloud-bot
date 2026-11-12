@@ -554,6 +554,54 @@ function formatCpPct(val) {
   return (val !== null && val !== undefined && isFinite(val)) ? `"%${Number(val).toFixed(2)}"` : `"-"`;
 }
 
+function csvNum(v, digits, wrap) {
+  if (v === null || v === undefined || !isFinite(Number(v))) return '"-"';
+  const body = Number(v).toFixed(digits);
+  return wrap ? `"${wrap[0]}${body}${wrap[1] || ''}"` : body;
+}
+
+function extraTradeCsvCells(trade) {
+  return [
+    csvNum(trade.margin, 2, ['', '']),
+    csvNum(trade.leverage, 0),
+    csvNum(trade.notional, 2, ['', '']),
+    csvNum(trade.slPct, 2, ['%', '']),
+    csvNum(trade.tpPct, 2, ['%', '']),
+    csvNum(trade.exitMovePct, 2, ['%', '']),
+    csvNum(trade.givebackPct, 2, ['%', '']),
+    csvNum(trade.chg1h, 2, ['%', '']),
+    csvNum(trade.vol24M, 1, ['$', 'M']),
+    csvNum(trade.pos1h, 1, ['%', '']),
+    csvNum(trade.breakVol, 2),
+    csvNum(trade.trigger3m, 2, ['%', '']),
+    csvNum(trade.spreadBps, 2),
+    csvNum(trade.btc5mExit, 2, ['%', '']),
+    csvNum(trade.btc15mExit, 2, ['%', '']),
+    csvNum(trade.balanceAfter, 2, ['', '']),
+    csvNum(trade.oppositePnl, 2, ['', ''])
+  ];
+}
+
+const EXTRA_CSV_HEADER = [
+  'Teminat ($)',
+  'Kaldıraç',
+  'Nominal ($)',
+  'Stop (%)',
+  'Hedef (%)',
+  'Çıkış Hareketi (%)',
+  'Geri Verme (%)',
+  '1s (%)',
+  '24s Hacim ($M)',
+  '1s Kanal (%)',
+  'Kırılım Hacmi (x)',
+  'Tetik 3dk (%)',
+  'Spread (bps)',
+  'BTC 5m Çıkış (%)',
+  'BTC 15m Çıkış (%)',
+  'Kasa Sonrası ($)',
+  'Ters PnL ($)'
+];
+
 function rewriteCsvFile() {
   try {
     const csvHeader = '\uFEFF' + [
@@ -589,7 +637,8 @@ function rewriteCsvFile() {
       'Brüt ($)',
       'Komisyon ($)',
       'Slippage ($)',
-      'Strateji'
+      'Strateji',
+      ...EXTRA_CSV_HEADER
     ].join(';') + '\n';
 
     let content = csvHeader;
@@ -636,7 +685,8 @@ function rewriteCsvFile() {
         trade.grossPnl != null ? `"${Number(trade.grossPnl).toFixed(2)}"` : '"-"',
         trade.feeUsd != null ? `"${Number(trade.feeUsd).toFixed(2)}"` : '"-"',
         trade.slipUsd != null ? `"${Number(trade.slipUsd).toFixed(2)}"` : '"-"',
-        `"${trade.strategy || '-'}"`
+        `"${trade.strategy || '-'}"`,
+        ...extraTradeCsvCells(trade)
       ].join(';') + '\n';
     });
     fs.writeFileSync(CSV_FILE, content, 'utf8');
@@ -692,7 +742,8 @@ function appendTradeToCsv(trade) {
       trade.grossPnl != null ? `"${Number(trade.grossPnl).toFixed(2)}"` : '"-"',
       trade.feeUsd != null ? `"${Number(trade.feeUsd).toFixed(2)}"` : '"-"',
       trade.slipUsd != null ? `"${Number(trade.slipUsd).toFixed(2)}"` : '"-"',
-      `"${trade.strategy || '-'}"`
+      `"${trade.strategy || '-'}"`,
+      ...extraTradeCsvCells(trade)
     ].join(';') + '\n';
     fs.appendFileSync(CSV_FILE, row, 'utf8');
   } catch (err) {
@@ -1758,11 +1809,16 @@ async function scanLoop() {
           radarTag += ` [SL: %${tradeSlPct.toFixed(2)} | ATR3m: %${atr3mPct.toFixed(2)} | Teminat: $${tradeMargin.toFixed(1)}]`;
 
           let fillPx = side === "LONG" ? curP * 1.00015 : curP * 0.99985;
+          let spreadBps = null;
           try {
             const bk = await fetchBinance(`/fapi/v1/ticker/bookTicker?symbol=${sym}`);
             const ask = bk && parseFloat(bk.askPrice);
             const bid = bk && parseFloat(bk.bidPrice);
-            if (ask > 0 && bid > 0) fillPx = side === "LONG" ? ask : bid;
+            if (ask > 0 && bid > 0) {
+              fillPx = side === "LONG" ? ask : bid;
+              const mid = (ask + bid) / 2;
+              if (mid > 0) spreadBps = Number(((ask - bid) / mid * 10000).toFixed(2));
+            }
           } catch (e) {}
           const stopPrice = side === "LONG"
             ? fillPx * (1 - tradeSlPct / 100)
@@ -1800,6 +1856,12 @@ async function scanLoop() {
             cp15m: null,
             entryRsi: Number(rsi3m.toFixed(1)),
             chg15: Number(chg15mTrue.toFixed(2)),
+            chg1h: Number(chg1hCalc.toFixed(3)),
+            vol24M: Number((data.volM || 0).toFixed(1)),
+            pos1h: Number(pos1h.toFixed(1)),
+            breakVol: Number(prevVolMult.toFixed(2)),
+            trigger3m: Number(curMovePct.toFixed(3)),
+            spreadBps,
             strategy: 'RETEST',
             margin: tradeMargin,
             initialMargin: tradeMargin,
@@ -1870,6 +1932,7 @@ async function scanLoop() {
           entryPrice: pick.position.entryPrice,
           entryTime: pick.position.entryTime,
           slPct: pick.tradeSlPct,
+          linkId: pick.position.id,
           stopPrice: pick.side === 'LONG'
             ? pick.position.entryPrice * (1 + pick.tradeSlPct / 100)
             : pick.position.entryPrice * (1 - pick.tradeSlPct / 100),
@@ -2079,6 +2142,20 @@ function schedulePostTradeTelemetry(tradeRecord, entryTimeMs) {
   }
 }
 
+function stampOpposite(linkId, pnl) {
+  if (!linkId) return;
+  const n = Number(Number(pnl).toFixed(2));
+  const live = activePositions.find(p => p.id === linkId);
+  if (live) live.oppositePnl = n;
+  const closed = history.find(t => t.linkId === linkId);
+  if (!closed || closed.oppositePnl === n) return;
+  closed.oppositePnl = n;
+  try {
+    fs.writeFileSync(HISTORY_FILE, JSON.stringify(history.slice(0, 500), null, 2), 'utf8');
+    rewriteCsvFile();
+  } catch (e) {}
+}
+
 function settleRandomShadows(priceMap) {
   const now = Date.now();
   const still = [];
@@ -2109,7 +2186,8 @@ function settleRandomShadows(priceMap) {
     const nominal = (s.margin || 30) * (s.leverage || 5);
     const fee = nominal * ((Number(CONFIG.makerRate) || 0.0002) + (why === 'tp' ? (Number(CONFIG.makerRate) || 0.0002) : CONFIG.feeRate));
     const pnl = nominal * (bookMove / 100) - fee;
-    randomClosed.unshift({ symbol: s.symbol, side: s.side, pnl, why, move: bookMove });
+    randomClosed.unshift({ symbol: s.symbol, side: s.side, pnl, why, move: bookMove, linkId: s.linkId || null });
+    stampOpposite(s.linkId, pnl);
     if (randomClosed.length > 200) randomClosed.pop();
   }
   randomOpen = still;
@@ -2180,6 +2258,14 @@ function closeTrade(pos, exitReason) {
 
   coinCooldowns[pos.symbol] = now + (3 * 60 * 1000);
 
+  const exitMovePct = pos.entryPrice > 0
+    ? (pos.side === 'LONG'
+        ? ((pos.currentPrice - pos.entryPrice) / pos.entryPrice) * 100
+        : ((pos.entryPrice - pos.currentPrice) / pos.entryPrice) * 100)
+    : 0;
+  const margin = Number(pos.margin) || 0;
+  const leverage = Number(pos.leverage) || Number(CONFIG.leverage) || 0;
+
   const tradeRecord = {
     id: (history.length > 0 ? Math.max(...history.map(h => h.id || 0)) : 0) + 1,
     time: trTime(),
@@ -2215,7 +2301,25 @@ function closeTrade(pos, exitReason) {
     grossPnl: pos.grossPnl !== undefined ? pos.grossPnl : null,
     feeUsd: pos.feeUsd !== undefined ? pos.feeUsd : null,
     slipUsd: pos.slipUsd !== undefined ? pos.slipUsd : null,
-    strategy: pos.strategy || ''
+    strategy: pos.strategy || '',
+    linkId: pos.id || null,
+    margin,
+    leverage,
+    notional: Number((margin * leverage).toFixed(2)),
+    slPct: pos.slPct != null ? Number(pos.slPct) : null,
+    tpPct: pos.tp1Pct != null ? Number(pos.tp1Pct) : null,
+    exitMovePct: Number(exitMovePct.toFixed(3)),
+    givebackPct: Number(((pos.mfe || 0) - exitMovePct).toFixed(3)),
+    chg1h: pos.chg1h != null ? pos.chg1h : null,
+    vol24M: pos.vol24M != null ? pos.vol24M : null,
+    pos1h: pos.pos1h != null ? pos.pos1h : null,
+    breakVol: pos.breakVol != null ? pos.breakVol : null,
+    trigger3m: pos.trigger3m != null ? pos.trigger3m : null,
+    spreadBps: pos.spreadBps != null ? pos.spreadBps : null,
+    btc5mExit: Number(btc5mNumeric.toFixed(3)),
+    btc15mExit: Number(btc15mNumeric.toFixed(3)),
+    balanceAfter: Number(balance.toFixed(2)),
+    oppositePnl: pos.oppositePnl != null ? pos.oppositePnl : null
   };
 
   history.unshift(tradeRecord);
