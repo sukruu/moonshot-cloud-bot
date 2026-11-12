@@ -114,7 +114,7 @@ function engineSnapshot() {
     userMargin: userRisk.marginPerTrade,
     gates: {
       entry: '25M$, stop %0.80, hedef %1.60, 5x, 60dk',
-      book: 'OBI veto',
+      book: 'defter fiyatı',
       judge: 'açık',
       flow: 'son 12 mum',
       freqai: 'kapalı',
@@ -293,10 +293,10 @@ function sanitizeSettings(s) {
   if (inRange(slots, 1, 4)) out.maxSlots = Math.round(slots);
   if (inRange(margin, 10, 40)) out.marginPerTrade = margin;
   if (lev !== null) out.leverage = Math.min(40, Math.max(5, Math.round(lev)));
-  if (inRange(sl, 0.55, 0.90)) out.slPct = sl;
+  if (inRange(sl, 0.20, 2.0)) out.slPct = sl;
   if (inRange(be, 0.25, 0.60)) out.bePct = be;
   if (inRange(moon, 1.2, 3.5)) out.moonPct = moon;
-  if (inRange(tp1, 0.35, 1.0)) out.tp1Pct = tp1;
+  if (inRange(tp1, 0.40, 3.0)) out.tp1Pct = tp1;
   if (inRange(tp2, 0.65, 2.0)) out.tp2Pct = tp2;
   return out;
 }
@@ -1736,7 +1736,7 @@ async function scanLoop() {
 
           // Nominal yaklaşık $150. Stop %0.80 gürültünün dışında, hedef %1.60.
           const baseMargin = getDynamicMargin();
-          const tradeSlPct = 0.80;
+          const tradeSlPct = Number(CONFIG.slPct) || 0.80;
           const volK = 1.0;
           let tradeMargin = Number(baseMargin.toFixed(2));
 
@@ -1752,7 +1752,7 @@ async function scanLoop() {
           }
 
           const tradeBePct = 0.16;
-          const tradeTp1Pct = 1.60;
+          const tradeTp1Pct = Number(CONFIG.tp1Pct) || 1.60;
           const tradeTp2Pct = tradeTp1Pct;
           const tradeMoonPct = tradeTp1Pct;
           radarTag += ` [SL: %${tradeSlPct.toFixed(2)} | ATR3m: %${atr3mPct.toFixed(2)} | Teminat: $${tradeMargin.toFixed(1)}]`;
@@ -2241,7 +2241,7 @@ function getStats() {
   const winRate = totalTrades > 0 ? ((wins / totalTrades) * 100).toFixed(1) : "0.0";
   const totalPnl = history.reduce((acc, h) => acc + (h.pnl || 0), 0);
   const totalRoi = (totalPnl / CONFIG.initialBalance) * 100;
-  const megaWins = history.filter(h => (h.mfe || 0) >= 15.0).length;
+  const megaWins = history.filter(h => String(h.exitReason || '').includes('kâr alındı')).length;
 
   const peak = getPeakBalance();
   const ddPct = peak > 0 ? (((peak - balance) / peak) * 100).toFixed(1) : "0.0";
@@ -2262,6 +2262,7 @@ function getStats() {
     breakevens,
     winRate,
     megaWins,
+    botActive: isBotActive,
     activeCount: activePositions.length,
     uptimeMin: Math.floor((Date.now() - startTime) / 60000),
     btcTrend: btc15mTrend,
@@ -3032,7 +3033,7 @@ function serveDashboardHtml() {
             <span class="perf-mini-val" id="stWinsLosses">${stats.wins}K / ${stats.losses}Z</span>
           </div>
           <div class="perf-mini-card">
-            <span class="perf-mini-label">Mega-Win</span>
+            <span class="perf-mini-label">Hedefe ulaşan</span>
             <span class="perf-mini-val" style="color:var(--amber);" id="stMega">${stats.megaWins} Adet</span>
           </div>
         </div>
@@ -3040,65 +3041,44 @@ function serveDashboardHtml() {
         <div class="sidebar-section-title">⚙️ TEMEL RİSK & POZİSYON</div>
         <div class="param-grid-2x2">
           <div class="param-card">
-            <div class="param-header"><span>MAX SLOT</span><span>Sniper</span></div>
+            <div class="param-header"><span>MAX SLOT</span><span>yön başı 1</span></div>
             <div class="param-input-wrap"><input type="number" id="inpSlots" value="${CONFIG.maxSlots}"><span class="param-unit">adet</span></div>
           </div>
           <div class="param-card">
-            <div class="param-header"><span>TEMİNAT</span><span>İzole</span></div>
+            <div class="param-header"><span>TEMİNAT</span><span>kâğıt</span></div>
             <div class="param-input-wrap"><input type="number" id="inpMargin" value="${CONFIG.marginPerTrade}"><span class="param-unit">$</span></div>
           </div>
           <div class="param-card">
-            <div class="param-header"><span>KALDIRAÇ</span><span>Büyüme</span></div>
+            <div class="param-header"><span>KALDIRAÇ</span><span>sabit</span></div>
             <div class="param-input-wrap"><input type="number" id="inpLev" value="${CONFIG.leverage}"><span class="param-unit">x</span></div>
           </div>
           <div class="param-card">
-            <div class="param-header"><span>STOP LOSS</span><span>Nefes</span></div>
+            <div class="param-header"><span>STOP LOSS</span><span>sabit</span></div>
             <div class="param-input-wrap"><input type="number" id="inpSl" value="${CONFIG.slPct.toFixed(2)}" step="0.1"><span class="param-unit">%</span></div>
           </div>
         </div>
 
-        <div class="sidebar-section-title">🛡️ SIFIR RİSK VE KADEMELİ HEDEFLER</div>
-        <div style="background:linear-gradient(90deg, var(--green-bg) 0%, var(--panel) 100%); border-left:3px solid var(--green); border:1px solid var(--green-border); border-radius:5px; padding:6px 8px; margin-bottom:5px; display:flex; justify-content:space-between; align-items:center; box-shadow:var(--shadow-sm);">
-          <div>
-            <div style="font-size:10px;font-weight:800;color:var(--green);letter-spacing:0.3px;">🛡️ OTOMATİK BAŞABAŞ</div>
-            <div style="font-size:8.5px;color:var(--muted);margin-top:1px;">İlk kâr alınca kalan giriş+%0.12, runner açık</div>
-          </div>
-          <div style="display:flex;align-items:baseline;gap:2px;background:var(--panel2);padding:2px 6px;border-radius:4px;border:1px solid var(--green-border);">
-            <input type="number" id="inpBe" value="${CONFIG.bePct.toFixed(2)}" step="0.1" style="width:52px;background:none;border:none;color:var(--green);font-family:'JetBrains Mono';font-size:13px;font-weight:650;text-align:right;outline:none;">
-            <span style="font-size:10px;color:var(--green);opacity:0.7;">%</span>
-          </div>
-        </div>
-
+        <div class="sidebar-section-title">ÇIKIŞ</div>
         <div style="background:linear-gradient(90deg, var(--blue-bg) 0%, var(--panel) 100%); border-left:3px solid var(--blue); border:1px solid var(--blue-border); border-radius:5px; padding:6px 8px; margin-bottom:5px; display:flex; justify-content:space-between; align-items:center; box-shadow:var(--shadow-sm);">
           <div>
-            <div style="font-size:10px;font-weight:800;color:var(--blue);letter-spacing:0.3px;">🎯 İLK KÂR ALMA (TP1)</div>
-            <div style="font-size:8.5px;color:var(--muted);margin-top:1px;">%30 Cebe, %70 Runner (max 55dk)</div>
+            <div style="font-size:10px;font-weight:800;color:var(--blue);letter-spacing:0.3px;">HEDEF</div>
+            <div style="font-size:8.5px;color:var(--muted);margin-top:1px;">Pozisyonun tamamı kapanır</div>
           </div>
           <div style="display:flex;align-items:baseline;gap:2px;background:var(--panel2);padding:2px 6px;border-radius:4px;border:1px solid var(--blue-border);">
-            <input type="number" id="inpTp1" value="${(CONFIG.tp1Pct || 0.50).toFixed(2)}" step="0.1" style="width:52px;background:none;border:none;color:var(--blue);font-family:'JetBrains Mono';font-size:13px;font-weight:650;text-align:right;outline:none;">
+            <input type="number" id="inpTp1" value="${(CONFIG.tp1Pct || 1.60).toFixed(2)}" step="0.1" style="width:52px;background:none;border:none;color:var(--blue);font-family:'JetBrains Mono';font-size:13px;font-weight:650;text-align:right;outline:none;">
             <span style="font-size:10px;color:var(--blue);opacity:0.7;">%</span>
           </div>
         </div>
-
-        <div style="background:linear-gradient(90deg, rgba(99,102,241,0.08) 0%, var(--panel) 100%); border-left:3px solid #6366f1; border:1px solid rgba(99,102,241,0.3); border-radius:5px; padding:6px 8px; margin-bottom:5px; display:flex; justify-content:space-between; align-items:center; box-shadow:var(--shadow-sm);">
+        <div style="background:var(--panel); border:1px solid var(--border); border-radius:5px; padding:6px 8px; margin-bottom:5px; display:flex; justify-content:space-between; align-items:center;">
           <div>
-            <div style="font-size:10px;font-weight:800;color:#6366f1;letter-spacing:0.3px;">🚀 2. KÂR ALMA (TP2)</div>
-            <div style="font-size:8.5px;color:var(--muted);margin-top:1px;">%35 Cebe, %25 Runner</div>
-          </div>
-          <div style="display:flex;align-items:baseline;gap:2px;background:var(--panel2);padding:2px 6px;border-radius:4px;border:1px solid rgba(99,102,241,0.3);">
-            <input type="number" id="inpTp2" value="${(CONFIG.tp2Pct || 1.00).toFixed(2)}" step="0.1" style="width:52px;background:none;border:none;color:#6366f1;font-family:'JetBrains Mono';font-size:13px;font-weight:650;text-align:right;outline:none;">
-            <span style="font-size:10px;color:#6366f1;opacity:0.7;">%</span>
+            <div style="font-size:10px;font-weight:800;color:var(--text);letter-spacing:0.3px;">45 DK</div>
+            <div style="font-size:8.5px;color:var(--muted);margin-top:1px;">Zirve, stopun yarısını görmediyse çık</div>
           </div>
         </div>
-
-        <div style="background:linear-gradient(90deg, var(--amber-bg) 0%, var(--panel) 100%); border-left:3px solid var(--amber); border:1px solid var(--amber-border); border-radius:5px; padding:6px 8px; margin-bottom:6px; display:flex; justify-content:space-between; align-items:center; box-shadow:var(--shadow-sm);">
+        <div style="background:var(--panel); border:1px solid var(--border); border-radius:5px; padding:6px 8px; margin-bottom:6px; display:flex; justify-content:space-between; align-items:center;">
           <div>
-            <div style="font-size:10px;font-weight:800;color:var(--amber);letter-spacing:0.3px;">🏆 VUR-KAÇ MOONSHOT</div>
-            <div style="font-size:8.5px;color:var(--muted);margin-top:1px;">%25 Runner Zirvede Kapanır</div>
-          </div>
-          <div style="display:flex;align-items:baseline;gap:2px;background:var(--panel2);padding:2px 6px;border-radius:4px;border:1px solid var(--amber-border);">
-            <input type="number" id="inpMoon" value="${CONFIG.moonPct.toFixed(2)}" step="0.1" style="width:52px;background:none;border:none;color:var(--amber);font-family:'JetBrains Mono';font-size:13px;font-weight:650;text-align:right;outline:none;">
-            <span style="font-size:10px;color:var(--amber);opacity:0.7;">%</span>
+            <div style="font-size:10px;font-weight:800;color:var(--text);letter-spacing:0.3px;">${CONFIG.maxTradeMin} DK</div>
+            <div style="font-size:8.5px;color:var(--muted);margin-top:1px;">Süre dolunca çık</div>
           </div>
         </div>
 
@@ -3487,6 +3467,12 @@ function serveDashboardHtml() {
         document.getElementById("stWinRate").innerText = '%' + data.stats.winRate;
         document.getElementById("stWinsLosses").innerText = data.stats.wins + 'K / ' + data.stats.losses + 'Z';
         document.getElementById("stMega").innerText = data.stats.megaWins + ' Adet';
+        const liveSt = document.getElementById("liveStatus");
+        if (liveSt) {
+          const on = data.stats.botActive !== false;
+          liveSt.innerText = on ? 'ÇALIŞIYOR' : 'DURDU';
+          liveSt.className = 'status-pill ' + (on ? 'green' : '');
+        }
         document.getElementById("posCount").innerText = data.stats.activeCount + ' / ' + (data.stats.liveSlots || (data.settings && data.settings.slots) || '1');
         document.getElementById("histCount").innerText = data.history.length;
 
@@ -3524,7 +3510,7 @@ function serveDashboardHtml() {
         // Aktif Pozisyonlar Tablosu
         const tbody = document.getElementById("activeTbody");
         if (data.positions.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:35px 15px;"><div style="font-size:32px; margin-bottom:12px; filter:grayscale(0.3);">🔭</div><div style="color:var(--text); font-weight:700; font-size:14px; letter-spacing:0.5px;">TETİKTE BEKLENİYOR</div><div style="color:var(--muted); font-size:11px; margin-top:6px; max-width:320px; margin-left:auto; margin-right:auto; line-height:1.4;">1 dakikalık bant, emir defteri ve yargıç vetosu taranıyor.</div></td></tr>';
+          tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:35px 15px;"><div style="font-size:32px; margin-bottom:12px; filter:grayscale(0.3);">🔭</div><div style="color:var(--text); font-weight:700; font-size:14px; letter-spacing:0.5px;">TETİKTE BEKLENİYOR</div><div style="color:var(--muted); font-size:11px; margin-top:6px; max-width:320px; margin-left:auto; margin-right:auto; line-height:1.4;">Kırılım testi, defter fiyatı ve yargıç taranıyor.</div></td></tr>';
         } else {
           tbody.innerHTML = data.positions.map((p, idx) => {
             const isLong = p.side === 'LONG';
@@ -3582,7 +3568,7 @@ function serveDashboardHtml() {
         const activeCardsEl = document.getElementById("activeCardsMobile");
         if (activeCardsEl) {
           if (data.positions.length === 0) {
-            activeCardsEl.innerHTML = '<div class="empty-cards-msg">🔍 Saatlik ivme taranıyor.</div>';
+            activeCardsEl.innerHTML = '<div class="empty-cards-msg">Kırılım testi taranıyor.</div>';
           } else {
             activeCardsEl.innerHTML = data.positions.map((p, idx) => {
               const isLong = p.side === 'LONG';
@@ -3720,7 +3706,7 @@ function serveDashboardHtml() {
 
     // Parametreleri Dinamik Güncelleme (sunucuya + tarayıcı hafızasına kaydeder)
     const LS_SET = 'moon_settings';
-    const SET_IDS = { slots: 'inpSlots', margin: 'inpMargin', lev: 'inpLev', sl: 'inpSl', be: 'inpBe', moon: 'inpMoon', tp1: 'inpTp1', tp2: 'inpTp2' };
+    const SET_IDS = { slots: 'inpSlots', margin: 'inpMargin', lev: 'inpLev', sl: 'inpSl', tp1: 'inpTp1' };
     let settingsSynced = false;
 
     function readSettingsFromInputs() {
@@ -3771,7 +3757,7 @@ function serveDashboardHtml() {
 
 function renderActiveRows(positions) {
   if (!positions || positions.length === 0) {
-    return '<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:24px;font-size:12px;">🔍 Saatlik ivme taranıyor.</td></tr>';
+    return '<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:24px;font-size:12px;">Kırılım testi taranıyor.</td></tr>';
   }
   return positions.map((p, idx) => {
     const isLong = p.side === 'LONG';
@@ -3845,7 +3831,7 @@ function renderHistoryRows(hist) {
 
 function renderActiveCards(positions) {
   if (!positions || positions.length === 0) {
-    return '<div class="empty-cards-msg">🔍 Saatlik ivme taranıyor.</div>';
+    return '<div class="empty-cards-msg">Kırılım testi taranıyor.</div>';
   }
   return positions.map((p, idx) => {
     const isLong = p.side === 'LONG';
