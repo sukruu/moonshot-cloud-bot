@@ -27,15 +27,15 @@ try {
 // --- EKRAN 1 BİREBİR AYARLARI ---
 let CONFIG = {
   initialBalance: 100.0,     // Bakiye 100 Dolar
-  marginPerTrade: 12.0,      // Temel Teminat 12$ (3 Slot ile $36 marjin, kasada $64 nakit tampon)
-  leverage: 10,              // 10x. Ücret pozisyona göre küçülür
+  marginPerTrade: 30.0,      // 5x ile nominal yaklaşık $150
+  leverage: 5,               // Stop geniş. Çarpan küçük kalsın
   maxSlots: 3,               // Aynı yönde en fazla 1 işlem
-  slPct: 0.20,               // Vur kaç stop. Kayıp, kârdan küçük kalsın
-  bePct: 0.16,               // +%0.30 görününce +%0.16'da kâr kilit
-  moonPct: 0.42,             // +%0.42 spotta tamamı kapanır
-  tp1Pct: 0.42,
-  tp2Pct: 0.42,
-  maxTradeMin: 45,
+  slPct: 0.80,               // Gürültünün dışı. 3 dk'lık nefes stop olmasın
+  bePct: 0.16,
+  moonPct: 1.60,
+  tp1Pct: 1.60,              // Stopun 2 katı
+  tp2Pct: 1.60,
+  maxTradeMin: 60,
   makerRate: 0.0002,         // Limit giriş ve kâr satış. Taker stop ayrı
   tp1ClosePct: 0.50,         // TP1'de %50 cebe
   minEntryScore: 0,          // Sürü: puan kapısı yok
@@ -56,14 +56,14 @@ let DYNAMIC = {
   updatedAt: 0
 };
 
-let userRisk = { maxSlots: 3, marginPerTrade: 12 };
+let userRisk = { maxSlots: 3, marginPerTrade: 30 };
 let circuitOn = false;
 
 function getDynamicMargin() {
   if (circuitOn) {
-    return Math.min(Number(userRisk.marginPerTrade) || 12, 10);
+    return Math.min(Number(userRisk.marginPerTrade) || 30, 10);
   }
-  return Number(userRisk.marginPerTrade) || 12;
+  return Number(userRisk.marginPerTrade) || 30;
 }
 
 function rememberUserRisk() {
@@ -80,7 +80,7 @@ function applyCircuitBreaker() {
   const severe = balance < 45 || dd >= 0.45;
   const profitGuard = !severe && (balance < 70 || dd >= 0.28);
   if (severe) {
-    const nextMargin = Math.min(Number(userRisk.marginPerTrade) || 12, 10);
+    const nextMargin = Math.min(Number(userRisk.marginPerTrade) || 30, 10);
     const changed = !circuitOn || CONFIG.maxSlots !== 1 || CONFIG.marginPerTrade !== nextMargin;
     circuitOn = true;
     CONFIG.maxSlots = 1;
@@ -95,7 +95,7 @@ function applyCircuitBreaker() {
   circuitOn = false;
   if (profitGuard) {
     CONFIG.maxSlots = 2;
-    CONFIG.marginPerTrade = Math.min(14, dynamicMargin);
+    CONFIG.marginPerTrade = dynamicMargin;
     DYNAMIC.mode = 'MARSCOIN_SURU';
   } else {
     CONFIG.maxSlots = userRisk.maxSlots || 3;
@@ -113,7 +113,7 @@ function engineSnapshot() {
     userSlots: userRisk.maxSlots,
     userMargin: userRisk.marginPerTrade,
     gates: {
-      entry: 'Retest, ATR hedef, 45dk, maker giriş, aynı yön tek',
+      entry: '25M$, stop %0.80, hedef %1.60, 5x, 60dk',
       book: 'OBI veto',
       judge: 'açık',
       flow: 'son 12 mum',
@@ -291,7 +291,7 @@ function sanitizeSettings(s) {
   const slots = num(s.slots), margin = num(s.margin), lev = num(s.lev);
   const sl = num(s.sl), be = num(s.be), moon = num(s.moon), tp1 = num(s.tp1), tp2 = num(s.tp2);
   if (inRange(slots, 1, 4)) out.maxSlots = Math.round(slots);
-  if (inRange(margin, 10, 25)) out.marginPerTrade = margin;
+  if (inRange(margin, 10, 40)) out.marginPerTrade = margin;
   if (lev !== null) out.leverage = Math.min(40, Math.max(5, Math.round(lev)));
   if (inRange(sl, 0.55, 0.90)) out.slPct = sl;
   if (inRange(be, 0.25, 0.60)) out.bePct = be;
@@ -327,14 +327,14 @@ function loadSettings() {
       sl: saved.slPct, be: saved.bePct, moon: saved.moonPct, tp1: saved.tp1Pct, tp2: saved.tp2Pct
     });
     clean.maxSlots = 3;
-    clean.marginPerTrade = 12;
-    clean.leverage = 10;
-    clean.slPct = 0.20;
+    clean.marginPerTrade = 30;
+    clean.leverage = 5;
+    clean.slPct = 0.80;
     clean.bePct = 0.16;
-    clean.tp1Pct = 0.42;
-    clean.tp2Pct = 0.42;
-    clean.moonPct = 0.42;
-    clean.maxTradeMin = 45;
+    clean.tp1Pct = 1.60;
+    clean.tp2Pct = 1.60;
+    clean.moonPct = 1.60;
+    clean.maxTradeMin = 60;
     Object.assign(CONFIG, clean);
     rememberUserRisk();
     settingsCustomized = true;
@@ -1435,7 +1435,7 @@ async function scanLoop() {
         isVip
       };
     })
-    .filter(t => (t.isVip || t.volM >= 1.5) && t.chg <= 65 && t.chg >= -40 && radarMap[t.symbol])
+    .filter(t => t.volM >= 25 && t.chg <= 65 && t.chg >= -40 && radarMap[t.symbol])
     .sort((a, b) => b.hotScore - a.hotScore)
     .slice(0, DYNAMIC.candidateSlice);
 
@@ -1666,7 +1666,7 @@ async function scanLoop() {
         const noWickShort = candleSpan > 0 ? (lowerWick / candleSpan <= 0.40) : true;
 
         const vol3hCheck = rInfo.vol3hM || ((quote90mCalc * 2) / 1e6);
-        const hasRealLiquidity = vol3hCheck >= 0.80 && (isVip || vol24 >= 1.5);
+        const hasRealLiquidity = vol24 >= 25;
         const noiseOk = atr3mPct < 0.50;
         let swingHigh = 0;
         let swingLow = Infinity;
@@ -1753,12 +1753,9 @@ async function scanLoop() {
             continue;
           }
 
-          // 📐 VOLATİLİTEYE VE DİNAMİK BİLEŞİK KASAYA GÖRE TEMİNAT & HEDEFLER:
-          // Teminat Dinamik Bileşik Kasa Motorundan (%18) gelir ($116 bakiyede ~$21, $150 bakiyede $27).
-          // Stop = 1.6 × 3dk ATR (taban %0.78, tavan %2.0). Stop genişledikçe teminat aynı oranda küçülür,
-          // böylece işlem başına dolar riski sabit kalır. Kâr kademeleri (BE, kilit, TP1, TP2, Moon) volK ile ölçeklenir.
+          // Nominal yaklaşık $150. Stop %0.80 gürültünün dışında, hedef %1.60.
           const baseMargin = getDynamicMargin();
-          const tradeSlPct = Math.min(0.36, Math.max(0.14, Number((atr3mPct * 0.8).toFixed(3))));
+          const tradeSlPct = 0.80;
           const volK = 1.0;
           let tradeMargin = Number(baseMargin.toFixed(2));
 
@@ -1772,8 +1769,8 @@ async function scanLoop() {
             continue; // Yetersiz serbest teminat
           }
 
-          const tradeBePct = Number((tradeSlPct + 0.12).toFixed(3));
-          const tradeTp1Pct = Number((tradeSlPct * 2 + 0.12).toFixed(3));
+          const tradeBePct = 0.16;
+          const tradeTp1Pct = 1.60;
           const tradeTp2Pct = tradeTp1Pct;
           const tradeMoonPct = tradeTp1Pct;
           radarTag += ` [SL: %${tradeSlPct.toFixed(2)} | ATR3m: %${atr3mPct.toFixed(2)} | Teminat: $${tradeMargin.toFixed(1)}]`;
@@ -2015,14 +2012,13 @@ async function fastRiskLoop() {
         }
       }
 
-      const tpPct = Number(pos.tp1Pct) || 0.50;
-      const atrStop = Number(pos.atr3mPct) || (Number(pos.slPct) || 0.20) / 0.8;
+      const tpPct = Number(pos.tp1Pct) || 1.60;
       if (!exitReason && move >= tpPct) {
         exitReason = `Retest kâr alındı (+%${move.toFixed(2)} / hedef %${tpPct.toFixed(2)})`;
       }
 
-      if (!exitReason && durMin >= 30 && mfe < (Number(pos.slPct) || 0.20) * 0.5) {
-        exitReason = `Retest: 30 dk hareket yok (%${move.toFixed(2)})`;
+      if (!exitReason && durMin >= 45 && mfe < (Number(pos.slPct) || 0.80) * 0.5) {
+        exitReason = `Retest: 45 dk hareket yok (%${move.toFixed(2)})`;
       }
 
       const maxHold = Number(CONFIG.maxTradeMin) || 40;
@@ -2058,7 +2054,7 @@ async function fastRiskLoop() {
           ? ((pos.currentPrice - pos.entryPrice) / pos.entryPrice) * 100
           : ((pos.entryPrice - pos.currentPrice) / pos.entryPrice) * 100;
         const maker = Number(CONFIG.makerRate) || 0.0002;
-        const exitFeeRate = stopExit ? CONFIG.feeRate : maker;
+        const exitFeeRate = exitReason.includes('kâr alındı') ? maker : CONFIG.feeRate;
         pos.grossPnl = finalNominal * (finalMove / 100);
         pos.feeUsd = finalNominal * (maker + exitFeeRate);
         pos.slipUsd = 0;
@@ -2122,12 +2118,13 @@ function settleRandomShadows(priceMap) {
     s.mfe = Math.max(s.mfe || 0, move);
     const dur = (now - s.entryTime) / 60000;
     let why = null;
-    if (move <= -(s.slPct || 0.2)) why = 'stop';
-    else if (move >= (s.tpPct || 0.5)) why = 'tp';
-    else if (dur >= 45) why = 'sure';
+    if (move <= -(s.slPct || 0.8)) why = 'stop';
+    else if (move >= (s.tpPct || 1.6)) why = 'tp';
+    else if (dur >= 45 && (s.mfe || 0) < (s.slPct || 0.8) * 0.5) why = 'flat';
+    else if (dur >= (Number(CONFIG.maxTradeMin) || 60)) why = 'sure';
     if (!why) { still.push(s); continue; }
     const nominal = (s.margin || 12) * (s.leverage || 10);
-    const fee = nominal * ((Number(CONFIG.makerRate) || 0.0002) + (why === 'stop' ? CONFIG.feeRate : (Number(CONFIG.makerRate) || 0.0002)));
+    const fee = nominal * ((Number(CONFIG.makerRate) || 0.0002) + (why === 'tp' ? (Number(CONFIG.makerRate) || 0.0002) : CONFIG.feeRate));
     const pnl = nominal * (move / 100) - fee;
     randomClosed.unshift({ symbol: s.symbol, side: s.side, pnl, why, move });
     if (randomClosed.length > 200) randomClosed.pop();
