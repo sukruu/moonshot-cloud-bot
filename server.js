@@ -418,34 +418,15 @@ function parseTrDateMs(str, fallbackMs) {
 }
 
 function rebuildCoinLossHistory() {
-  const now = Date.now();
   coinLossCount = {};
   if (!Array.isArray(history) || history.length === 0) return;
   const chron = [...history].sort((a, b) => (a.id || 0) - (b.id || 0));
-  const banned = [];
   for (const t of chron) {
     const sym = t.symbol;
     if (!sym) continue;
-    const closeMs = parseTrDateMs(t.dateFullStr, now - (30 * 60 * 1000));
     const isLoss = (t.pnl <= -0.05) || (t.exitReason && (t.exitReason.includes("Stop Loss") || t.exitReason.includes("İvmesizlik") || t.exitReason.includes("Durgunluk") || t.exitReason.includes("Zarar")));
-    if (isLoss) {
-      coinLossCount[sym] = (coinLossCount[sym] || 0) + 1;
-      if (coinLossCount[sym] >= 2) {
-        coinCooldowns[sym] = Math.max(coinCooldowns[sym] || 0, closeMs + (3 * 60 * 60 * 1000));
-        if (!banned.includes(sym)) banned.push(sym);
-      } else {
-        coinCooldowns[sym] = Math.max(coinCooldowns[sym] || 0, closeMs + (45 * 60 * 1000));
-      }
-    } else {
-      const winMin = 30; // Kâr alan koin sadece 30 dakika dinlendirilir
-      coinLossCount[sym] = 0;
-      coinCooldowns[sym] = Math.max(coinCooldowns[sym] || 0, closeMs + (winMin * 60 * 1000));
-      const bIdx = banned.indexOf(sym);
-      if (bIdx !== -1) banned.splice(bIdx, 1);
-    }
-  }
-  if (banned.length > 0) {
-    addLog(`🚫 Koin Zarar Hafızası: 2+ kez zarar veren koinler 24 saat kilitlendi: ${banned.join(", ")}`, 'INFO');
+    if (isLoss) coinLossCount[sym] = (coinLossCount[sym] || 0) + 1;
+    else coinLossCount[sym] = 0;
   }
 }
 
@@ -1600,8 +1581,8 @@ async function scanLoop() {
         }
         const atr3mPct = trCount > 0 ? trSum / trCount : 0.5;
 
-        const radarOkLong = chg1hCalc >= 0.15 && chg15mCalc >= 0.08 && chg15mCalc <= 1.60 && chg24Val <= 5 && chg24Val > -3 && atr3mPct >= 0.18 && atr3mPct <= 0.45;
-        const radarOkShort = chg1hCalc <= -0.15 && chg15mCalc <= -0.08 && chg15mCalc >= -1.60 && chg24Val >= -5 && chg24Val < 3 && atr3mPct >= 0.18 && atr3mPct <= 0.45;
+        const radarOkLong = chg1hCalc >= 0.15 && chg15mTrue >= 0.08 && chg15mTrue <= 1.60 && chg24Val <= 5 && chg24Val > -3 && atr3mPct >= 0.18 && atr3mPct <= 0.45;
+        const radarOkShort = chg1hCalc <= -0.15 && chg15mTrue <= -0.08 && chg15mTrue >= -1.60 && chg24Val >= -5 && chg24Val < 3 && atr3mPct >= 0.18 && atr3mPct <= 0.45;
 
         if (!radarOkLong && !radarOkShort) {
           // 👻 Radar'a ÇOK YAKIN elenen adayları da kaydet (yeni 1s/30dk/pos1h/RSI/ATR filtrelerinin etkisi ölçülebilsin)
@@ -1691,13 +1672,13 @@ async function scanLoop() {
         if (hasRealLiquidity && radarOkLong && prevBrokeHigh && breakVolOk && pulledToHigh && buyersBack && taker15mCalc >= 52 && !btcBlocksLong) {
           isLongPump = true;
           isRocketSignal = true;
-          radarTag = `[LONG RETEST | 1s +%${chg1hCalc.toFixed(2)} | 15dk +%${chg15mCalc.toFixed(2)} | ATR %${atr3mPct.toFixed(2)} | Alıcı %${taker15mCalc.toFixed(0)}]`;
+          radarTag = `[LONG RETEST | 1s +%${chg1hCalc.toFixed(2)} | 15dk +%${chg15mTrue.toFixed(2)} | ATR %${atr3mPct.toFixed(2)} | Alıcı %${taker15mCalc.toFixed(0)}]`;
         }
 
         let isShortDump = false;
         if (hasRealLiquidity && radarOkShort && prevBrokeLow && breakVolOk && pulledToLow && sellersBack && taker15mCalc <= 48 && !btcBlocksShort) {
           isShortDump = true;
-          radarTag = `[SHORT RETEST | 1s %${chg1hCalc.toFixed(2)} | 15dk %${chg15mCalc.toFixed(2)} | ATR %${atr3mPct.toFixed(2)} | Alıcı %${taker15mCalc.toFixed(0)}]`;
+          radarTag = `[SHORT RETEST | 1s %${chg1hCalc.toFixed(2)} | 15dk %${chg15mTrue.toFixed(2)} | ATR %${atr3mPct.toFixed(2)} | Alıcı %${taker15mCalc.toFixed(0)}]`;
         }
 
         if (!isLongPump && !isShortDump) {
@@ -1706,7 +1687,7 @@ async function scanLoop() {
 
         if (isLongPump || isShortDump) {
           const side = isLongPump ? "LONG" : "SHORT";
-          if (activePositions.some(p => p.side === side)) continue;
+          if (activePositions.some(p => p.side === side) || scanEntryCandidates.some(c => c.side === side)) continue;
           const shieldWhy = scannerShield(side, {
             rsi3m,
             taker: taker15mCalc,
@@ -1719,7 +1700,7 @@ async function scanLoop() {
           }
 
           const judgeTakerInput = taker15mCalc;
-          const judgeChg15Input = chg15mCalc;
+          const judgeChg15Input = chg15mTrue;
           let judgeClearance = null;
           try {
             judgeClearance = evaluatePreTradeClearance(sym, side, {
@@ -1760,7 +1741,8 @@ async function scanLoop() {
           let tradeMargin = Number(baseMargin.toFixed(2));
 
           // 🛡️ KASA SERBEST NAKİT KORUMASI: Açık pozisyonlar ve yeni işlem serbest bakiyeyi aşamaz
-          const usedMargin = activePositions.reduce((acc, p) => acc + (p.margin || 0), 0);
+          const queuedMargin = scanEntryCandidates.reduce((acc, c) => acc + (Number(c.tradeMargin) || 0), 0);
+          const usedMargin = activePositions.reduce((acc, p) => acc + (p.margin || 0), 0) + queuedMargin;
           const freeMargin = Math.max(0, balance - usedMargin);
           if (tradeMargin > freeMargin) {
             tradeMargin = Number(freeMargin.toFixed(2));
@@ -1817,7 +1799,7 @@ async function scanLoop() {
             cp5m: null,
             cp15m: null,
             entryRsi: Number(rsi3m.toFixed(1)),
-            chg15: Number(chg15mCalc.toFixed(2)),
+            chg15: Number(chg15mTrue.toFixed(2)),
             strategy: 'RETEST',
             margin: tradeMargin,
             initialMargin: tradeMargin,
@@ -1866,11 +1848,16 @@ async function scanLoop() {
     if (scanEntryCandidates.length > 0 && activePositions.length < CONFIG.maxSlots) {
       scanEntryCandidates.sort((a, b) => b.entryScore - a.entryScore);
       const taken = new Set(activePositions.map((p) => p.symbol));
+      const openSides = new Set(activePositions.map((p) => p.side));
       const room = CONFIG.maxSlots - activePositions.length;
       let opened = 0;
+      let bookedMargin = activePositions.reduce((acc, p) => acc + (p.margin || 0), 0);
       for (const pick of scanEntryCandidates) {
-        if (opened >= room || taken.has(pick.sym)) continue;
+        if (opened >= room || taken.has(pick.sym) || openSides.has(pick.side)) continue;
+        if (bookedMargin + pick.tradeMargin > balance) continue;
         taken.add(pick.sym);
+        openSides.add(pick.side);
+        bookedMargin += pick.tradeMargin;
         activePositions.push(pick.position);
         activeSyms.add(pick.sym);
         lastTradeOpenTime = Date.now();
@@ -1883,6 +1870,9 @@ async function scanLoop() {
           entryPrice: pick.position.entryPrice,
           entryTime: pick.position.entryTime,
           slPct: pick.tradeSlPct,
+          stopPrice: pick.side === 'LONG'
+            ? pick.position.entryPrice * (1 + pick.tradeSlPct / 100)
+            : pick.position.entryPrice * (1 - pick.tradeSlPct / 100),
           tpPct: pick.tradeTp1Pct,
           margin: pick.tradeMargin,
           leverage: CONFIG.leverage,
@@ -1904,36 +1894,18 @@ async function scanLoop() {
 }
 
 function checkSlotRotation() {
-  if (activePositions.length < CONFIG.maxSlots) return;
-  const now = Date.now();
-  let stagnantIdx = -1;
-  let maxDuration = 0;
-
-  activePositions.forEach((pos, idx) => {
-    const durMin = (now - pos.entryTime) / 60000;
-    // Uyuyan slot: en az 18dk, MFE <%0.20 — erken rotasyon komisyon kaybı yaratmasın
-    if (durMin >= 18 && (pos.mfe || 0) < 0.20 && Math.abs(pos.roi || 0) <= 2.5) {
-      if (durMin > maxDuration) {
-        maxDuration = durMin;
-        stagnantIdx = idx;
-      }
-    }
-  });
-
-  if (stagnantIdx !== -1) {
-    const closed = activePositions.splice(stagnantIdx, 1)[0];
-    const durMin = Math.round((now - closed.entryTime) / 60000);
-    closeTrade(closed, `🔄 Slot Rotasyonu (${closed.symbol} ${durMin}dk Uyudu - Yeni Rokete Yer Açıldı)`);
-    persistState();
-  }
+  return;
 }
 
 // 3. LAZER RİSK & KÂR KİLİTLEME (FAST RISK LOOP)
 async function fastRiskLoop() {
-  if (isRiskRunning || activePositions.length === 0) return;
+  if (isRiskRunning || (activePositions.length === 0 && randomOpen.length === 0)) return;
   isRiskRunning = true;
   try {
-    const symbols = [...new Set(activePositions.map(p => p.symbol))];
+    const symbols = [...new Set([
+      ...activePositions.map(p => p.symbol),
+      ...randomOpen.map(s => s.symbol)
+    ])];
     const priceMap = {};
 
     await Promise.all(symbols.map(async sym => {
@@ -2117,16 +2089,27 @@ function settleRandomShadows(priceMap) {
     const move = long ? ((px - s.entryPrice) / s.entryPrice) * 100 : ((s.entryPrice - px) / s.entryPrice) * 100;
     s.mfe = Math.max(s.mfe || 0, move);
     const dur = (now - s.entryTime) / 60000;
+    const slPct = Number(s.slPct) || 0.8;
+    const stopPrice = Number(s.stopPrice) > 0
+      ? Number(s.stopPrice)
+      : (long ? s.entryPrice * (1 - slPct / 100) : s.entryPrice * (1 + slPct / 100));
+    const stopHit = long ? px <= stopPrice : px >= stopPrice;
     let why = null;
-    if (move <= -(s.slPct || 0.8)) why = 'stop';
-    else if (move >= (s.tpPct || 1.6)) why = 'tp';
-    else if (dur >= 45 && (s.mfe || 0) < (s.slPct || 0.8) * 0.5) why = 'flat';
+    let bookMove = move;
+    if (stopHit) {
+      why = 'stop';
+      const fill = long ? stopPrice * (1 - 0.0002) : stopPrice * (1 + 0.0002);
+      bookMove = long
+        ? ((fill - s.entryPrice) / s.entryPrice) * 100
+        : ((s.entryPrice - fill) / s.entryPrice) * 100;
+    } else if (move >= (s.tpPct || 1.6)) why = 'tp';
+    else if (dur >= 45 && (s.mfe || 0) < slPct * 0.5) why = 'flat';
     else if (dur >= (Number(CONFIG.maxTradeMin) || 60)) why = 'sure';
     if (!why) { still.push(s); continue; }
-    const nominal = (s.margin || 12) * (s.leverage || 10);
+    const nominal = (s.margin || 30) * (s.leverage || 5);
     const fee = nominal * ((Number(CONFIG.makerRate) || 0.0002) + (why === 'tp' ? (Number(CONFIG.makerRate) || 0.0002) : CONFIG.feeRate));
-    const pnl = nominal * (move / 100) - fee;
-    randomClosed.unshift({ symbol: s.symbol, side: s.side, pnl, why, move });
+    const pnl = nominal * (bookMove / 100) - fee;
+    randomClosed.unshift({ symbol: s.symbol, side: s.side, pnl, why, move: bookMove });
     if (randomClosed.length > 200) randomClosed.pop();
   }
   randomOpen = still;
