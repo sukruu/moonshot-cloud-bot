@@ -219,28 +219,28 @@ class JudicialAuditCourt {
     const chg15 = chg15raw;
 
     if (side === 'LONG') {
-      if (taker < 55.0) {
+      if (taker < 50.0) {
         judicialScore -= 35;
         accusations.push(`Alıcı yok (%${taker.toFixed(1)})`);
       }
-      if (chg15 < 0.20) {
+      if (chg15 < 0.05) {
         judicialScore -= 35;
         accusations.push(`15dk yükselmiyor (%${chg15.toFixed(2)})`);
       }
-      if (chg24 > 4.0) {
+      if (chg24 > 5.0) {
         judicialScore -= 35;
         accusations.push(`Gün bitmiş (+%${chg24.toFixed(1)})`);
       }
     } else {
-      if (taker > 45.0) {
+      if (taker > 50.0) {
         judicialScore -= 35;
         accusations.push(`Satıcı yok (alıcı %${taker.toFixed(1)})`);
       }
-      if (chg15 > -0.20) {
+      if (chg15 > -0.05) {
         judicialScore -= 35;
         accusations.push(`15dk düşmüyor (%${chg15.toFixed(2)})`);
       }
-      if (chg24 < -4.0) {
+      if (chg24 < -5.0) {
         judicialScore -= 35;
         accusations.push(`Gün bitmiş (%${chg24.toFixed(1)})`);
       }
