@@ -113,7 +113,7 @@ function engineSnapshot() {
     userSlots: userRisk.maxSlots,
     userMargin: userRisk.marginPerTrade,
     gates: {
-      entry: '25M$, stop %0.80, hedef %1.60, 5x, 60dk',
+      entry: 'Short satıcı %65, long saat tepesinde yok',
       book: 'defter fiyatı',
       judge: 'açık',
       flow: 'son 12 mum',
@@ -1632,7 +1632,7 @@ async function scanLoop() {
         }
         const atr3mPct = trCount > 0 ? trSum / trCount : 0.5;
 
-        const radarOkLong = chg1hCalc >= 0.15 && chg15mTrue >= 0.08 && chg15mTrue <= 1.60 && chg24Val <= 5 && chg24Val > -3 && atr3mPct >= 0.18 && atr3mPct <= 0.45;
+        const radarOkLong = chg1hCalc >= 0.15 && chg15mTrue >= 0.08 && chg15mTrue <= 1.60 && chg24Val <= 5 && chg24Val > -3 && atr3mPct >= 0.18 && atr3mPct <= 0.45 && pos1h < 80;
         const radarOkShort = chg1hCalc <= -0.15 && chg15mTrue <= -0.08 && chg15mTrue >= -1.60 && chg24Val >= -5 && chg24Val < 3 && atr3mPct >= 0.18 && atr3mPct <= 0.45;
 
         if (!radarOkLong && !radarOkShort) {
@@ -1727,7 +1727,7 @@ async function scanLoop() {
         }
 
         let isShortDump = false;
-        if (hasRealLiquidity && radarOkShort && prevBrokeLow && breakVolOk && pulledToLow && sellersBack && taker15mCalc <= 48 && !btcBlocksShort) {
+        if (hasRealLiquidity && radarOkShort && prevBrokeLow && breakVolOk && pulledToLow && sellersBack && taker15mCalc <= 35 && !btcBlocksShort) {
           isShortDump = true;
           radarTag = `[SHORT RETEST | 1s %${chg1hCalc.toFixed(2)} | 15dk %${chg15mTrue.toFixed(2)} | ATR %${atr3mPct.toFixed(2)} | Alıcı %${taker15mCalc.toFixed(0)}]`;
         }
