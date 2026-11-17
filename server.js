@@ -27,15 +27,15 @@ try {
 // --- EKRAN 1 BİREBİR AYARLARI ---
 let CONFIG = {
   initialBalance: 100.0,     // Bakiye 100 Dolar
-  marginPerTrade: 30.0,      // 5x ile nominal yaklaşık $150
-  leverage: 5,               // Stop geniş. Çarpan küçük kalsın
+  marginPerTrade: 30.0,      // 10x ile nominal $300
+  leverage: 10,              // Kanıtlanmış 10x kaldıraç
   maxSlots: 3,               // Aynı yönde en fazla 1 işlem
   slPct: 0.80,               // Gürültünün dışı. 3 dk'lık nefes stop olmasın
-  bePct: 0.16,
-  moonPct: 1.60,
-  tp1Pct: 1.60,              // Stopun 2 katı
-  tp2Pct: 1.60,
-  maxTradeMin: 60,
+  bePct: 0.40,               // +%0.40 MFE'de stop +%0.12'ye (komisyon üstü kâra) çekilir
+  moonPct: 1.20,
+  tp1Pct: 1.20,              // Gerçekçi ana hedef +%1.20 (+%0.65 ve +%0.90'da kademeli kâr kilidi)
+  tp2Pct: 1.20,
+  maxTradeMin: 45,
   makerRate: 0.0002,         // Limit giriş ve kâr satış. Taker stop ayrı
   tp1ClosePct: 0.50,         // TP1'de %50 cebe
   minEntryScore: 0,          // Sürü: puan kapısı yok
@@ -113,10 +113,10 @@ function engineSnapshot() {
     userSlots: userRisk.maxSlots,
     userMargin: userRisk.marginPerTrade,
     gates: {
-      entry: 'Short satıcı %65, long saat tepesinde yok',
+      entry: 'Kırılım + 3 Kademe Kâr Kilidi (BE %0.40, Hedef %1.20)',
       book: 'defter fiyatı',
       judge: 'açık',
-      flow: 'son 12 mum',
+      flow: '3s + 15dk kurumsal akış',
       freqai: 'kapalı',
       funding: 'kapalı',
       team: 'kapalı'
@@ -294,10 +294,10 @@ function sanitizeSettings(s) {
   if (inRange(margin, 10, 40)) out.marginPerTrade = margin;
   if (lev !== null) out.leverage = Math.min(40, Math.max(5, Math.round(lev)));
   if (inRange(sl, 0.20, 2.0)) out.slPct = sl;
-  if (inRange(be, 0.25, 0.60)) out.bePct = be;
-  if (inRange(moon, 1.2, 3.5)) out.moonPct = moon;
+  if (inRange(be, 0.15, 0.80)) out.bePct = be;
+  if (inRange(moon, 0.80, 3.5)) out.moonPct = moon;
   if (inRange(tp1, 0.40, 3.0)) out.tp1Pct = tp1;
-  if (inRange(tp2, 0.65, 2.0)) out.tp2Pct = tp2;
+  if (inRange(tp2, 0.60, 3.0)) out.tp2Pct = tp2;
   return out;
 }
 
@@ -326,15 +326,14 @@ function loadSettings() {
       slots: saved.maxSlots, margin: saved.marginPerTrade, lev: saved.leverage,
       sl: saved.slPct, be: saved.bePct, moon: saved.moonPct, tp1: saved.tp1Pct, tp2: saved.tp2Pct
     });
-    clean.maxSlots = 3;
-    clean.marginPerTrade = 30;
-    clean.leverage = 5;
-    clean.slPct = 0.80;
-    clean.bePct = 0.16;
-    clean.tp1Pct = 1.60;
-    clean.tp2Pct = 1.60;
-    clean.moonPct = 1.60;
-    clean.maxTradeMin = 60;
+    // Eski sabit ezme bug'ından kalan (5x / %1.60 / %0.16) değerlerini yeni optimum (%1.20 / 10x / %0.40) ile güncelle
+    if (clean.tp1Pct === 1.60 && clean.leverage === 5) {
+      clean.leverage = 10;
+      clean.bePct = 0.40;
+      clean.tp1Pct = 1.20;
+      clean.tp2Pct = 1.20;
+      clean.moonPct = 1.20;
+    }
     Object.assign(CONFIG, clean);
     rememberUserRisk();
     settingsCustomized = true;
@@ -1226,6 +1225,8 @@ async function updateRadar() {
           // ⚡ GERÇEK ANLIK 15M BALİNA & İVME TESPİTİ
           const last15 = klines[klines.length - 1];
           const open15 = parseFloat(last15[1]);
+          const high15 = parseFloat(last15[2]);
+          const low15 = parseFloat(last15[3]);
           const close15 = parseFloat(last15[4]);
           const vol15 = parseFloat(last15[7]) || 0;
           const takerBuy15 = parseFloat(last15[10]) || 0;
@@ -1247,6 +1248,9 @@ async function updateRadar() {
           const rItem = {
             symbol: sym,
             lastPrice: close3h,
+            open15m: open15,
+            high15m: high15,
+            low15m: low15,
             chg3h,
             chg15m,
             vol3hM: volUsdt / 1e6,
@@ -1316,6 +1320,8 @@ async function scanRadarBoard(tf) {
       if (!klines || !klines.length) return null;
       const k = klines[klines.length - 1];
       const openP = parseFloat(k[1]) || 0;
+      const highP = parseFloat(k[2]) || 0;
+      const lowP = parseFloat(k[3]) || 0;
       const closeP = parseFloat(k[4]) || 0;
       const vol = parseFloat(k[7]) || 0;
       const takerBuy = parseFloat(k[10]) || 0;
@@ -1331,6 +1337,9 @@ async function scanRadarBoard(tf) {
       return {
         symbol: sym,
         lastPrice: closeP,
+        open15m: openP,
+        high15m: highP,
+        low15m: lowP,
         chg15m: chg,
         vol15m: vol,
         vol24hM: info.vol24hM || 0,
@@ -1632,8 +1641,26 @@ async function scanLoop() {
         }
         const atr3mPct = trCount > 0 ? trSum / trCount : 0.5;
 
-        const radarOkLong = chg1hCalc >= 0.15 && chg15mTrue >= 0.08 && chg15mTrue <= 1.60 && chg24Val <= 5 && chg24Val > -3 && atr3mPct >= 0.18 && atr3mPct <= 0.45 && pos1h < 80;
-        const radarOkShort = chg1hCalc <= -0.15 && chg15mTrue <= -0.08 && chg15mTrue >= -1.60 && chg24Val >= -5 && chg24Val < 3 && atr3mPct >= 0.18 && atr3mPct <= 0.45;
+        const radarOkLong =
+          chg1hCalc >= 0.15 &&
+          chg15mTrue >= 0.08 &&
+          chg15mTrue <= 1.80 &&
+          chg24Val <= 12.0 &&
+          chg24Val > -2.5 &&
+          atr3mPct >= 0.18 &&
+          atr3mPct <= 0.65 &&
+          rsi3m <= 73 &&
+          (chg3hVal >= -0.50 || chg1hCalc >= 0.50);
+        const radarOkShort =
+          chg1hCalc <= -0.15 &&
+          chg15mTrue <= -0.08 &&
+          chg15mTrue >= -1.80 &&
+          chg24Val >= -12.0 &&
+          chg24Val < 2.5 &&
+          atr3mPct >= 0.18 &&
+          atr3mPct <= 0.65 &&
+          rsi3m >= 27 &&
+          (chg3hVal <= 0.50 || chg1hCalc <= -0.50 || taker15mCalc <= 36.0);
 
         if (!radarOkLong && !radarOkShort) {
           // 👻 Radar'a ÇOK YAKIN elenen adayları da kaydet (yeni 1s/30dk/pos1h/RSI/ATR filtrelerinin etkisi ölçülebilsin)
@@ -1708,26 +1735,33 @@ async function scanLoop() {
           if (hh > swingHigh) swingHigh = hh;
           if (ll < swingLow) swingLow = ll;
         }
-        const breakVolOk = baselineVol > 0 && prevV >= baselineVol * 1.15;
+        const breakVolOk = baselineVol > 0 && (prevV >= baselineVol * 1.15 || volMult >= 1.25);
         const prevBrokeHigh = swingHigh > 0 && prevC > swingHigh * 1.0004;
         const prevBrokeLow = swingLow < Infinity && prevC < swingLow * 0.9996;
-        const pulledToHigh = swingHigh > 0 && curL <= swingHigh * 1.0018 && curP >= swingHigh * 1.0001;
-        const pulledToLow = swingLow < Infinity && curH >= swingLow * 0.9982 && curP <= swingLow * 0.9999;
-        const buyersBack = curP > curO && curMovePct >= 0.03 && curMovePct <= 0.16 && noWickLong;
-        const sellersBack = curP < curO && curMovePct <= -0.03 && curMovePct >= -0.16 && noWickShort;
+        const pulledToHigh = swingHigh > 0 && curL <= swingHigh * 1.0022 && curP >= swingHigh * 1.0001;
+        const pulledToLow = swingLow < Infinity && curH >= swingLow * 0.9978 && curP <= swingLow * 0.9999;
+        const buyersBack = curP > curO && curMovePct >= 0.04 && curMovePct <= 0.30 && volMult >= 1.02 && noWickLong;
+        const sellersBack = curP < curO && curMovePct <= -0.04 && curMovePct >= -0.30 && volMult >= 1.02 && noWickShort;
         const btcBlocksLong = btc15mNumeric <= -0.40 || (btc15mNumeric < 0 && btc5mNumeric <= -0.30);
         const btcBlocksShort = btc15mNumeric >= 0.40 || (btc15mNumeric > 0 && btc5mNumeric >= 0.30);
 
+        const longTakerOk = chg3hVal < -0.50 && chg1hCalc < 1.20
+          ? (taker15mCalc >= 60.0 && effectiveTaker >= 56.0)
+          : (taker15mCalc >= 54.0 && effectiveTaker >= 52.0);
+        const shortTakerOk = chg3hVal > 0.50
+          ? (taker15mCalc <= 36.0 && effectiveTakerShort <= 40.0)
+          : (taker15mCalc <= 44.0 && effectiveTakerShort <= 46.0);
+
         let isLongPump = false;
         let isRocketSignal = false;
-        if (hasRealLiquidity && radarOkLong && prevBrokeHigh && breakVolOk && pulledToHigh && buyersBack && taker15mCalc >= 52 && !btcBlocksLong) {
+        if (hasRealLiquidity && radarOkLong && prevBrokeHigh && breakVolOk && pulledToHigh && buyersBack && longTakerOk && !btcBlocksLong) {
           isLongPump = true;
           isRocketSignal = true;
           radarTag = `[LONG RETEST | 1s +%${chg1hCalc.toFixed(2)} | 15dk +%${chg15mTrue.toFixed(2)} | ATR %${atr3mPct.toFixed(2)} | Alıcı %${taker15mCalc.toFixed(0)}]`;
         }
 
         let isShortDump = false;
-        if (hasRealLiquidity && radarOkShort && prevBrokeLow && breakVolOk && pulledToLow && sellersBack && taker15mCalc <= 35 && !btcBlocksShort) {
+        if (hasRealLiquidity && radarOkShort && prevBrokeLow && breakVolOk && pulledToLow && sellersBack && shortTakerOk && !btcBlocksShort) {
           isShortDump = true;
           radarTag = `[SHORT RETEST | 1s %${chg1hCalc.toFixed(2)} | 15dk %${chg15mTrue.toFixed(2)} | ATR %${atr3mPct.toFixed(2)} | Alıcı %${taker15mCalc.toFixed(0)}]`;
         }
@@ -1773,19 +1807,21 @@ async function scanLoop() {
             continue;
           }
 
+          const isRadarLeader = (side === 'LONG' && radarLeaderLong.has(sym)) || (side === 'SHORT' && radarLeaderShort.has(sym));
           const flowBiasPre = side === 'LONG' ? effectiveTaker : (100 - effectiveTakerShort);
           const entryScorePre =
             Math.abs(chg1hCalc) * 22 +
             prevVolMult * 12 +
             Math.min(data.volM || 0, 80) * 0.35 +
-            flowBiasPre * 0.15;
+            flowBiasPre * 0.15 +
+            (isRadarLeader ? 25 : 0);
           const minScore = Number.isFinite(Number(CONFIG.minEntryScore)) ? Number(CONFIG.minEntryScore) : 0;
           if (minScore > 0 && entryScorePre < minScore) {
             shadow('LOW_ENTRY_SCORE', { entryScore: Number(entryScorePre.toFixed(0)) });
             continue;
           }
 
-          // Nominal yaklaşık $150. Stop %0.80 gürültünün dışında, hedef %1.60.
+          // Nominal $300 (10x, $30 teminat). Stop %0.80, 3 kademeli kâr kilidi (%0.40 -> BE +%0.12, %0.65 -> +%0.38, %0.90 -> +%0.65), ana hedef %1.20.
           const baseMargin = getDynamicMargin();
           const tradeSlPct = Number(CONFIG.slPct) || 0.80;
           const volK = 1.0;
@@ -1802,8 +1838,8 @@ async function scanLoop() {
             continue; // Yetersiz serbest teminat
           }
 
-          const tradeBePct = 0.16;
-          const tradeTp1Pct = Number(CONFIG.tp1Pct) || 1.60;
+          const tradeBePct = Number(CONFIG.bePct) || 0.40;
+          const tradeTp1Pct = Number(CONFIG.tp1Pct) || 1.20;
           const tradeTp2Pct = tradeTp1Pct;
           const tradeMoonPct = tradeTp1Pct;
           radarTag += ` [SL: %${tradeSlPct.toFixed(2)} | ATR3m: %${atr3mPct.toFixed(2)} | Teminat: $${tradeMargin.toFixed(1)}]`;
@@ -1829,7 +1865,8 @@ async function scanLoop() {
             Math.abs(chg1hCalc) * 22 +
             prevVolMult * 12 +
             Math.min(data.volM || 0, 80) * 0.35 +
-            flowBias * 0.15;
+            flowBias * 0.15 +
+            (isRadarLeader ? 25 : 0);
 
           const position = {
             id: Date.now() + Math.random().toString(36).substring(2, 6),
@@ -2023,6 +2060,47 @@ async function fastRiskLoop() {
       const nMfe = mfe / k;
       const lockSpot = (pct) => isLong ? pos.entryPrice * (1 + pct / 100) : pos.entryPrice * (1 - pct / 100);
 
+      const tpPct = Number(pos.tp1Pct) || Number(CONFIG.tp1Pct) || 1.20;
+      const beTrigger = Math.min(Number(pos.bePct) || 0.40, tpPct * 0.35);
+      const tier1Trigger = tpPct * 0.54; // ~%0.65 (Hedef %1.20 iken)
+      const tier2Trigger = tpPct * 0.75; // ~%0.90 (Hedef %1.20 iken)
+
+      // ========================================================
+      // 🛡️ 0. 3 KADEMELİ İZ SÜREN KÂR KİLİDİ & BAŞABAŞ MOTORU
+      // ========================================================
+      if (!pos.beLocked && mfe >= beTrigger) {
+        const nextStop = lockSpot(0.12);
+        if ((isLong && nextStop > pos.stopPrice) || (!isLong && nextStop < pos.stopPrice)) {
+          pos.stopPrice = nextStop;
+        }
+        pos.beLocked = true;
+        stateChanged = true;
+        addLog(`🛡️ [BAŞABAŞ KİLİDİ]: ${pos.symbol} (${pos.side}) +%${mfe.toFixed(2)} gördü ➔ Stop +%0.12 kâra çekildi ($0 Risk)!`, 'INFO');
+      }
+      if (!pos.tier1Locked && mfe >= tier1Trigger) {
+        const lock1Pct = Number((tpPct * 0.32).toFixed(2)); // ~%0.38 kâr kilidi
+        const nextStop = lockSpot(lock1Pct);
+        if ((isLong && nextStop > pos.stopPrice) || (!isLong && nextStop < pos.stopPrice)) {
+          pos.stopPrice = nextStop;
+        }
+        pos.tier1Locked = true;
+        pos.beLocked = true;
+        stateChanged = true;
+        addLog(`🔒 [KÂR KİLİDİ 1]: ${pos.symbol} (${pos.side}) +%${mfe.toFixed(2)} gördü ➔ Stop +%${lock1Pct.toFixed(2)} garanti kâra kilitlendi!`, 'TRADE');
+      }
+      if (!pos.tp1Taken && mfe >= tier2Trigger) {
+        const lock2Pct = Number((tpPct * 0.54).toFixed(2)); // ~%0.65 kâr kilidi
+        const nextStop = lockSpot(lock2Pct);
+        if ((isLong && nextStop > pos.stopPrice) || (!isLong && nextStop < pos.stopPrice)) {
+          pos.stopPrice = nextStop;
+        }
+        pos.tp1Taken = true;
+        pos.tier1Locked = true;
+        pos.beLocked = true;
+        stateChanged = true;
+        addLog(`🎯 [KÂR KİLİDİ 2]: ${pos.symbol} (${pos.side}) +%${mfe.toFixed(2)} gördü ➔ Stop +%${lock2Pct.toFixed(2)} yüksek kâra yükseltildi!`, 'TRADE');
+      }
+
       // ========================================================
       // 🛑 1. STOP LOSS VEYA KİLİTLİ STOP KONTROLÜ (EN YÜKSEK ÖNCELİK)
       // ========================================================
@@ -2047,16 +2125,20 @@ async function fastRiskLoop() {
         }
       }
 
-      const tpPct = Number(pos.tp1Pct) || 1.60;
       if (!exitReason && move >= tpPct) {
         exitReason = `Retest kâr alındı (+%${move.toFixed(2)} / hedef %${tpPct.toFixed(2)})`;
       }
 
-      if (!exitReason && durMin >= 45 && mfe < (Number(pos.slPct) || 0.80) * 0.5) {
-        exitReason = `Retest: 45 dk hareket yok (%${move.toFixed(2)})`;
+      // ⏱️ 22. DAKİKA ÖLÜ İŞLEM KORUMASI: 22 dakikada +%0.28 bile görmemiş ve ekside sürünen işlemi 45 dk bekletme
+      if (!exitReason && !pos.beLocked && durMin >= 22 && mfe < 0.28 && move <= -0.15) {
+        exitReason = `Retest: 22 dk ivme yok (%${move.toFixed(2)} / MFE: +%${mfe.toFixed(2)})`;
       }
 
-      const maxHold = Number(CONFIG.maxTradeMin) || 40;
+      if (!exitReason && !pos.beLocked && durMin >= 35 && mfe < (Number(pos.slPct) || 0.80) * 0.5) {
+        exitReason = `Retest: 35 dk hareket yok (%${move.toFixed(2)})`;
+      }
+
+      const maxHold = Number(CONFIG.maxTradeMin) || 45;
       if (!exitReason && durMin >= maxHold) {
         exitReason = pos.tp1Taken
           ? `⏱️ Vur Kaç runner süresi doldu (${maxHold}dk / MFE: +%${mfe.toFixed(2)})`
@@ -3162,27 +3244,27 @@ function serveDashboardHtml() {
           </div>
         </div>
 
-        <div class="sidebar-section-title">ÇIKIŞ</div>
+        <div class="sidebar-section-title">ÇIKIŞ & KÂR KİLİDİ</div>
         <div style="background:linear-gradient(90deg, var(--blue-bg) 0%, var(--panel) 100%); border-left:3px solid var(--blue); border:1px solid var(--blue-border); border-radius:5px; padding:6px 8px; margin-bottom:5px; display:flex; justify-content:space-between; align-items:center; box-shadow:var(--shadow-sm);">
           <div>
-            <div style="font-size:10px;font-weight:800;color:var(--blue);letter-spacing:0.3px;">HEDEF</div>
-            <div style="font-size:8.5px;color:var(--muted);margin-top:1px;">Pozisyonun tamamı kapanır</div>
+            <div style="font-size:10px;font-weight:800;color:var(--blue);letter-spacing:0.3px;">ANA HEDEF (TP)</div>
+            <div style="font-size:8.5px;color:var(--muted);margin-top:1px;">Pozisyonun tamamı kârla kapanır</div>
           </div>
           <div style="display:flex;align-items:baseline;gap:2px;background:var(--panel2);padding:2px 6px;border-radius:4px;border:1px solid var(--blue-border);">
-            <input type="number" id="inpTp1" value="${(CONFIG.tp1Pct || 1.60).toFixed(2)}" step="0.1" style="width:52px;background:none;border:none;color:var(--blue);font-family:'JetBrains Mono';font-size:13px;font-weight:650;text-align:right;outline:none;">
+            <input type="number" id="inpTp1" value="${(CONFIG.tp1Pct || 1.20).toFixed(2)}" step="0.1" style="width:52px;background:none;border:none;color:var(--blue);font-family:'JetBrains Mono';font-size:13px;font-weight:650;text-align:right;outline:none;">
             <span style="font-size:10px;color:var(--blue);opacity:0.7;">%</span>
           </div>
         </div>
         <div style="background:var(--panel); border:1px solid var(--border); border-radius:5px; padding:6px 8px; margin-bottom:5px; display:flex; justify-content:space-between; align-items:center;">
           <div>
-            <div style="font-size:10px;font-weight:800;color:var(--text);letter-spacing:0.3px;">45 DK</div>
-            <div style="font-size:8.5px;color:var(--muted);margin-top:1px;">Zirve, stopun yarısını görmediyse çık</div>
+            <div style="font-size:10px;font-weight:800;color:var(--green);letter-spacing:0.3px;">🛡️ 3 KADEMELİ İZ SÜREN KİLİT</div>
+            <div style="font-size:8.5px;color:var(--muted);margin-top:1px;">+%0.40 ➔ BE (+%0.12) | +%0.65 ➔ +%0.38 | +%0.90 ➔ +%0.65</div>
           </div>
         </div>
         <div style="background:var(--panel); border:1px solid var(--border); border-radius:5px; padding:6px 8px; margin-bottom:6px; display:flex; justify-content:space-between; align-items:center;">
           <div>
-            <div style="font-size:10px;font-weight:800;color:var(--text);letter-spacing:0.3px;">${CONFIG.maxTradeMin} DK</div>
-            <div style="font-size:8.5px;color:var(--muted);margin-top:1px;">Süre dolunca çık</div>
+            <div style="font-size:10px;font-weight:800;color:var(--text);letter-spacing:0.3px;">⏱️ 22 DK / 35 DK / ${CONFIG.maxTradeMin} DK</div>
+            <div style="font-size:8.5px;color:var(--muted);margin-top:1px;">Ölü işlem 22dk'da, yatay 35dk'da, süre ${CONFIG.maxTradeMin}dk'da kesilir</div>
           </div>
         </div>
 
@@ -3282,8 +3364,8 @@ function serveDashboardHtml() {
       <div class="panel" style="margin-bottom:12px;">
         <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
           <div>
-            <h2 style="margin:0;">🔍 <span id="radarTimeframeTitle">15 DAKİKALIK</span> MOMENTUM RADARI</h2>
-            <div style="font-size:12px; color:var(--muted); margin-top:4px;">Canlı taranan koinler. Bot yalnızca 15dk hareketi %0.8 ile %2.4 arasındaki liderlere girer.</div>
+            <h2 style="margin:0;">🔍 <span id="radarTimeframeTitle">15 DAKİKALIK</span> MOMENTUM RADARI & POTANSİYEL KÂR SİMÜLATÖRÜ</h2>
+            <div style="font-size:12px; color:var(--muted); margin-top:4px;">Eğer kod bu mumda işleme girseydi ($30 Teminat · 10x Kaldıraç · 3 Kademe Kâr Kilidi) ne kadar net kâr bırakırdı?</div>
           </div>
           <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
             <select id="selRadarTimeframe" onchange="loadRadar()" style="background:var(--panel2); color:var(--text); border:1px solid var(--border); border-radius:6px; padding:6px 8px; font-weight:800;">
@@ -3304,20 +3386,20 @@ function serveDashboardHtml() {
         </div>
         <div id="radarStatusLine" style="margin-top:8px; font-size:12px; color:var(--muted);">Radar bekleniyor.</div>
       </div>
-      <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap:12px;">
+      <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(460px, 1fr)); gap:12px;">
         <div class="panel">
-          <h2 style="color:var(--green);">EN ÇOK YÜKSELEN 15</h2>
-          <div class="table-container" style="max-height:520px; overflow:auto;"><table><thead><tr><th>#</th><th>Sembol</th><th>Fiyat</th><th>Değişim</th><th>Hacim</th><th>24s</th><th>Alıcı</th><th>Sinyal</th></tr></thead><tbody id="tbody15mGainers"></tbody></table></div>
+          <h2 style="color:var(--green);">🟢 EN ÇOK YÜKSELEN 15 (LONG SİMÜLASYONU)</h2>
+          <div class="table-container" style="max-height:520px; overflow:auto;"><table><thead><tr><th>#</th><th>Sembol</th><th>Fiyat</th><th>Değişim</th><th>Max MFE</th><th>Simüle Kâr</th><th>Hedef</th><th>Alıcı</th><th>Sinyal</th></tr></thead><tbody id="tbody15mGainers"></tbody></table></div>
         </div>
         <div class="panel">
-          <h2 style="color:var(--red);">EN ÇOK DÜŞEN 15</h2>
-          <div class="table-container" style="max-height:520px; overflow:auto;"><table><thead><tr><th>#</th><th>Sembol</th><th>Fiyat</th><th>Değişim</th><th>Hacim</th><th>24s</th><th>Satıcı</th><th>Sinyal</th></tr></thead><tbody id="tbody15mLosers"></tbody></table></div>
+          <h2 style="color:var(--red);">🔴 EN ÇOK DÜŞEN 15 (SHORT SİMÜLASYONU)</h2>
+          <div class="table-container" style="max-height:520px; overflow:auto;"><table><thead><tr><th>#</th><th>Sembol</th><th>Fiyat</th><th>Değişim</th><th>Max MFE</th><th>Simüle Kâr</th><th>Hedef</th><th>Satıcı</th><th>Sinyal</th></tr></thead><tbody id="tbody15mLosers"></tbody></table></div>
         </div>
       </div>
       <div class="panel" style="margin-top:12px;">
-        <h2>TÜM LİSTE <span id="badgeAllCoinsCount" style="font-size:12px; color:var(--muted);"></span></h2>
+        <h2>📋 TÜM LİSTE & SİMÜLE KÂR TABLOSU <span id="badgeAllCoinsCount" style="font-size:12px; color:var(--muted);"></span></h2>
         <input id="inp15mSearch" oninput="renderRadar()" placeholder="Koin ara" style="background:var(--panel2); border:1px solid var(--border); color:var(--text); border-radius:6px; padding:6px 10px; margin-bottom:8px;">
-        <div class="table-container" style="max-height:420px; overflow:auto;"><table><thead><tr><th>#</th><th>Sembol</th><th>Fiyat</th><th>Değişim</th><th>Hacim</th><th>24s</th><th>24s Hacim</th><th>Alıcı</th><th>Sinyal</th></tr></thead><tbody id="tbody15mAll"></tbody></table></div>
+        <div class="table-container" style="max-height:420px; overflow:auto;"><table><thead><tr><th>#</th><th>Sembol</th><th>Fiyat</th><th>Değişim</th><th>Max MFE</th><th>Simüle Kâr ($)</th><th>Hedef Durumu</th><th>24s Hacim</th><th>Alıcı</th><th>Sinyal</th></tr></thead><tbody id="tbody15mAll"></tbody></table></div>
       </div>
     </div>
   </div>
@@ -3348,18 +3430,77 @@ function serveDashboardHtml() {
       if (n >= 1e3) return '$' + (n / 1e3).toFixed(1) + 'K';
       return '$' + Math.round(n);
     }
+    function calcRadarHypo(item, side) {
+      var margin = Number((document.getElementById('inpMargin') || {}).value) || 30;
+      var lev = Number((document.getElementById('inpLev') || {}).value) || 10;
+      var tpPct = Number((document.getElementById('inpTp1') || {}).value) || 1.20;
+      var slPct = Number((document.getElementById('inpSl') || {}).value) || 0.80;
+      var nominal = margin * lev;
+      var fee = nominal * 0.0007;
+      var openP = Number(item.open15m) || Number(item.lastPrice) || 0;
+      var highP = Number(item.high15m) || Number(item.lastPrice) || 0;
+      var lowP = Number(item.low15m) || Number(item.lastPrice) || 0;
+      var curP = Number(item.lastPrice) || 0;
+      var chg = Number(item.chg15m) || 0;
+      var mfe = 0, mae = 0, curMove = 0;
+      if (openP > 0 && highP > 0 && lowP > 0) {
+        if (side === 'short') {
+          mfe = Math.max(0, ((openP - lowP) / openP) * 100);
+          mae = Math.max(0, ((highP - openP) / openP) * 100);
+          curMove = ((openP - curP) / openP) * 100;
+        } else {
+          mfe = Math.max(0, ((highP - openP) / openP) * 100);
+          mae = Math.max(0, ((openP - lowP) / openP) * 100);
+          curMove = ((curP - openP) / openP) * 100;
+        }
+      } else {
+        mfe = Math.abs(chg);
+        curMove = side === 'short' ? -chg : chg;
+      }
+      var net = 0, status = '⏳ AÇIK', color = 'var(--muted)';
+      if (mfe >= tpPct) {
+        net = nominal * (tpPct / 100) - (nominal * 0.0004);
+        status = '🎯 HEDEF (+%' + tpPct.toFixed(2) + ')';
+        color = 'var(--green)';
+      } else if (mfe >= tpPct * 0.75) {
+        var lock2 = Math.max(curMove, tpPct * 0.54);
+        net = nominal * (lock2 / 100) - fee;
+        status = '🔒 KİLİT-2 (+%' + (tpPct * 0.54).toFixed(2) + ')';
+        color = 'var(--green)';
+      } else if (mfe >= tpPct * 0.54) {
+        var lock1 = Math.max(curMove, tpPct * 0.32);
+        net = nominal * (lock1 / 100) - fee;
+        status = '🔒 KİLİT-1 (+%' + (tpPct * 0.32).toFixed(2) + ')';
+        color = 'var(--green)';
+      } else if (mfe >= 0.40) {
+        var lockBe = Math.max(curMove, 0.12);
+        net = nominal * (lockBe / 100) - fee;
+        status = '🛡️ BAŞABAŞ (+%0.12)';
+        color = 'var(--blue)';
+      } else if (mae >= slPct) {
+        net = -(nominal * (slPct / 100) + fee);
+        status = '🛑 STOP (-%' + slPct.toFixed(2) + ')';
+        color = 'var(--red)';
+      } else {
+        net = nominal * (curMove / 100) - fee;
+        status = '⏳ AÇIK (' + (curMove >= 0 ? '+' : '') + '%' + curMove.toFixed(2) + ')';
+        color = net >= 0 ? 'var(--green)' : 'var(--red)';
+      }
+      return { mfe: mfe, mae: mae, net: net, status: status, color: color };
+    }
     function radarRows(list, side) {
       return list.map(function (item, idx) {
         var chg = Number(item.chg15m) || 0;
         var color = chg >= 0 ? 'var(--green)' : 'var(--red)';
         var sign = chg >= 0 ? '+' : '';
-        var day = Number(item.chg24h) || 0;
-        var dayColor = day >= 0 ? 'var(--green)' : 'var(--red)';
         var taker = Number(item.takerBuyRatio) || Number(item.taker15m) || 50;
         var press = side === 'short' ? (100 - taker) : taker;
         var pressLbl = side === 'short' ? ' satıcı' : ' alıcı';
         var star = item.bot ? ' ★' : '';
-        return '<tr><td>' + (idx + 1) + '</td><td style="font-weight:900;">' + item.symbol + star + '</td><td>$' + radarNum(item.lastPrice) + '</td><td style="color:' + color + ';font-weight:900;">' + sign + '%' + chg.toFixed(2) + '</td><td>' + radarVol(item.vol15m || (item.vol3hM || 0) * 1e6) + '</td><td style="color:' + dayColor + ';">' + (day >= 0 ? '+' : '') + '%' + day.toFixed(2) + '</td><td>%' + press.toFixed(1) + pressLbl + '</td><td>' + (item.signal || '') + '</td></tr>';
+        var sim = calcRadarHypo(item, side);
+        var pnlStr = (sim.net >= 0 ? '+$' : '-$') + Math.abs(sim.net).toFixed(2);
+        var pnlClr = sim.net >= 0 ? 'var(--green)' : 'var(--red)';
+        return '<tr><td>' + (idx + 1) + '</td><td style="font-weight:900;">' + item.symbol + star + '</td><td>$' + radarNum(item.lastPrice) + '</td><td style="color:' + color + ';font-weight:900;">' + sign + '%' + chg.toFixed(2) + '</td><td style="color:var(--green);font-weight:800;">+%' + sim.mfe.toFixed(2) + '</td><td style="color:' + pnlClr + ';font-weight:900;">' + pnlStr + '</td><td style="color:' + sim.color + ';font-weight:800;font-size:11px;">' + sim.status + '</td><td>%' + press.toFixed(1) + pressLbl + '</td><td>' + (item.signal || '') + '</td></tr>';
       }).join('');
     }
     function renderRadar() {
@@ -3373,13 +3514,16 @@ function serveDashboardHtml() {
       var g = document.getElementById('tbody15mGainers');
       var l = document.getElementById('tbody15mLosers');
       var a = document.getElementById('tbody15mAll');
-      if (g) g.innerHTML = radarRows(gainers, 'long') || '<tr><td colspan="8">Veri yok</td></tr>';
-      if (l) l.innerHTML = radarRows(losers, 'short') || '<tr><td colspan="8">Veri yok</td></tr>';
+      if (g) g.innerHTML = radarRows(gainers, 'long') || '<tr><td colspan="9">Veri yok</td></tr>';
+      if (l) l.innerHTML = radarRows(losers, 'short') || '<tr><td colspan="9">Veri yok</td></tr>';
       if (a) a.innerHTML = all.map(function (item, idx) {
         var chg = Number(item.chg15m) || 0;
-        var day = Number(item.chg24h) || 0;
-        return '<tr><td>' + (idx + 1) + '</td><td>' + item.symbol + (item.bot ? ' ★' : '') + '</td><td>$' + radarNum(item.lastPrice) + '</td><td>' + (chg >= 0 ? '+' : '') + '%' + chg.toFixed(2) + '</td><td>' + radarVol(item.vol15m || 0) + '</td><td>' + (day >= 0 ? '+' : '') + '%' + day.toFixed(2) + '</td><td>$' + (Number(item.vol24hM) || 0).toFixed(1) + 'M</td><td>%' + (Number(item.taker15m) || Number(item.takerBuyRatio) || 0).toFixed(1) + '</td><td>' + (item.signal || '') + '</td></tr>';
-      }).join('') || '<tr><td colspan="9">Veri yok</td></tr>';
+        var side = chg >= 0 ? 'long' : 'short';
+        var sim = calcRadarHypo(item, side);
+        var pnlStr = (sim.net >= 0 ? '+$' : '-$') + Math.abs(sim.net).toFixed(2);
+        var pnlClr = sim.net >= 0 ? 'var(--green)' : 'var(--red)';
+        return '<tr><td>' + (idx + 1) + '</td><td style="font-weight:800;">' + item.symbol + (item.bot ? ' ★' : '') + ' (' + (side === 'long' ? 'LONG' : 'SHORT') + ')</td><td>$' + radarNum(item.lastPrice) + '</td><td style="color:' + (chg >= 0 ? 'var(--green)' : 'var(--red)') + ';font-weight:800;">' + (chg >= 0 ? '+' : '') + '%' + chg.toFixed(2) + '</td><td style="color:var(--green);font-weight:800;">+%' + sim.mfe.toFixed(2) + '</td><td style="color:' + pnlClr + ';font-weight:900;">' + pnlStr + '</td><td style="color:' + sim.color + ';font-weight:800;font-size:11px;">' + sim.status + '</td><td>$' + (Number(item.vol24hM) || 0).toFixed(1) + 'M</td><td>%' + (Number(item.taker15m) || Number(item.takerBuyRatio) || 0).toFixed(1) + '</td><td>' + (item.signal || '') + '</td></tr>';
+      }).join('') || '<tr><td colspan="10">Veri yok</td></tr>';
       var badge = document.getElementById('badgeAllCoinsCount');
       if (badge) badge.textContent = all.length + ' koin';
     }
@@ -3395,21 +3539,28 @@ function serveDashboardHtml() {
         var data = await res.json();
         radarCache = data.items || [];
         renderRadar();
-        if (line) line.textContent = (data.count || radarCache.length) + ' koin. Yıldız, botun girebileceği 15dk lideri.';
+        var top15Wins = radarCache.slice(0, 30).reduce(function (acc, x) {
+          var s = calcRadarHypo(x, (Number(x.chg15m) || 0) >= 0 ? 'long' : 'short');
+          return acc + (s.net > 0 ? s.net : 0);
+        }, 0);
+        if (line) line.textContent = (data.count || radarCache.length) + ' koin tarandı | İlk 30 Koin Toplam Potansiyel Kâr: +$' + top15Wins.toFixed(2) + ' (★ = 15dk Lideri)';
       } catch (e) {
         if (line) line.textContent = 'Radar alınamadı.';
       }
     }
     function exportRadarExcel() {
       if (!radarCache.length) { loadRadar(); return; }
-      var lines = ['Sira;Sembol;Fiyat;Degisim;Hacim;24s;24sHacimM;Alici;Sinyal;BotLideri'];
-      radarCache.slice().sort(function (a, b) { return (b.chg15m || 0) - (a.chg15m || 0); }).forEach(function (item, idx) {
-        lines.push([idx + 1, item.symbol, item.lastPrice, (Number(item.chg15m) || 0).toFixed(2), Math.round(item.vol15m || 0), (Number(item.chg24h) || 0).toFixed(2), (Number(item.vol24hM) || 0).toFixed(2), (Number(item.taker15m) || Number(item.takerBuyRatio) || 0).toFixed(1), '"' + String(item.signal || '') + '"', item.bot ? 'EVET' : ''].join(';'));
+      var lines = ['Sira;Sembol;Yon;Fiyat;Degisim_Pct;Max_MFE_Pct;Simule_Net_Kar_USD;Hedef_Durumu;Hacim;24s_Pct;24sHacimM;Alici_Pct;Sinyal;BotLideri'];
+      radarCache.slice().sort(function (a, b) { return Math.abs(b.chg15m || 0) - Math.abs(a.chg15m || 0); }).forEach(function (item, idx) {
+        var chg = Number(item.chg15m) || 0;
+        var side = chg >= 0 ? 'LONG' : 'SHORT';
+        var sim = calcRadarHypo(item, chg >= 0 ? 'long' : 'short');
+        lines.push([idx + 1, item.symbol, side, item.lastPrice, chg.toFixed(2), sim.mfe.toFixed(2), sim.net.toFixed(2), '"' + sim.status + '"', Math.round(item.vol15m || 0), (Number(item.chg24h) || 0).toFixed(2), (Number(item.vol24hM) || 0).toFixed(2), (Number(item.taker15m) || Number(item.takerBuyRatio) || 0).toFixed(1), '"' + String(item.signal || '') + '"', item.bot ? 'EVET' : ''].join(';'));
       });
       var blob = new Blob(['\uFEFF' + lines.join('\\n')], { type: 'text/csv;charset=utf-8;' });
       var link = document.createElement('a');
       link.href = URL.createObjectURL(blob);
-      link.download = 'binance_radar.csv';
+      link.download = 'binance_radar_potansiyel_kar.csv';
       link.click();
     }
     const LS_HIST = "moon_cloud_history";
