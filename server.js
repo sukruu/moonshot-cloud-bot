@@ -752,7 +752,8 @@ function appendTradeToCsv(trade) {
 
 // BİNANCE RESMİ API & ISP/DPI/BULUT ENGELİNE KARŞI ÇOKLU AYNA SİSTEMİ
 const BINANCE_FAPI_MIRRORS = [
-  "https://fapi.binance.com"
+  "https://fapi.binance.com",
+  "https://www.binance.info"
 ];
 
 
@@ -1008,8 +1009,11 @@ async function fetchBinanceRaw(relativePath) {
   const isBook = relativePath.includes('ticker/24hr') && !relativePath.includes('symbol=');
   const hostName = (base) => base.replace('https://', '').split('.')[0];
 
-  if (Date.now() >= fapiDownUntil && !isFapiProbing) {
-    isFapiProbing = true;
+  // 🛡️ DÜZELTME: Paralel isteklerde isFapiProbing kilidi yüzünden 15 isteğin 14'ünün Spot'a (/api/v3) düşmesi engellendi!
+  // fapiDownUntil === 0 (Futures sağlıklı) iken tüm paralel istekler doğrudan Futures (fapi) kullanır.
+  const needProbeLock = fapiDownUntil > 0 && Date.now() >= fapiDownUntil;
+  if (Date.now() >= fapiDownUntil && (!needProbeLock || !isFapiProbing)) {
+    if (needProbeLock) isFapiProbing = true;
     try {
       for (const base of BINANCE_FAPI_MIRRORS) {
         const hit = await fetchJson(base + relativePath, isBook ? 6000 : 4000);
@@ -1031,9 +1035,10 @@ async function fetchBinanceRaw(relativePath) {
         }
         errors.push(`fapi ${hit.status}`);
       }
-      if (Date.now() >= fapiDownUntil) fapiDownUntil = Date.now() + 60 * 1000;
+      // Sadece ana kitap (ticker/24hr) alınamadıysa 15 sn bekle; tekil sembol hatasında tüm fapi'yi kapatma!
+      if (isBook && Date.now() >= fapiDownUntil) fapiDownUntil = Date.now() + 15 * 1000;
     } finally {
-      isFapiProbing = false;
+      if (needProbeLock) isFapiProbing = false;
     }
   } else if (Date.now() < fapiDownUntil) {
     errors.push('fapi bekliyor');
@@ -1149,6 +1154,14 @@ async function updateRadar() {
     if (btcTicker) {
       const now = Date.now();
       const p = parseFloat(btcTicker.lastPrice);
+      if (btcPriceHistory.length < 3) {
+        try {
+          const bk5 = await fetchBinance('/fapi/v1/klines?symbol=BTCUSDT&interval=5m&limit=4');
+          if (Array.isArray(bk5) && bk5.length >= 3) {
+            btcPriceHistory = bk5.map(k => ({ t: Number(k[0]) || (now - 300000), p: parseFloat(k[1]) || p }));
+          }
+        } catch (e) {}
+      }
       btcPriceHistory.push({ t: now, p: p });
       btcPriceHistory = btcPriceHistory.filter(x => now - x.t <= 15 * 60 * 1000);
       
@@ -1181,17 +1194,17 @@ async function updateRadar() {
       if (!isTradableCryptoSymbol(t.symbol)) return false;
       const p = parseFloat(t.lastPrice) || 0;
       const volM = (parseFloat(t.quoteVolume) || 0) / 1e6;
-      return p >= 0.008 && volM >= 1.5;
+      return p >= 0.008 && volM >= 8.0;
     });
 
     // 🚀 HEM YÜKSEK İVMELİ (+%10-%50) BREAKOUT KOİNLERİ HEM DE LİKİT DEVLERİ TARA
     const byMomentum = [...validAll]
-      .filter(t => ((parseFloat(t.quoteVolume) || 0) / 1e6) >= 1.8 && Math.abs(parseFloat(t.priceChangePercent) || 0) <= 65)
+      .filter(t => ((parseFloat(t.quoteVolume) || 0) / 1e6) >= 12.0 && Math.abs(parseFloat(t.priceChangePercent) || 0) <= 65)
       .sort((a, b) => Math.abs(parseFloat(b.priceChangePercent) || 0) - Math.abs(parseFloat(a.priceChangePercent) || 0))
       .slice(0, 75);
     const byVolume = [...validAll]
       .sort((a, b) => (parseFloat(b.quoteVolume) || 0) - (parseFloat(a.quoteVolume) || 0))
-      .slice(0, 60);
+      .slice(0, 65);
 
     const seenRadarSyms = new Set();
     const valid = [];
@@ -1206,7 +1219,7 @@ async function updateRadar() {
     const chunkSize = 15;
     const scanned = [];
     const freshRadarMap = {};
-    for (let i = 0; i < Math.min(valid.length, 90); i += chunkSize) {
+    for (let i = 0; i < Math.min(valid.length, 105); i += chunkSize) {
       const chunk = valid.slice(i, i + chunkSize);
       await Promise.all(chunk.map(async item => {
         const sym = item.symbol;
@@ -1476,7 +1489,7 @@ async function scanLoop() {
         isVip
       };
     })
-    .filter(t => t.volM >= 25 && t.chg <= 65 && t.chg >= -40 && radarMap[t.symbol])
+    .filter(t => t.volM >= 12 && t.chg <= 65 && t.chg >= -40 && radarMap[t.symbol])
     .sort((a, b) => b.hotScore - a.hotScore)
     .slice(0, DYNAMIC.candidateSlice);
 
@@ -1725,7 +1738,7 @@ async function scanLoop() {
         const noWickShort = candleSpan > 0 ? (lowerWick / candleSpan <= 0.40) : true;
 
         const vol3hCheck = rInfo.vol3hM || ((quote90mCalc * 2) / 1e6);
-        const hasRealLiquidity = vol24 >= 25;
+        const hasRealLiquidity = vol24 >= 12;
         const noiseOk = atr3mPct < 0.50;
         let swingHigh = 0;
         let swingLow = Infinity;
@@ -1772,7 +1785,9 @@ async function scanLoop() {
 
         if (isLongPump || isShortDump) {
           const side = isLongPump ? "LONG" : "SHORT";
-          if (activePositions.some(p => p.side === side) || scanEntryCandidates.some(c => c.side === side)) continue;
+          const maxSameSide = CONFIG.maxSlots >= 2 ? 2 : 1;
+          const curSameSide = activePositions.filter(p => p.side === side).length + scanEntryCandidates.filter(c => c.side === side).length;
+          if (curSameSide >= maxSameSide) continue;
           const shieldWhy = scannerShield(side, {
             rsi3m,
             taker: taker15mCalc,
@@ -1947,15 +1962,19 @@ async function scanLoop() {
     if (scanEntryCandidates.length > 0 && activePositions.length < CONFIG.maxSlots) {
       scanEntryCandidates.sort((a, b) => b.entryScore - a.entryScore);
       const taken = new Set(activePositions.map((p) => p.symbol));
-      const openSides = new Set(activePositions.map((p) => p.side));
+      const sideCounts = {
+        LONG: activePositions.filter(p => p.side === 'LONG').length,
+        SHORT: activePositions.filter(p => p.side === 'SHORT').length
+      };
+      const maxSameSide = CONFIG.maxSlots >= 2 ? 2 : 1;
       const room = CONFIG.maxSlots - activePositions.length;
       let opened = 0;
       let bookedMargin = activePositions.reduce((acc, p) => acc + (p.margin || 0), 0);
       for (const pick of scanEntryCandidates) {
-        if (opened >= room || taken.has(pick.sym) || openSides.has(pick.side)) continue;
+        if (opened >= room || taken.has(pick.sym) || (sideCounts[pick.side] || 0) >= maxSameSide) continue;
         if (bookedMargin + pick.tradeMargin > balance) continue;
         taken.add(pick.sym);
-        openSides.add(pick.side);
+        sideCounts[pick.side] = (sideCounts[pick.side] || 0) + 1;
         bookedMargin += pick.tradeMargin;
         activePositions.push(pick.position);
         activeSyms.add(pick.sym);
@@ -2068,7 +2087,7 @@ async function fastRiskLoop() {
       // ========================================================
       // 🛡️ 0. 3 KADEMELİ İZ SÜREN KÂR KİLİDİ & BAŞABAŞ MOTORU
       // ========================================================
-      if (!pos.beLocked && mfe >= beTrigger) {
+      if (!pos.beLocked && mfe >= beTrigger && move > 0.14) {
         const nextStop = lockSpot(0.12);
         if ((isLong && nextStop > pos.stopPrice) || (!isLong && nextStop < pos.stopPrice)) {
           pos.stopPrice = nextStop;
@@ -2077,8 +2096,8 @@ async function fastRiskLoop() {
         stateChanged = true;
         addLog(`🛡️ [BAŞABAŞ KİLİDİ]: ${pos.symbol} (${pos.side}) +%${mfe.toFixed(2)} gördü ➔ Stop +%0.12 kâra çekildi ($0 Risk)!`, 'INFO');
       }
-      if (!pos.tier1Locked && mfe >= tier1Trigger) {
-        const lock1Pct = Number((tpPct * 0.32).toFixed(2)); // ~%0.38 kâr kilidi
+      const lock1Pct = Number((tpPct * 0.32).toFixed(2)); // ~%0.38 kâr kilidi
+      if (!pos.tier1Locked && mfe >= tier1Trigger && move > lock1Pct + 0.03) {
         const nextStop = lockSpot(lock1Pct);
         if ((isLong && nextStop > pos.stopPrice) || (!isLong && nextStop < pos.stopPrice)) {
           pos.stopPrice = nextStop;
@@ -2088,8 +2107,8 @@ async function fastRiskLoop() {
         stateChanged = true;
         addLog(`🔒 [KÂR KİLİDİ 1]: ${pos.symbol} (${pos.side}) +%${mfe.toFixed(2)} gördü ➔ Stop +%${lock1Pct.toFixed(2)} garanti kâra kilitlendi!`, 'TRADE');
       }
-      if (!pos.tp1Taken && mfe >= tier2Trigger) {
-        const lock2Pct = Number((tpPct * 0.54).toFixed(2)); // ~%0.65 kâr kilidi
+      const lock2Pct = Number((tpPct * 0.54).toFixed(2)); // ~%0.65 kâr kilidi
+      if (!pos.tp1Taken && mfe >= tier2Trigger && move > lock2Pct + 0.03) {
         const nextStop = lockSpot(lock2Pct);
         if ((isLong && nextStop > pos.stopPrice) || (!isLong && nextStop < pos.stopPrice)) {
           pos.stopPrice = nextStop;
@@ -2106,12 +2125,12 @@ async function fastRiskLoop() {
       // ========================================================
       const isStopHit = (isLong && curP <= pos.stopPrice) || (!isLong && curP >= pos.stopPrice);
       if (isStopHit) {
-        const fill = pos.stopPrice;
+        const fill = isLong ? pos.stopPrice * (1 - 0.0002) : pos.stopPrice * (1 + 0.0002);
         const fillMove = isLong
           ? ((fill - pos.entryPrice) / pos.entryPrice) * 100
           : ((pos.entryPrice - fill) / pos.entryPrice) * 100;
         pos.currentPrice = fill;
-        pos.pnl = (nominalSize * ((fillMove - 0.02) / 100)) - feeCost;
+        pos.pnl = (nominalSize * (fillMove / 100)) - feeCost;
         pos.roi = pos.margin > 0 ? (pos.pnl / pos.margin) * 100 : 0;
         if ((isLong && pos.stopPrice > pos.entryPrice * 1.0025) || (!isLong && pos.stopPrice < pos.entryPrice * 0.9975)) {
           exitReason = `🔒 Garanti Kilitli Kâr Çıkışı (+%${pos.roi.toFixed(1)} ROI / Zirve: +%${mfe.toFixed(2)} Spot)`;
@@ -2160,9 +2179,8 @@ async function fastRiskLoop() {
       // 🏁 ÇIKIŞ VE MUTLAK FİYAT KORUMASI (Clamping Safeguard)
       // ========================================================
       if (exitReason) {
-        // MUTLAK KORUMA: Hiçbir çıkış fiyatı belirlenmiş stopPrice'tan daha kötü olamaz!
-        const stopExit = exitReason.includes('Stop Loss');
-        if (stopExit) {
+        // MUTLAK KORUMA: Stop veya kilitli stop çıkışlarında yukarıda (isStopHit içinde) slippage uygulanmış fiyat korunur
+        if (!isStopHit && exitReason.includes('Stop Loss')) {
           pos.currentPrice = isLong ? pos.stopPrice * (1 - 0.0002) : pos.stopPrice * (1 + 0.0002);
         }
 
