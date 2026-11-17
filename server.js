@@ -1388,10 +1388,10 @@ async function scanLoop() {
       return;
     }
     // 🛑 ACİL DURUM SERMAYE TABANI (HARD CIRCUIT BREAKER)
-    if (todayNetPnl() <= -4) {
+    if (todayNetPnl() <= -15) {
       if (Date.now() - lastScanHeartbeat > 120000) {
         lastScanHeartbeat = Date.now();
-        addLog('⏸️ Günlük zarar limiti (-$4). Yeni işlem yok.', 'RISK');
+        addLog('⏸️ Günlük zarar limiti (-$15). Yeni işlem yok.', 'RISK');
       }
       return;
     }
@@ -1656,24 +1656,30 @@ async function scanLoop() {
 
         const radarOkLong =
           chg1hCalc >= 0.15 &&
+          chg1hCalc <= 1.75 &&
           chg15mTrue >= 0.08 &&
-          chg15mTrue <= 1.80 &&
+          chg15mTrue <= 1.50 &&
           chg24Val <= 12.0 &&
           chg24Val > -2.5 &&
           atr3mPct >= 0.18 &&
           atr3mPct <= 0.65 &&
-          rsi3m <= 73 &&
-          (chg3hVal >= -0.50 || chg1hCalc >= 0.50);
+          rsi3m <= 68 &&
+          pos1h <= 104 &&
+          chg3hVal >= -1.50 &&
+          (chg3hVal >= -0.40 || chg1hCalc >= 0.65);
         const radarOkShort =
           chg1hCalc <= -0.15 &&
+          chg1hCalc >= -0.95 &&
           chg15mTrue <= -0.08 &&
-          chg15mTrue >= -1.80 &&
+          chg15mTrue >= -1.50 &&
           chg24Val >= -12.0 &&
-          chg24Val < 2.5 &&
+          chg24Val < 1.0 &&
           atr3mPct >= 0.18 &&
           atr3mPct <= 0.65 &&
-          rsi3m >= 27 &&
-          (chg3hVal <= 0.50 || chg1hCalc <= -0.50 || taker15mCalc <= 36.0);
+          rsi3m >= 34 &&
+          pos1h >= -8.0 &&
+          chg3hVal >= -2.20 &&
+          (chg3hVal <= 0.40 || chg1hCalc <= -0.60);
 
         if (!radarOkLong && !radarOkShort) {
           // 👻 Radar'a ÇOK YAKIN elenen adayları da kaydet (yeni 1s/30dk/pos1h/RSI/ATR filtrelerinin etkisi ölçülebilsin)
@@ -1748,22 +1754,22 @@ async function scanLoop() {
           if (hh > swingHigh) swingHigh = hh;
           if (ll < swingLow) swingLow = ll;
         }
-        const breakVolOk = baselineVol > 0 && (prevV >= baselineVol * 1.15 || volMult >= 1.25);
+        const breakVolOk = baselineVol > 0 && prevV >= baselineVol * 1.25;
         const prevBrokeHigh = swingHigh > 0 && prevC > swingHigh * 1.0004;
         const prevBrokeLow = swingLow < Infinity && prevC < swingLow * 0.9996;
-        const pulledToHigh = swingHigh > 0 && curL <= swingHigh * 1.0022 && curP >= swingHigh * 1.0001;
-        const pulledToLow = swingLow < Infinity && curH >= swingLow * 0.9978 && curP <= swingLow * 0.9999;
-        const buyersBack = curP > curO && curMovePct >= 0.04 && curMovePct <= 0.30 && volMult >= 1.02 && noWickLong;
-        const sellersBack = curP < curO && curMovePct <= -0.04 && curMovePct >= -0.30 && volMult >= 1.02 && noWickShort;
-        const btcBlocksLong = btc15mNumeric <= -0.40 || (btc15mNumeric < 0 && btc5mNumeric <= -0.30);
-        const btcBlocksShort = btc15mNumeric >= 0.40 || (btc15mNumeric > 0 && btc5mNumeric >= 0.30);
+        const pulledToHigh = swingHigh > 0 && curL <= swingHigh * 1.0020 && curP >= swingHigh * 1.0001;
+        const pulledToLow = swingLow < Infinity && curH >= swingLow * 0.9980 && curP <= swingLow * 0.9999;
+        const buyersBack = curP > curO && curMovePct >= 0.04 && curMovePct <= 0.20 && volMult >= 1.05 && noWickLong;
+        const sellersBack = curP < curO && curMovePct <= -0.04 && curMovePct >= -0.20 && volMult >= 1.05 && noWickShort;
+        const btcBlocksLong = btc15mNumeric <= -0.35 || (btc15mNumeric < 0 && btc5mNumeric <= -0.25);
+        const btcBlocksShort = btc15mNumeric >= 0.35 || (btc15mNumeric > 0 && btc5mNumeric >= 0.25);
 
-        const longTakerOk = chg3hVal < -0.50 && chg1hCalc < 1.20
+        const longTakerOk = chg3hVal < -0.40
           ? (taker15mCalc >= 60.0 && effectiveTaker >= 56.0)
-          : (taker15mCalc >= 54.0 && effectiveTaker >= 52.0);
-        const shortTakerOk = chg3hVal > 0.50
-          ? (taker15mCalc <= 36.0 && effectiveTakerShort <= 40.0)
-          : (taker15mCalc <= 44.0 && effectiveTakerShort <= 46.0);
+          : (taker15mCalc >= 55.0 && effectiveTaker >= 53.0);
+        const shortTakerOk = chg3hVal > 0.20
+          ? (taker15mCalc <= 34.0 && effectiveTakerShort <= 38.0)
+          : (taker15mCalc <= 38.0 && effectiveTakerShort <= 41.0);
 
         let isLongPump = false;
         let isRocketSignal = false;
@@ -1785,9 +1791,8 @@ async function scanLoop() {
 
         if (isLongPump || isShortDump) {
           const side = isLongPump ? "LONG" : "SHORT";
-          const maxSameSide = CONFIG.maxSlots >= 2 ? 2 : 1;
-          const curSameSide = activePositions.filter(p => p.side === side).length + scanEntryCandidates.filter(c => c.side === side).length;
-          if (curSameSide >= maxSameSide) continue;
+          // 🛡️ Aynı anda tek yönde en fazla 1 işlem (BTC tepkisinde çifte stop yemeyi engeller)
+          if (activePositions.some(p => p.side === side) || scanEntryCandidates.some(c => c.side === side)) continue;
           const shieldWhy = scannerShield(side, {
             rsi3m,
             taker: taker15mCalc,
@@ -1966,7 +1971,7 @@ async function scanLoop() {
         LONG: activePositions.filter(p => p.side === 'LONG').length,
         SHORT: activePositions.filter(p => p.side === 'SHORT').length
       };
-      const maxSameSide = CONFIG.maxSlots >= 2 ? 2 : 1;
+      const maxSameSide = 1;
       const room = CONFIG.maxSlots - activePositions.length;
       let opened = 0;
       let bookedMargin = activePositions.reduce((acc, p) => acc + (p.margin || 0), 0);
