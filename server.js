@@ -30,16 +30,16 @@ let CONFIG = {
   marginPerTrade: 30.0,      // 10x ile nominal $300
   leverage: 10,              // Kanıtlanmış 10x kaldıraç
   maxSlots: 3,               // Aynı yönde en fazla 1 işlem
-  slPct: 0.80,               // Gürültünün dışı. 3 dk'lık nefes stop olmasın
-  bePct: 0.30,               // +%0.30 MFE'de stop +%0.10'a çekilir
-  moonPct: 0.90,
-  tp1Pct: 0.90,              // Ana hedef +%0.90 (+%0.48'de %50 nakit cebe + +%0.18 kilit)
-  tp2Pct: 0.90,
-  maxTradeMin: 40,
+  slPct: 0.45,               // Kazanan hiçbir işlem -%0.22'den fazla sarkmadı; -%0.80 yerine sıkı -%0.45 stop (-$1.56 max risk)
+  bePct: 0.30,               // +%0.30 MFE'de stop +%0.12'ye çekilir
+  moonPct: 0.72,
+  tp1Pct: 0.72,              // %100 tam pozisyonla +%0.72 ana hedef (+$2.04 net kâr; pozitif R:R!)
+  tp2Pct: 0.72,
+  maxTradeMin: 35,
   makerRate: 0.0002,         // Limit giriş ve kâr satış. Taker stop ayrı
-  tp1ClosePct: 0.50,         // TP1'de %50 cebe
-  minEntryScore: 0,          // Sürü: puan kapısı yok
-  maxTradesPerDay: 0,        // 0 = günlük limit yok
+  tp1ClosePct: 0.50,
+  minEntryScore: 0,
+  maxTradesPerDay: 0,
   aPlusOnly: false,
   feeRate: 0.0005,           // Binance Futures taker %0.05 (TEK YÖN)
   scanIntervalMs: 3000,
@@ -327,13 +327,14 @@ function loadSettings() {
       slots: saved.maxSlots, margin: saved.marginPerTrade, lev: saved.leverage,
       sl: saved.slPct, be: saved.bePct, moon: saved.moonPct, tp1: saved.tp1Pct, tp2: saved.tp2Pct
     });
-    // Eski varsayılanlardan (5x / %1.60 veya %1.20 / %0.40) yeni Profesyonel Trader Paketine (%0.90 / %0.30 BE) otomatik geçiş
-    if ((clean.tp1Pct === 1.60 && clean.leverage === 5) || (clean.tp1Pct === 1.20 && clean.bePct === 0.40)) {
+    // Eski varsayılanlardan (SL %0.80 / TP %0.90-%1.60) yeni Pozitif R:R Paketine (SL %0.45 / TP %0.72) otomatik geçiş
+    if (clean.slPct === 0.80 && (clean.tp1Pct === 0.90 || clean.tp1Pct === 1.20 || clean.tp1Pct === 1.60)) {
       clean.leverage = 10;
+      clean.slPct = 0.45;
       clean.bePct = 0.30;
-      clean.tp1Pct = 0.90;
-      clean.tp2Pct = 0.90;
-      clean.moonPct = 0.90;
+      clean.tp1Pct = 0.72;
+      clean.tp2Pct = 0.72;
+      clean.moonPct = 0.72;
     }
     Object.assign(CONFIG, clean);
     rememberUserRisk();
@@ -1645,9 +1646,9 @@ async function scanLoop() {
         const rangePos = rangeSpan3h > 0 ? ((curP - rInfo.low3h) / rangeSpan3h) * 100 : 50;
         const roomToHigh3hPct = (rInfo.high3h && curP > 0) ? ((rInfo.high3h - curP) / curP) * 100 : 99;
         const roomToLow3hPct = (rInfo.low3h && curP > 0) ? ((curP - rInfo.low3h) / curP) * 100 : 99;
-        // 🧱 DUVAR KURALI: Sadece tam 3s direnç/destek duvarının %0.03 ile %0.35 burnunun dibini engelle; kırılımları ve trendi serbest bırak!
-        const clearAirLong = roomToHigh3hPct <= 0.03 || roomToHigh3hPct >= 0.35;
-        const clearAirShort = roomToLow3hPct <= 0.03 || roomToLow3hPct >= 0.35;
+        // 🧱 DUVAR KURALI: <= -0.01 (3s duvarı gerçekten kırdı geçti) veya >= 0.35 (duvara en az +%0.35 boşluk var). +0.01% (duvarın hemen altı) engellenir!
+        const clearAirLong = roomToHigh3hPct <= -0.01 || roomToHigh3hPct >= 0.35;
+        const clearAirShort = roomToLow3hPct <= -0.01 || roomToLow3hPct >= 0.35;
 
         // 📐 3 DK EMA9 & EMA21 TREND DİZİLİMİ:
         let ema9 = parseFloat(k3m[0][4]) || curP;
@@ -1672,29 +1673,35 @@ async function scanLoop() {
         }
         const atr3mPct = trCount > 0 ? trSum / trCount : 0.5;
 
-        // 🚀 YÜKSELENE LONG, DÜŞENE SHORT (Doğrudan Trend Takibi):
+        // 🚀 YÜKSELENE LONG, DÜŞENE SHORT (Tepeden/Dipten Yorgun Giriş Engelli):
         const radarOkLong =
           clearAirLong &&
           emaBull &&
-          chg1hCalc >= 0.25 &&
-          chg15mTrue >= 0.18 &&
+          chg1hCalc >= 0.20 &&
+          chg1hCalc <= 1.50 &&
+          chg15mTrue >= 0.20 &&
+          chg15mTrue <= 0.90 &&
           (chg3hVal >= -0.35 || chg15mTrue >= 0.55) &&
           chg24Val >= -4.0 &&
           chg24Val <= 45.0 &&
-          atr3mPct >= 0.15 &&
-          atr3mPct <= 0.85 &&
-          rsi3m <= 72;
+          atr3mPct >= 0.18 &&
+          atr3mPct <= 0.75 &&
+          rsi3m >= 48 &&
+          rsi3m <= 67;
         const radarOkShort =
           clearAirShort &&
           emaBear &&
-          chg1hCalc <= -0.25 &&
-          chg15mTrue <= -0.18 &&
+          chg1hCalc <= -0.20 &&
+          chg1hCalc >= -1.45 &&
+          chg15mTrue <= -0.20 &&
+          chg15mTrue >= -0.95 &&
           (chg3hVal <= 0.35 || chg15mTrue <= -0.55) &&
           chg24Val <= 65.0 &&
           chg24Val >= -35.0 &&
-          atr3mPct >= 0.15 &&
-          atr3mPct <= 0.85 &&
-          rsi3m >= 28;
+          atr3mPct >= 0.18 &&
+          atr3mPct <= 0.75 &&
+          rsi3m >= 29 &&
+          rsi3m <= 44;
 
         if (!radarOkLong && !radarOkShort) {
           // 👻 Radar'a ÇOK YAKIN elenen adayları da kaydet (yeni 1s/30dk/pos1h/RSI/ATR filtrelerinin etkisi ölçülebilsin)
@@ -1774,33 +1781,35 @@ async function scanLoop() {
         const prevBrokeLow = swingLow < Infinity && prevC < swingLow * 0.9998;
         const pulledToHigh = swingHigh > 0 && curL <= swingHigh * 1.0025 && curP >= swingHigh * 1.0000;
         const pulledToLow = swingLow < Infinity && curH >= swingLow * 0.9975 && curP <= swingLow * 1.0000;
-        const buyersBack = curP > curO && curMovePct >= 0.04 && curMovePct <= 0.40 && volMult >= 1.0 && noWickLong;
-        const sellersBack = curP < curO && curMovePct <= -0.04 && curMovePct >= -0.40 && volMult >= 1.0 && noWickShort;
+        const maxTriggerPct = Math.min(0.45, atr3mPct * 1.65);
+        const buyersBack = curP > curO && curMovePct >= 0.04 && curMovePct <= maxTriggerPct && volMult >= 1.0 && noWickLong;
+        const sellersBack = curP < curO && curMovePct <= -0.04 && curMovePct >= -maxTriggerPct && volMult >= 1.0 && noWickShort;
 
-        // ⚡ DOĞRUDAN TREND DEVAM TETİĞİ (Yükselene LONG, Düşene SHORT):
-        // Koin retest yapmadan doğrudan güçlü yükseliyorsa (son 2 mum yeşil ve yeni tepe) veya doğrudan düşüyorsa (son 2 mum kırmızı ve yeni dip) yakala!
+        // ⚡ DOĞRUDAN TREND DEVAM TETİĞİ (Yükselene LONG, Düşene SHORT — Climax mum tepesi/dibi korumalı):
         const directLongTrend =
           curP > curO &&
           curMovePct >= 0.05 &&
-          curMovePct <= 0.45 &&
-          (prevMovePct >= 0.04 || chg15mTrue >= 0.40) &&
+          curMovePct <= maxTriggerPct &&
+          (prevMovePct >= 0.04 || chg15mTrue >= 0.35) &&
           curP >= prevC &&
+          prevVolMult >= 0.70 &&
           volMult >= 1.05 &&
           noWickLong;
         const directShortTrend =
           curP < curO &&
           curMovePct <= -0.05 &&
-          curMovePct >= -0.45 &&
-          (prevMovePct <= -0.04 || chg15mTrue <= -0.40) &&
+          curMovePct >= -maxTriggerPct &&
+          (prevMovePct <= -0.04 || chg15mTrue <= -0.35) &&
           curP <= prevC &&
+          prevVolMult >= 1.10 &&
           volMult >= 1.05 &&
           noWickShort;
 
-        const btcBlocksLong = btc15mNumeric <= -0.45 || (btc15mNumeric < -0.15 && btc5mNumeric <= -0.30);
-        const btcBlocksShort = btc15mNumeric >= 0.45 || (btc15mNumeric > 0.15 && btc5mNumeric >= 0.30);
+        const btcBlocksLong = btc15mNumeric <= -0.35 || (btc15mNumeric < -0.10 && btc5mNumeric <= -0.20);
+        const btcBlocksShort = btc15mNumeric >= 0.35 || (btc15mNumeric > 0.10 && btc5mNumeric >= 0.20);
 
-        const longTakerOk = taker15mCalc >= 53.5 || effectiveTaker >= 54.0;
-        const shortTakerOk = taker15mCalc <= 46.5 || effectiveTakerShort <= 46.0;
+        const longTakerOk = taker15mCalc >= 55.0 && effectiveTaker >= 54.0;
+        const shortTakerOk = taker15mCalc <= 45.0 && effectiveTakerShort <= 45.5;
 
         let isLongPump = false;
         let isRocketSignal = false;
@@ -2122,43 +2131,27 @@ async function fastRiskLoop() {
       const nMfe = mfe / k;
       const lockSpot = (pct) => isLong ? pos.entryPrice * (1 + pct / 100) : pos.entryPrice * (1 - pct / 100);
 
-      const tpPct = Number(pos.tp1Pct) || Number(CONFIG.tp1Pct) || 0.90;
-      const beTrigger = Math.min(Number(pos.bePct) || 0.30, tpPct * 0.35);
-      const partialTp1Trigger = Math.min(0.48, tpPct * 0.54); // +%0.48'de %50 nakit cebe!
-      const tier2Trigger = Math.min(0.68, tpPct * 0.76);      // +%0.68'de kalanın stopu +%0.42'ye!
+      const tpPct = Number(pos.tp1Pct) || Number(CONFIG.tp1Pct) || 0.72;
+      const beTrigger = Math.min(Number(pos.bePct) || 0.30, tpPct * 0.42);
+      const tier1Trigger = Math.min(0.50, tpPct * 0.69); // +%0.50'de %100 pozisyonun stopu +%0.34'e kilitlenir!
 
       // ========================================================
-      // 🛡️ 0. PROFESYONEL KÂR REALİZASYONU ("ÖNCE CEBE KOY") & ERKEN BAŞABAŞ
+      // 🛡️ 0. %100 TAM POZİSYON İZ SÜREN KÂR KİLİDİ (KÂRI YARIYA BÖLMEDEN TAŞIMA)
       // ========================================================
-      // Kademe 1: +%0.30 MFE -> Stop +%0.10'a çekilir ($0 Risk!)
-      if (!pos.beLocked && mfe >= beTrigger && move > 0.12) {
-        const nextStop = lockSpot(0.10);
+      // Kademe 1: +%0.30 MFE -> Stop +%0.12'ye çekilir ($0 Risk + +$0.15 net kâr!)
+      if (!pos.beLocked && mfe >= beTrigger && move > 0.14) {
+        const nextStop = lockSpot(0.12);
         if ((isLong && nextStop > pos.stopPrice) || (!isLong && nextStop < pos.stopPrice)) {
           pos.stopPrice = nextStop;
         }
         pos.beLocked = true;
         stateChanged = true;
-        addLog(`🛡️ [ERKEN BAŞABAŞ]: ${pos.symbol} (${pos.side}) +%${mfe.toFixed(2)} gördü ➔ Stop +%0.10 kâra çekildi ($0 Risk)!`, 'INFO');
+        addLog(`🛡️ [ERKEN BAŞABAŞ]: ${pos.symbol} (${pos.side}) +%${mfe.toFixed(2)} gördü ➔ Stop +%0.12 kâra çekildi ($0 Risk)!`, 'INFO');
       }
 
-      // Kademe 2: +%0.48 MFE -> Pozisyonun %50'si ANINDA SATILIP NAKİT KÂR CEBE KONUR, kalan %50'nin stopu +%0.18'e çekilir!
-      if (!pos.tp1Taken && mfe >= partialTp1Trigger && move >= partialTp1Trigger * 0.92) {
-        const closeRatio = Number(CONFIG.tp1ClosePct) || 0.50;
-        const closedMargin = Number((pos.margin * closeRatio).toFixed(2));
-        const closedNominal = closedMargin * pos.leverage;
-        const maker = Number(CONFIG.makerRate) || 0.0002;
-        const tp1Fee = closedNominal * (maker * 2);
-        const realizedMove = Math.max(move, partialTp1Trigger);
-        const tp1Gross = closedNominal * (realizedMove / 100);
-        const tp1Net = tp1Gross - tp1Fee;
-
-        balance += tp1Net;
-        pos.tp1Pnl = (pos.tp1Pnl || 0) + tp1Net;
-        pos.tp1Gross = (pos.tp1Gross || 0) + tp1Gross;
-        pos.tp1Fee = (pos.tp1Fee || 0) + tp1Fee;
-        pos.margin = Number((pos.margin - closedMargin).toFixed(2));
-
-        const nextStop = lockSpot(0.18);
+      // Kademe 2: +%0.50 MFE -> %100 Tam pozisyonun stopu +%0.34'e (+$0.81 garanti net kâr) çekilir ve +%0.72 tam hedefe (+$2.04) sürülür!
+      if (!pos.tp1Taken && mfe >= tier1Trigger && move > 0.37) {
+        const nextStop = lockSpot(0.34);
         if ((isLong && nextStop > pos.stopPrice) || (!isLong && nextStop < pos.stopPrice)) {
           pos.stopPrice = nextStop;
         }
@@ -2166,18 +2159,7 @@ async function fastRiskLoop() {
         pos.tier1Locked = true;
         pos.beLocked = true;
         stateChanged = true;
-        addLog(`💰 [TP1 %50 NAKİT CEBE]: ${pos.symbol} (${pos.side}) +%${realizedMove.toFixed(2)}'de yarısı satıldı (+$${tp1Net.toFixed(2)} kasaya eklendi) ➔ Kalan %50 Stop +%0.18'e kilitlendi!`, 'WIN');
-      }
-
-      // Kademe 3: +%0.68 MFE -> Kalan %50 runner'ın stopu +%0.42'ye yükseltilir!
-      if (pos.tp1Taken && !pos.tp2Taken && mfe >= tier2Trigger && move > 0.45) {
-        const nextStop = lockSpot(0.42);
-        if ((isLong && nextStop > pos.stopPrice) || (!isLong && nextStop < pos.stopPrice)) {
-          pos.stopPrice = nextStop;
-        }
-        pos.tp2Taken = true;
-        stateChanged = true;
-        addLog(`🎯 [RUNNER KİLİDİ]: ${pos.symbol} (${pos.side}) +%${mfe.toFixed(2)} gördü ➔ Kalan %50 Stop +%0.42 yüksek kâra yükseltildi!`, 'TRADE');
+        addLog(`🔒 [TAM POZİSYON KÂR KİLİDİ]: ${pos.symbol} (${pos.side}) +%${mfe.toFixed(2)} gördü ➔ %100 Pozisyon Stopu +%0.34'e (+$0.81) kilitlendi, hedef +%${tpPct.toFixed(2)}!`, 'WIN');
       }
 
       // ========================================================
@@ -2212,16 +2194,22 @@ async function fastRiskLoop() {
         exitReason = `Retest kâr alındı (+%${move.toFixed(2)} / hedef %${tpPct.toFixed(2)})`;
       }
 
+      // ⚡ 4. DAKİKA "SIFIR TEPKİ / TERS GİRİŞ" KESİCİSİ: Kazanan hiçbir işlem -%0.22'den fazla sarkmadı!
+      // 4 dakikada +%0.08 bile görememiş ve -%0.25 altına sarkmış hatalı girişi -%0.45/-%0.80'i beklemeden hemen kes!
+      if (!exitReason && !pos.beLocked && durMin >= 4 && mfe < 0.08 && move <= -0.25) {
+        exitReason = `Retest: 4 dk sıfır tepki (%${move.toFixed(2)} / MFE: +%${mfe.toFixed(2)})`;
+      }
+
       // ⏱️ 12. DAKİKA "BAŞARISIZ KIRILIM" (TIME-STOP) KORUMASI: 12 dakikada +%0.20 bile görememiş ve eksideki sahte kırılımı erken kes!
-      if (!exitReason && !pos.beLocked && durMin >= 12 && mfe < 0.20 && move <= -0.18) {
+      if (!exitReason && !pos.beLocked && durMin >= 12 && mfe < 0.20 && move <= -0.15) {
         exitReason = `Retest: 12 dk kırılım çalışmadı (%${move.toFixed(2)} / MFE: +%${mfe.toFixed(2)})`;
       }
 
-      if (!exitReason && !pos.beLocked && durMin >= 25 && mfe < 0.30) {
-        exitReason = `Retest: 25 dk yatay kaldı (%${move.toFixed(2)})`;
+      if (!exitReason && !pos.beLocked && durMin >= 22 && mfe < 0.30) {
+        exitReason = `Retest: 22 dk yatay kaldı (%${move.toFixed(2)})`;
       }
 
-      const maxHold = Number(CONFIG.maxTradeMin) || 40;
+      const maxHold = Number(CONFIG.maxTradeMin) || 35;
       if (!exitReason && durMin >= maxHold) {
         exitReason = pos.tp1Taken
           ? `⏱️ Vur Kaç runner süresi doldu (${maxHold}dk / MFE: +%${mfe.toFixed(2)})`
@@ -2420,7 +2408,8 @@ function closeTrade(pos, exitReason) {
     formattedExitReason = `🎯 3 KADEMELİ MOONSHOT ALINDI (Toplam: +$${totalTradePnl.toFixed(2)} / +%${totalTradeRoi.toFixed(1)} ROI)`;
   }
 
-  coinCooldowns[pos.symbol] = now + (3 * 60 * 1000);
+  // 🛡️ Aynı koinde peş peşe testere/yorgunluk işlemine girmemek için 15 dakika (1 tam 15m mum) soğuma süresi!
+  coinCooldowns[pos.symbol] = now + (15 * 60 * 1000);
 
   const exitMovePct = pos.entryPrice > 0
     ? (pos.side === 'LONG'
