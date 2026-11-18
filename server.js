@@ -147,6 +147,7 @@ let VIP_TARGETS = { ...DEFAULT_VIP_TARGETS };
 const BANNED_SYMBOLS = new Set([
   'BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT',
   'USDCUSDT', 'FDUSDUSDT', 'TUSDUSDT', 'EURUSDT',
+  'BFUSDUSDT', 'USD1USDT', 'RLUSDUSDT', 'RWUSDUSDT', 'USDEUSDT', 'USDPUSDT',
   'AMPUSDT', 'XAUTUSDT', 'PAXGUSDT'
 ]);
 
@@ -1644,9 +1645,9 @@ async function scanLoop() {
         const rangePos = rangeSpan3h > 0 ? ((curP - rInfo.low3h) / rangeSpan3h) * 100 : 50;
         const roomToHigh3hPct = (rInfo.high3h && curP > 0) ? ((rInfo.high3h - curP) / curP) * 100 : 99;
         const roomToLow3hPct = (rInfo.low3h && curP > 0) ? ((curP - rInfo.low3h) / curP) * 100 : 99;
-        // 🧱 DUVAR KURALI: 3 saatlik direncin %0.02 ile %0.70 hemen altında LONG açma! Ya direnci yukarı kırmış olmalı (<= 0.02) ya da dirence en az +%0.70 boş alan olmalı!
-        const clearAirLong = roomToHigh3hPct <= 0.02 || roomToHigh3hPct >= 0.70;
-        const clearAirShort = roomToLow3hPct <= 0.02 || roomToLow3hPct >= 0.70;
+        // 🧱 DUVAR KURALI: Sadece tam 3s direnç/destek duvarının %0.03 ile %0.35 burnunun dibini engelle; kırılımları ve trendi serbest bırak!
+        const clearAirLong = roomToHigh3hPct <= 0.03 || roomToHigh3hPct >= 0.35;
+        const clearAirShort = roomToLow3hPct <= 0.03 || roomToLow3hPct >= 0.35;
 
         // 📐 3 DK EMA9 & EMA21 TREND DİZİLİMİ:
         let ema9 = parseFloat(k3m[0][4]) || curP;
@@ -1657,8 +1658,8 @@ async function scanLoop() {
           ema9 = c * k9 + ema9 * (1 - k9);
           ema21 = c * k21 + ema21 * (1 - k21);
         }
-        const emaBull = curP > ema9 && ema9 >= ema21 * 0.9995;
-        const emaBear = curP < ema9 && ema9 <= ema21 * 1.0005;
+        const emaBull = curP > ema9 && ema9 >= ema21 * 0.9990;
+        const emaBear = curP < ema9 && ema9 <= ema21 * 1.0010;
 
         // 📐 VOLATİLİTE (3dk ATR-14, %): Stop mesafesi koinin normal gürültüsüne göre ayarlanır
         let trSum = 0, trCount = 0;
@@ -1671,35 +1672,29 @@ async function scanLoop() {
         }
         const atr3mPct = trCount > 0 ? trSum / trCount : 0.5;
 
+        // 🚀 YÜKSELENE LONG, DÜŞENE SHORT (Doğrudan Trend Takibi):
         const radarOkLong =
           clearAirLong &&
           emaBull &&
-          chg1hCalc >= 0.55 &&
-          chg1hCalc <= 1.85 &&
-          chg3hVal >= 0.30 &&
-          chg15mTrue >= 0.15 &&
-          chg15mTrue <= 1.50 &&
-          chg24Val <= 14.0 &&
-          chg24Val >= -1.0 &&
-          atr3mPct >= 0.22 &&
-          atr3mPct <= 0.65 &&
-          rsi3m <= 66 &&
-          pos1h <= 98;
+          chg1hCalc >= 0.25 &&
+          chg15mTrue >= 0.18 &&
+          (chg3hVal >= -0.35 || chg15mTrue >= 0.55) &&
+          chg24Val >= -4.0 &&
+          chg24Val <= 45.0 &&
+          atr3mPct >= 0.15 &&
+          atr3mPct <= 0.85 &&
+          rsi3m <= 72;
         const radarOkShort =
           clearAirShort &&
           emaBear &&
-          chg1hCalc <= -0.55 &&
-          chg1hCalc >= -1.40 &&
-          chg3hVal <= -0.30 &&
-          chg3hVal >= -2.20 &&
-          chg15mTrue <= -0.15 &&
-          chg15mTrue >= -1.50 &&
-          chg24Val >= -14.0 &&
-          chg24Val <= 0.8 &&
-          atr3mPct >= 0.22 &&
-          atr3mPct <= 0.65 &&
-          rsi3m >= 35 &&
-          pos1h >= -5.0;
+          chg1hCalc <= -0.25 &&
+          chg15mTrue <= -0.18 &&
+          (chg3hVal <= 0.35 || chg15mTrue <= -0.55) &&
+          chg24Val <= 65.0 &&
+          chg24Val >= -35.0 &&
+          atr3mPct >= 0.15 &&
+          atr3mPct <= 0.85 &&
+          rsi3m >= 28;
 
         if (!radarOkLong && !radarOkShort) {
           // 👻 Radar'a ÇOK YAKIN elenen adayları da kaydet (yeni 1s/30dk/pos1h/RSI/ATR filtrelerinin etkisi ölçülebilsin)
@@ -1764,8 +1759,8 @@ async function scanLoop() {
         const noWickShort = candleSpan > 0 ? (lowerWick / candleSpan <= 0.40) : true;
 
         const vol3hCheck = rInfo.vol3hM || ((quote90mCalc * 2) / 1e6);
-        const hasRealLiquidity = vol24 >= 15 && vol3hCheck >= 1.5;
-        const noiseOk = atr3mPct < 0.50;
+        const hasRealLiquidity = vol24 >= 10 && vol3hCheck >= 1.0;
+        const noiseOk = atr3mPct < 0.85;
         let swingHigh = 0;
         let swingLow = Infinity;
         for (let m = Math.max(0, lastIdx - 16); m <= lastIdx - 3; m++) {
@@ -1774,32 +1769,53 @@ async function scanLoop() {
           if (hh > swingHigh) swingHigh = hh;
           if (ll < swingLow) swingLow = ll;
         }
-        const breakVolOk = baselineVol > 0 && prevV >= baselineVol * 1.50;
-        const prevBrokeHigh = swingHigh > 0 && prevC > swingHigh * 1.0004;
-        const prevBrokeLow = swingLow < Infinity && prevC < swingLow * 0.9996;
-        const pulledToHigh = swingHigh > 0 && curL <= swingHigh * 1.0020 && curP >= swingHigh * 1.0001;
-        const pulledToLow = swingLow < Infinity && curH >= swingLow * 0.9980 && curP <= swingLow * 0.9999;
-        const buyersBack = curP > curO && curMovePct >= 0.04 && curMovePct <= 0.20 && volMult >= 1.10 && noWickLong;
-        const sellersBack = curP < curO && curMovePct <= -0.04 && curMovePct >= -0.20 && volMult >= 1.10 && noWickShort;
-        // 🛡️ BTC YÖN UYUMU: BTC düşerken LONG açma, BTC yükselirken SHORT açma!
-        const btcBlocksLong = btc15mNumeric < -0.06 || btc5mNumeric < -0.08;
-        const btcBlocksShort = btc15mNumeric > 0.06 || btc5mNumeric > 0.08;
+        const breakVolOk = baselineVol > 0 && (prevV >= baselineVol * 1.20 || volMult >= 1.15);
+        const prevBrokeHigh = swingHigh > 0 && prevC > swingHigh * 1.0002;
+        const prevBrokeLow = swingLow < Infinity && prevC < swingLow * 0.9998;
+        const pulledToHigh = swingHigh > 0 && curL <= swingHigh * 1.0025 && curP >= swingHigh * 1.0000;
+        const pulledToLow = swingLow < Infinity && curH >= swingLow * 0.9975 && curP <= swingLow * 1.0000;
+        const buyersBack = curP > curO && curMovePct >= 0.04 && curMovePct <= 0.40 && volMult >= 1.0 && noWickLong;
+        const sellersBack = curP < curO && curMovePct <= -0.04 && curMovePct >= -0.40 && volMult >= 1.0 && noWickShort;
 
-        const longTakerOk = taker15mCalc >= 58.0 && effectiveTaker >= 54.0;
-        const shortTakerOk = taker15mCalc <= 38.0 && effectiveTakerShort <= 41.0;
+        // ⚡ DOĞRUDAN TREND DEVAM TETİĞİ (Yükselene LONG, Düşene SHORT):
+        // Koin retest yapmadan doğrudan güçlü yükseliyorsa (son 2 mum yeşil ve yeni tepe) veya doğrudan düşüyorsa (son 2 mum kırmızı ve yeni dip) yakala!
+        const directLongTrend =
+          curP > curO &&
+          curMovePct >= 0.05 &&
+          curMovePct <= 0.45 &&
+          (prevMovePct >= 0.04 || chg15mTrue >= 0.40) &&
+          curP >= prevC &&
+          volMult >= 1.05 &&
+          noWickLong;
+        const directShortTrend =
+          curP < curO &&
+          curMovePct <= -0.05 &&
+          curMovePct >= -0.45 &&
+          (prevMovePct <= -0.04 || chg15mTrue <= -0.40) &&
+          curP <= prevC &&
+          volMult >= 1.05 &&
+          noWickShort;
+
+        const btcBlocksLong = btc15mNumeric <= -0.45 || (btc15mNumeric < -0.15 && btc5mNumeric <= -0.30);
+        const btcBlocksShort = btc15mNumeric >= 0.45 || (btc15mNumeric > 0.15 && btc5mNumeric >= 0.30);
+
+        const longTakerOk = taker15mCalc >= 53.5 || effectiveTaker >= 54.0;
+        const shortTakerOk = taker15mCalc <= 46.5 || effectiveTakerShort <= 46.0;
 
         let isLongPump = false;
         let isRocketSignal = false;
-        if (hasRealLiquidity && radarOkLong && prevBrokeHigh && breakVolOk && pulledToHigh && buyersBack && longTakerOk && !btcBlocksLong) {
+        if (hasRealLiquidity && radarOkLong && ((prevBrokeHigh && breakVolOk && pulledToHigh && buyersBack) || directLongTrend) && longTakerOk && !btcBlocksLong) {
           isLongPump = true;
           isRocketSignal = true;
-          radarTag = `[LONG RETEST | 1s +%${chg1hCalc.toFixed(2)} | 15dk +%${chg15mTrue.toFixed(2)} | ATR %${atr3mPct.toFixed(2)} | Alıcı %${taker15mCalc.toFixed(0)}]`;
+          const modeLbl = directLongTrend ? 'LONG TREND' : 'LONG RETEST';
+          radarTag = `[${modeLbl} | 1s +%${chg1hCalc.toFixed(2)} | 15dk +%${chg15mTrue.toFixed(2)} | ATR %${atr3mPct.toFixed(2)} | Alıcı %${taker15mCalc.toFixed(0)}]`;
         }
 
         let isShortDump = false;
-        if (hasRealLiquidity && radarOkShort && prevBrokeLow && breakVolOk && pulledToLow && sellersBack && shortTakerOk && !btcBlocksShort) {
+        if (hasRealLiquidity && radarOkShort && ((prevBrokeLow && breakVolOk && pulledToLow && sellersBack) || directShortTrend) && shortTakerOk && !btcBlocksShort) {
           isShortDump = true;
-          radarTag = `[SHORT RETEST | 1s %${chg1hCalc.toFixed(2)} | 15dk %${chg15mTrue.toFixed(2)} | ATR %${atr3mPct.toFixed(2)} | Alıcı %${taker15mCalc.toFixed(0)}]`;
+          const modeLbl = directShortTrend ? 'SHORT TREND' : 'SHORT RETEST';
+          radarTag = `[${modeLbl} | 1s %${chg1hCalc.toFixed(2)} | 15dk %${chg15mTrue.toFixed(2)} | ATR %${atr3mPct.toFixed(2)} | Alıcı %${taker15mCalc.toFixed(0)}]`;
         }
 
         if (!isLongPump && !isShortDump) {

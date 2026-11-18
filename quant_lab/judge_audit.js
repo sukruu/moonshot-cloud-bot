@@ -219,30 +219,30 @@ class JudicialAuditCourt {
     const chg15 = chg15raw;
 
     if (side === 'LONG') {
-      if (taker < 55.0) {
+      if (taker < 53.0) {
         judicialScore -= 35;
         accusations.push(`Alıcı yetersiz (%${taker.toFixed(1)})`);
       }
-      if (chg15 < 0.08) {
+      if (chg15 < 0.12) {
         judicialScore -= 35;
         accusations.push(`15dk yükselmiyor (%${chg15.toFixed(2)})`);
       }
-      if (chg24 > 14.0 || chg24 < -2.5) {
+      if (chg24 < -6.0 && chg15 < 0.50) {
         judicialScore -= 35;
-        accusations.push(`24s trend uygunsuz (%${chg24.toFixed(1)})`);
+        accusations.push(`24s trend çok zayıf (%${chg24.toFixed(1)})`);
       }
     } else {
-      if (taker > 38.5) {
+      if (taker > 47.0) {
         judicialScore -= 35;
         accusations.push(`Satıcı yetersiz (alıcı %${taker.toFixed(1)})`);
       }
-      if (chg15 > -0.08) {
+      if (chg15 > -0.12) {
         judicialScore -= 35;
         accusations.push(`15dk düşmüyor (%${chg15.toFixed(2)})`);
       }
-      if (chg24 < -14.0 || chg24 > 1.0) {
+      if (chg24 > 8.0 && chg15 > -0.50) {
         judicialScore -= 35;
-        accusations.push(`24s trend uygunsuz (%${chg24.toFixed(1)})`);
+        accusations.push(`24s güçlü yükselişte (%${chg24.toFixed(1)})`);
       }
     }
 
