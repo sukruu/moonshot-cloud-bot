@@ -953,6 +953,9 @@ function getCachePolicy(relativePath) {
   if (relativePath.includes('exchangeInfo')) {
     return { ttlMs: 6 * 60 * 60 * 1000, staleMs: 24 * 60 * 60 * 1000 };
   }
+  if (relativePath.includes('limit=1000') || relativePath.includes('limit=500')) {
+    return { ttlMs: 10 * 60 * 1000, staleMs: 30 * 60 * 1000 }; // Geçmiş Replay mumları 10 dk önbellekte kalır (429 rate-limit engeli!)
+  }
   if (relativePath.includes('ticker/24hr')) {
     return { ttlMs: 8000, staleMs: 300000 }; // 8 sn taze, 5 dakika stale toleransı
   }
@@ -1638,7 +1641,7 @@ async function runHistoricalReplay(hours = 72, maxCoins = 45) {
   const cClamped = Math.max(15, Math.min(55, Math.round(Number(maxCoins) || 45)));
   const cacheKey = `${hClamped}:${cClamped}`;
   const cached = replayCache.get(cacheKey);
-  if (cached && (Date.now() - cached.ts) < 60 * 1000) return cached.result;
+  if (cached && (Date.now() - cached.ts) < 5 * 60 * 1000) return cached.result;
   if (replayInFlight) return replayInFlight;
 
   replayInFlight = (async () => {
@@ -1664,16 +1667,21 @@ async function runHistoricalReplay(hours = 72, maxCoins = 45) {
 
       const barLimit = Math.min(1000, Math.ceil(hClamped * 4) + 65);
       const coinKlines = [];
-      for (let i = 0; i < picked.length; i += 6) {
-        const chunk = picked.slice(i, i + 6);
+      // 🛡️ Kibar 5'li tarama + rate-limit koruması (Futures koinlerinin Spot'a düşüp eksilmesini önler!)
+      for (let i = 0; i < picked.length; i += 5) {
+        const chunk = picked.slice(i, i + 5);
         const part = await Promise.all(chunk.map(async sym => {
           try {
-            const k = await fetchBinance(`/fapi/v1/klines?symbol=${sym}&interval=15m&limit=${barLimit}`);
+            let k = await fetchBinance(`/fapi/v1/klines?symbol=${sym}&interval=15m&limit=${barLimit}`);
+            if (!Array.isArray(k) || k.length < 75) {
+              await new Promise(r => setTimeout(r, 400));
+              k = await fetchBinance(`/fapi/v1/klines?symbol=${sym}&interval=15m&limit=${barLimit}`);
+            }
             return (Array.isArray(k) && k.length >= 75) ? { symbol: sym, k } : null;
           } catch (e) { return null; }
         }));
         part.forEach(x => { if (x) coinKlines.push(x); });
-        if (i + 6 < picked.length) await new Promise(r => setTimeout(r, 120));
+        if (i + 5 < picked.length) await new Promise(r => setTimeout(r, 200));
       }
 
       const cutoffTs = Date.now() - (hClamped * 60 * 60 * 1000);
@@ -1802,7 +1810,9 @@ async function runHistoricalReplay(hours = 72, maxCoins = 45) {
         },
         trades: trades.slice().reverse()
       };
-      replayCache.set(cacheKey, { ts: Date.now(), result });
+      if (coinKlines.length >= Math.floor(picked.length * 0.65)) {
+        replayCache.set(cacheKey, { ts: Date.now(), result });
+      }
       return result;
     } finally {
       replayInFlight = null;
@@ -1946,6 +1956,12 @@ async function scanLoop() {
     }
 
     if (!global.whaleEvaluatedCandles) global.whaleEvaluatedCandles = new Map();
+
+    // 🛡️ API AĞIRLIK KORUMASI: 15dk teyit penceresi dışındayken (240sn..810sn arası) 55 koin için boşuna kline çekip 429 yeme!
+    const secIn15mNow = Math.floor((now / 1000) % 900);
+    if (secIn15mNow > 240 && secIn15mNow < 810) {
+      return;
+    }
 
     // 5'li paralel 15dk kline taraması (Geçmiş Replay Backtest ile 1-e-1 aynı motor!)
     const chunkSize = 5;
