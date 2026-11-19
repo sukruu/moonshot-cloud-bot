@@ -1494,6 +1494,9 @@ function evaluateWhaleSpike15m(k, idx) {
 
   if (atr15 < 1.05 || atr15 > 3.50) return { approved: false, why: 'ATR15', ...diag };
   if (volMult < 2.50) return { approved: false, why: 'VOL_LOW', ...diag };
+  // 🌋 Wyckoff Hacim Tükenişi (Climax) Kalkanı: 6x+ hacimli mum = likidasyon/FOMO zirvesi, balina mala çıkıyor.
+  // 10g CSV: Vol>5.5x n=7 → 1W/6L (-$11.66, H1 ve H2 ikisi de zarar) | Portföy sim: tavan 6–7x → H1 ve H2 ikisi de iyileşti.
+  if (volMult > 6.00) return { approved: false, why: 'VOL_CLIMAX', ...diag };
 
   const longOk =
     move >= atr15 * 0.90 &&
@@ -1713,20 +1716,32 @@ async function runHistoricalReplay(hours = 72, maxCoins = 45) {
       let maxDD = 0;
       const openSlots = [];
       const coinCd = {};
+      const lossStreak = {}; // 🛡️ Canlı closeTrade ile birebir: 2 ardışık zarar → 4 saat soğuma
       const trades = [];
       let oppNetTotal = 0;
       let idSeq = 1;
 
+      const settleSlot = (p) => {
+        bal += p.netPnl;
+        if (bal > peak) peak = bal;
+        const dd = peak > 0 ? ((peak - bal) / peak) * 100 : 0;
+        if (dd > maxDD) maxDD = dd;
+        p.ref.balanceAfter = Number(bal.toFixed(2));
+        if (p.netPnl <= -0.05) {
+          lossStreak[p.symbol] = (lossStreak[p.symbol] || 0) + 1;
+          const coolMin = lossStreak[p.symbol] >= 2 ? 240 : 30;
+          coinCd[p.symbol] = Math.max(coinCd[p.symbol] || 0, p.exitTs + coolMin * 60 * 1000);
+          if (lossStreak[p.symbol] >= 2) lossStreak[p.symbol] = 1; // canlıdaki gibi: soğuma sonrası 1 zarar daha → tekrar kalkan
+        } else if (p.netPnl > 0.05) {
+          lossStreak[p.symbol] = 0;
+        }
+      };
+
       for (const ev of events) {
-        for (let j = openSlots.length - 1; j >= 0; j--) {
-          if (openSlots[j].exitTs <= ev.candleTs) {
-            bal += openSlots[j].netPnl;
-            if (bal > peak) peak = bal;
-            const dd = peak > 0 ? ((peak - bal) / peak) * 100 : 0;
-            if (dd > maxDD) maxDD = dd;
-            openSlots[j].ref.balanceAfter = Number(bal.toFixed(2));
-            openSlots.splice(j, 1);
-          }
+        openSlots.sort((a, b) => a.exitTs - b.exitTs);
+        for (let j = 0; j < openSlots.length; ) {
+          if (openSlots[j].exitTs <= ev.candleTs) { settleSlot(openSlots[j]); openSlots.splice(j, 1); }
+          else j++;
         }
         if (openSlots.length >= 3) continue;
         if (openSlots.some(p => p.symbol === ev.symbol)) continue;
@@ -1767,17 +1782,11 @@ async function runHistoricalReplay(hours = 72, maxCoins = 45) {
           balanceAfter: Number(bal.toFixed(2))
         };
         openSlots.push({ symbol: ev.symbol, side: ev.side, exitTs: res.exitTs, netPnl: res.netPnl, ref: rec });
-        coinCd[ev.symbol] = res.exitTs + (30 * 60 * 1000);
+        coinCd[ev.symbol] = Math.max(coinCd[ev.symbol] || 0, res.exitTs + (30 * 60 * 1000));
         trades.push(rec);
       }
       openSlots.sort((a, b) => a.exitTs - b.exitTs);
-      for (const p of openSlots) {
-        bal += p.netPnl;
-        if (bal > peak) peak = bal;
-        const dd = peak > 0 ? ((peak - bal) / peak) * 100 : 0;
-        if (dd > maxDD) maxDD = dd;
-        p.ref.balanceAfter = Number(bal.toFixed(2));
-      }
+      for (const p of openSlots) settleSlot(p);
 
       const sum = (arr, fn) => arr.reduce((a, x) => a + fn(x), 0);
       const wins = trades.filter(x => x.netPnl > 0.05);
