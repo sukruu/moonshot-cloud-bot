@@ -115,7 +115,7 @@ function engineSnapshot() {
     userSlots: userRisk.maxSlots,
     userMargin: userRisk.marginPerTrade,
     gates: {
-      entry: '15dk Balina Hacmi (2.5x+) + EMA20/50 + Taker %56/%44 | 1.0R BE + 0.85R Trail + 3.5R Moonshot',
+      entry: '15dk Balina (2.5x+) | LONG 3.5R Geniş Trail · SHORT 2.5R Sıkı Trail',
       book: 'defter fiyatı',
       judge: 'açık',
       flow: '15dk & 4s Saf Kripto Futures balina akışı',
@@ -1586,7 +1586,12 @@ function simulateWhaleTrade15m(k, entryIdx, sig, riskUsd, forceSide = null) {
     mfe = Math.max(mfe, favMove);
     mae = Math.max(mae, -advMove);
 
-    const tpGoal = slPct * 3.50;
+    // Asimetrik kripto fiziği: LONG merdiven gibi tırmanır (3.5R / 0.85R trail), SHORT sert V-dönüşü yapar (2.5R / 0.50R trail)!
+    const beMult = isLong ? 1.00 : 0.80;
+    const trailStartMult = isLong ? 1.40 : 1.10;
+    const trailGapMult = isLong ? 0.85 : 0.50;
+    const moonMult = isLong ? 3.50 : 2.50;
+    const tpGoal = slPct * moonMult;
     if (favMove >= tpGoal) {
       const grossPnl = nominal * (tpGoal / 100);
       const feeUsd = nominal * (maker + maker);
@@ -1600,15 +1605,15 @@ function simulateWhaleTrade15m(k, entryIdx, sig, riskUsd, forceSide = null) {
         grossPnl: Number(grossPnl.toFixed(2)),
         feeUsd: Number(feeUsd.toFixed(2)),
         netPnl: Number((grossPnl - feeUsd).toFixed(2)),
-        reason: `🎯 3.5R Moonshot (+%${tpGoal.toFixed(2)})`
+        reason: `🎯 ${moonMult.toFixed(1)}R Moonshot (+%${tpGoal.toFixed(2)})`
       };
     }
 
-    if (mfe >= slPct * 1.40) {
-      tighten(mfe - (slPct * 0.85));
+    if (mfe >= slPct * trailStartMult) {
+      tighten(mfe - (slPct * trailGapMult));
       trailing = true;
       beLocked = true;
-    } else if (!beLocked && mfe >= slPct * 1.00 && closeMove > 0.20) {
+    } else if (!beLocked && mfe >= slPct * beMult && closeMove > 0.20) {
       tighten(0.15);
       beLocked = true;
     }
@@ -2112,10 +2117,11 @@ async function scanLoop() {
           ? fillPx * (1 - tradeSlPct / 100)
           : fillPx * (1 + tradeSlPct / 100);
 
-        const tradeBePct = Number((tradeSlPct * 1.00).toFixed(2));
-        const tradeTp1Pct = Number((tradeSlPct * 1.40).toFixed(2));
-        const tradeTp2Pct = Number((tradeSlPct * 2.25).toFixed(2));
-        const tradeMoonPct = Number((tradeSlPct * 3.50).toFixed(2));
+        const isLongSide = side === 'LONG';
+        const tradeBePct = Number((tradeSlPct * (isLongSide ? 1.00 : 0.80)).toFixed(2));
+        const tradeTp1Pct = Number((tradeSlPct * (isLongSide ? 1.40 : 1.10)).toFixed(2));
+        const tradeTp2Pct = Number((tradeSlPct * (isLongSide ? 2.25 : 1.80)).toFixed(2));
+        const tradeMoonPct = Number((tradeSlPct * (isLongSide ? 3.50 : 2.50)).toFixed(2));
 
         const dirEmoji = side === 'LONG' ? '🐋🚀 BALİNA LONG' : '🐋🩸 BALİNA SHORT';
         const flowText = side === 'LONG' ? `Alıcı %${sig.taker.toFixed(0)}` : `Satıcı %${(100 - sig.taker).toFixed(0)}`;
@@ -2320,8 +2326,9 @@ async function fastRiskLoop() {
 
       let exitReason = null;
 
-      // 🐋 MARSCOIN V3 — 15DK BALİNA RUNNER ÇIKIŞ MOTORU (Geçmiş Replay Backtest ile 1-e-1 Aynı!)
-      // 1.0R BE (+%0.15 kilit) -> 1.4R+ Geniş İz Süren Runner (mfe - 0.85*SL) -> 3.5R Moonshot Hedefi (~$8.50+)
+      // 🐋 MARSCOIN V3 — ASİMETRİK 15DK BALİNA RUNNER ÇIKIŞ MOTORU (Replay Backtest ile 1-e-1 Aynı!)
+      // LONG : 1.00R BE -> 1.40R+ Geniş Trail (0.85R) -> 3.50R Moonshot (ralli basamaklarını taşır)
+      // SHORT: 0.80R BE -> 1.10R+ Sıkı Trail  (0.50R) -> 2.50R Moonshot (V-dönüşü öncesi kârı kilitler)
       const slBase = Math.max(0.75, Number(pos.slPct) || Number(CONFIG.slPct) || 1.50);
       const lockSpot = (pct) => isLong ? pos.entryPrice * (1 + pct / 100) : pos.entryPrice * (1 - pct / 100);
       const tightenStop = (pct) => {
@@ -2334,22 +2341,27 @@ async function fastRiskLoop() {
         return false;
       };
 
-      const beGoal = slBase * 1.00;     // 1.0R: Stop maliyete (+%0.15) çekilir
-      const trailStart = slBase * 1.40; // 1.4R: Geniş iz süren Runner devreye girer
-      const trailGap = slBase * 0.85;   // Zirveden 0.85R takip mesafesi (trendi boğmadan büyütür!)
-      const moonGoal = slBase * 3.50;   // 3.5R: Büyük Balina Moonshot hedefi!
+      const beMult = isLong ? 1.00 : 0.80;
+      const trailStartMult = isLong ? 1.40 : 1.10;
+      const trailGapMult = isLong ? 0.85 : 0.50;
+      const moonMult = isLong ? 3.50 : 2.50;
+
+      const beGoal = slBase * beMult;
+      const trailStart = slBase * trailStartMult;
+      const trailGap = slBase * trailGapMult;
+      const moonGoal = slBase * moonMult;
       const initMargin = pos.initialMargin || pos.margin || 20;
       const makerRate = Number(CONFIG.makerRate) || 0.0002;
 
-      // Kademe 1: 1.0R kâr -> Stop +%0.15'e çekilir ($0 Risk!)
+      // Kademe 1: BE (LONG 1.0R / SHORT 0.8R) -> Stop +%0.15'e çekilir ($0 Risk!)
       if (!pos.beLocked && mfe >= beGoal && move > 0.20) {
         tightenStop(0.15);
         pos.beLocked = true;
         stateChanged = true;
-        addLog(`🛡️ [1.0R BAŞABAŞ]: ${pos.symbol} (${pos.side}) +%${mfe.toFixed(2)} gördü ➔ Stop +%0.15 kâra çekildi ($0 Risk)!`, 'INFO');
+        addLog(`🛡️ [${beMult.toFixed(1)}R BAŞABAŞ]: ${pos.symbol} (${pos.side}) +%${mfe.toFixed(2)} gördü ➔ Stop +%0.15 kâra çekildi ($0 Risk)!`, 'INFO');
       }
 
-      // Kademe 2: 1.4R+ -> %100 Tam pozisyon geniş iz süren Runner'a geçer (mfe - 0.85*SL)!
+      // Kademe 2: Runner İz Süren (LONG 1.4R-0.85R / SHORT 1.1R-0.50R)
       if (mfe >= trailStart) {
         const trailPct = mfe - trailGap;
         const moved = tightenStop(trailPct);
@@ -2357,7 +2369,7 @@ async function fastRiskLoop() {
           pos.tp1Taken = true;
           pos.beLocked = true;
           stateChanged = true;
-          addLog(`🔒 [RUNNER İZ SÜREN AKTİF]: ${pos.symbol} (${pos.side}) +%${mfe.toFixed(2)} gördü ➔ Stop +%${trailPct.toFixed(2)}'ye kilitlendi, hedef 3.5R (+%${moonGoal.toFixed(2)})!`, 'WIN');
+          addLog(`🔒 [RUNNER İZ SÜREN AKTİF]: ${pos.symbol} (${pos.side}) +%${mfe.toFixed(2)} gördü ➔ Stop +%${trailPct.toFixed(2)}'ye kilitlendi, hedef ${moonMult.toFixed(1)}R (+%${moonGoal.toFixed(2)})!`, 'WIN');
         } else if (moved) {
           stateChanged = true;
         }
@@ -2388,9 +2400,9 @@ async function fastRiskLoop() {
         }
       }
 
-      // 🚀 Kademe 3: 3.5R BALİNA MOONSHOT HEDEFİ!
+      // 🚀 Kademe 3: BALİNA MOONSHOT HEDEFİ (LONG 3.5R / SHORT 2.5R)!
       if (!exitReason && move >= moonGoal) {
-        exitReason = `🎯 3.5R BALİNA MOONSHOT ALINDI (+%${move.toFixed(2)} / hedef %${moonGoal.toFixed(2)})`;
+        exitReason = `🎯 ${moonMult.toFixed(1)}R BALİNA MOONSHOT ALINDI (+%${move.toFixed(2)} / hedef %${moonGoal.toFixed(2)})`;
       }
 
       const maxHold = Number(CONFIG.maxTradeMin) || 480;
