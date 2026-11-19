@@ -1062,7 +1062,8 @@ async function fetchBinanceRaw(relativePath) {
       for (const base of BINANCE_FAPI_MIRRORS) {
         if ((fapiMirrorDownUntil.get(base) || 0) > Date.now()) continue;
         triedFapi++;
-        const hit = await fetchJson(base + relativePath, isBook ? 7000 : 5000);
+        const reqTimeout = isBook ? 8000 : (relativePath.includes('limit=1000') || relativePath.includes('limit=500') || relativePath.includes('exchangeInfo') ? 12000 : 5500);
+        const hit = await fetchJson(base + relativePath, reqTimeout);
         if (hit.banMs) {
           fapiMirrorDownUntil.set(base, Date.now() + hit.banMs);
           errors.push(`${hostName(base)} ${hit.status}`);
@@ -1488,7 +1489,7 @@ function evaluateWhaleSpike15m(k, idx) {
 
   const diag = { atr15, volMult, taker, move, chg1h, chg3h, chg4h, ema20, ema50, rsi15, closePx: c, candleTs: Number(k[idx][0]) || 0 };
 
-  if (atr15 < 0.70 || atr15 > 3.50) return { approved: false, why: 'ATR15', ...diag };
+  if (atr15 < 1.05 || atr15 > 3.50) return { approved: false, why: 'ATR15', ...diag };
   if (volMult < 2.50) return { approved: false, why: 'VOL_LOW', ...diag };
 
   const longOk =
@@ -1497,7 +1498,7 @@ function evaluateWhaleSpike15m(k, idx) {
     c > ema20 &&
     ema20 > ema50 &&
     taker >= 56.0 &&
-    chg4h >= 1.0 &&
+    chg4h >= 2.0 &&
     chg4h <= 15.0 &&
     upperWick <= 0.45;
 
@@ -1507,7 +1508,7 @@ function evaluateWhaleSpike15m(k, idx) {
     c < ema20 &&
     ema20 < ema50 &&
     taker <= 44.0 &&
-    chg4h <= -1.0 &&
+    chg4h <= -2.0 &&
     chg4h >= -15.0 &&
     lowerWick <= 0.45;
 
@@ -1663,8 +1664,8 @@ async function runHistoricalReplay(hours = 72, maxCoins = 45) {
 
       const barLimit = Math.min(1000, Math.ceil(hClamped * 4) + 65);
       const coinKlines = [];
-      for (let i = 0; i < picked.length; i += 10) {
-        const chunk = picked.slice(i, i + 10);
+      for (let i = 0; i < picked.length; i += 6) {
+        const chunk = picked.slice(i, i + 6);
         const part = await Promise.all(chunk.map(async sym => {
           try {
             const k = await fetchBinance(`/fapi/v1/klines?symbol=${sym}&interval=15m&limit=${barLimit}`);
@@ -1672,6 +1673,7 @@ async function runHistoricalReplay(hours = 72, maxCoins = 45) {
           } catch (e) { return null; }
         }));
         part.forEach(x => { if (x) coinKlines.push(x); });
+        if (i + 6 < picked.length) await new Promise(r => setTimeout(r, 120));
       }
 
       const cutoffTs = Date.now() - (hClamped * 60 * 60 * 1000);
@@ -1936,7 +1938,11 @@ async function scanLoop() {
 
     if (now - lastScanHeartbeat > 60000 && topCandidates.length > 0) {
       lastScanHeartbeat = now;
-      addLog(`🐋 [15dk Balina Tarayıcı]: ${validTickers.length} Saf Kripto Taranıyor (En Sıcak ${topCandidates.length} Aday) | Lider: ${topCandidates[0].symbol} (%${topCandidates[0].chg.toFixed(1)}, Puan: ${topCandidates[0].hotScore.toFixed(0)}) | Slot: ${activePositions.length}/${CONFIG.maxSlots}`);
+      const secIn15m = Math.floor((now / 1000) % 900);
+      const windowLbl = (secIn15m <= 240 || secIn15m >= 810)
+        ? '⚡ 15dk Teyit Penceresi AÇIK'
+        : `⏳ Sonraki 15dk teyit: ${Math.ceil((810 - secIn15m) / 60)} dk`;
+      addLog(`🐋 [15dk Balina Tarayıcı]: ${validTickers.length} Saf Kripto (${topCandidates.length} Aday) | Lider: ${topCandidates[0].symbol} (24s: %${topCandidates[0].chg.toFixed(1)}, Puan: ${topCandidates[0].hotScore.toFixed(0)}) | ${windowLbl} | Slot: ${activePositions.length}/${CONFIG.maxSlots}`);
     }
 
     if (!global.whaleEvaluatedCandles) global.whaleEvaluatedCandles = new Map();
@@ -4049,10 +4055,11 @@ function serveDashboardHtml() {
 
         const dBox = document.getElementById("dialogueBox");
         if (dBox && data.logs) {
-          const wasAtBottom = (dBox.scrollHeight - dBox.scrollTop - dBox.clientHeight) < 60;
+          const wasNearTop = dBox.scrollTop < 40;
           dBox.innerHTML = renderLogsClient(data.logs);
-          if (wasAtBottom || !window._dBoxInitialized) {
-            dBox.scrollTop = dBox.scrollHeight;
+          // En yeni kayıt en üstte (index 0) olduğu için kutu üstte kalır (eskiden en alta/en eski kayda kaydırıyordu!)
+          if (wasNearTop || !window._dBoxInitialized) {
+            dBox.scrollTop = 0;
             window._dBoxInitialized = true;
           }
         }
