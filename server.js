@@ -24,39 +24,41 @@ try {
   evaluatePreTradeClearance = judgeMod.evaluatePreTradeClearance;
 } catch (e) {}
 
-// --- EKRAN 1 BİREBİR AYARLARI ---
+// --- EKRAN 1 BİREBİR AYARLARI (MARSCOIN V2 — FUTURES RUNNER + RETEST) ---
 let CONFIG = {
   initialBalance: 100.0,     // Bakiye 100 Dolar
-  marginPerTrade: 30.0,      // 10x ile nominal $300
-  leverage: 10,              // Kanıtlanmış 10x kaldıraç
-  maxSlots: 3,               // Aynı yönde en fazla 1 işlem
-  slPct: 0.45,               // Kazanan hiçbir işlem -%0.22'den fazla sarkmadı; -%0.80 yerine sıkı -%0.45 stop (-$1.56 max risk)
-  bePct: 0.30,               // +%0.30 MFE'de stop +%0.12'ye çekilir
-  moonPct: 0.72,
-  tp1Pct: 0.72,              // %100 tam pozisyonla +%0.72 ana hedef (+$2.04 net kâr; pozitif R:R!)
-  tp2Pct: 0.72,
-  maxTradeMin: 35,
+  marginPerTrade: 25.0,      // Baz teminat (Sabit dolar riski ile ATR stopa göre otomatik ölçeklenir)
+  riskPerTradeUsd: 2.50,     // Sabit dolar riski (~%2.5 kasa: Stop genişse pozisyon otomatik küçülür)
+  leverage: 15,              // 15x kaldıraç (Nominal = Risk / SL% ile dengelenir)
+  maxSlots: 3,               // Aynı yönde en fazla 1 işlem (1 LONG + 1 SHORT çift yön)
+  slPct: 0.90,               // Baz stop (%0.75 - %1.35 arası 3dk ATR x 2.15 ile otomatik esner)
+  bePct: 0.55,               // +%0.55 MFE'de stop maliyete (+%0.15 net kâra) çekilir (Erken boğma yok!)
+  tp1Pct: 0.75,              // 💰 TP1: +%0.75 spotta %35 pozisyon kapatılır, kâr cebe iner
+  tp2Pct: 1.40,              // 💰 TP2: +%1.40 spotta %35 daha kapatılır
+  moonPct: 2.80,             // 🚀 Runner Moonshot: Kalan %30 pozisyon +%2.80'e kadar iz süren stopla taşınır
+  tp1ClosePct: 0.35,         // TP1'de başlangıç pozisyonunun %35'i kapatılır
+  tp2ClosePct: 0.35,         // TP2'de başlangıç pozisyonunun %35'i kapatılır (%30 Runner kalır)
+  maxTradeMin: 60,           // Büyük trendi taşımak için 60 dk süre
   makerRate: 0.0002,         // Limit giriş ve kâr satış. Taker stop ayrı
-  tp1ClosePct: 0.50,
   minEntryScore: 0,
   maxTradesPerDay: 0,
   aPlusOnly: false,
   feeRate: 0.0005,           // Binance Futures taker %0.05 (TEK YÖN)
   scanIntervalMs: 3000,
   riskIntervalMs: 1000,
-  radarIntervalMs: 35000
+  radarIntervalMs: 30000
 };
 
 // Giriş genişliği. Ajan toplantısı bunu değiştirmez.
 let DYNAMIC = {
   vol3hMin: 0.8,
-  candidateSlice: 35,
-  regime: 'SCALP',
-  mode: 'MARSCOIN_SURU',
+  candidateSlice: 45,
+  regime: 'RUNNER',
+  mode: 'MARSCOIN_V2_RUNNER',
   updatedAt: 0
 };
 
-let userRisk = { maxSlots: 3, marginPerTrade: 30 };
+let userRisk = { maxSlots: 3, marginPerTrade: 25 };
 let circuitOn = false;
 
 function getDynamicMargin() {
@@ -113,10 +115,10 @@ function engineSnapshot() {
     userSlots: userRisk.maxSlots,
     userMargin: userRisk.marginPerTrade,
     gates: {
-      entry: 'Kırılım + 3 Kademe Kâr Kilidi (BE %0.40, Hedef %1.20)',
+      entry: 'Marscoin v2 Retest+Pullback | ATR SL + 3 Kademe Runner (%0.75 / %1.40 / %2.80)',
       book: 'defter fiyatı',
       judge: 'açık',
-      flow: '3s + 15dk kurumsal akış',
+      flow: '3s + 15dk Futures kurumsal akış',
       freqai: 'kapalı',
       funding: 'kapalı',
       team: 'kapalı'
@@ -294,11 +296,11 @@ function sanitizeSettings(s) {
   if (inRange(slots, 1, 4)) out.maxSlots = Math.round(slots);
   if (inRange(margin, 10, 40)) out.marginPerTrade = margin;
   if (lev !== null) out.leverage = Math.min(40, Math.max(5, Math.round(lev)));
-  if (inRange(sl, 0.20, 2.0)) out.slPct = sl;
-  if (inRange(be, 0.15, 0.80)) out.bePct = be;
-  if (inRange(moon, 0.80, 3.5)) out.moonPct = moon;
+  if (inRange(sl, 0.20, 2.5)) out.slPct = sl;
+  if (inRange(be, 0.15, 1.50)) out.bePct = be;
+  if (inRange(moon, 0.80, 5.0)) out.moonPct = moon;
   if (inRange(tp1, 0.40, 3.0)) out.tp1Pct = tp1;
-  if (inRange(tp2, 0.60, 3.0)) out.tp2Pct = tp2;
+  if (inRange(tp2, 0.60, 3.5)) out.tp2Pct = tp2;
   return out;
 }
 
@@ -327,17 +329,22 @@ function loadSettings() {
       slots: saved.maxSlots, margin: saved.marginPerTrade, lev: saved.leverage,
       sl: saved.slPct, be: saved.bePct, moon: saved.moonPct, tp1: saved.tp1Pct, tp2: saved.tp2Pct
     });
-    // Eski varsayılanlardan (SL %0.80 / TP %0.90-%1.60) yeni Pozitif R:R Paketine (SL %0.45 / TP %0.72) otomatik geçiş
-    if (clean.slPct === 0.80 && (clean.tp1Pct === 0.90 || clean.tp1Pct === 1.20 || clean.tp1Pct === 1.60)) {
-      clean.leverage = 10;
-      clean.slPct = 0.45;
-      clean.bePct = 0.30;
-      clean.tp1Pct = 0.72;
-      clean.tp2Pct = 0.72;
-      clean.moonPct = 0.72;
+    // Eski dar scalp varsayılanlarından (SL %0.45/%0.80, TP %0.72/%0.90/%1.20) Marscoin v2 Runner paketine otomatik geçiş
+    const isOldLegacy =
+      (clean.slPct === 0.45 && clean.tp1Pct === 0.72) ||
+      (clean.slPct === 0.80 && (clean.tp1Pct === 0.90 || clean.tp1Pct === 1.20 || clean.tp1Pct === 1.60));
+    if (isOldLegacy) {
+      clean.leverage = 15;
+      clean.marginPerTrade = 25;
+      clean.slPct = 0.90;
+      clean.bePct = 0.55;
+      clean.tp1Pct = 0.75;
+      clean.tp2Pct = 1.40;
+      clean.moonPct = 2.80;
     }
     Object.assign(CONFIG, clean);
     rememberUserRisk();
+    if (isOldLegacy) saveSettings();
     settingsCustomized = true;
   } catch (e) {}
 }
@@ -896,6 +903,7 @@ const COMPACT_BOOK_SYMBOLS = [
   'PYTHUSDT','ETHFIUSDT','QNTUSDT','ZECUSDT','GALAUSDT','STXUSDT','PEOPLEUSDT','TRXUSDT',
   'TONUSDT','ORDIUSDT','HBARUSDT','ICPUSDT','ATOMUSDT','ETCUSDT','IMXUSDT','SANDUSDT'
 ];
+const fapiMirrorDownUntil = new Map();
 const spotMirrorDownUntil = new Map();
 const binanceCache = new Map();
 const binanceInFlight = new Map();
@@ -1011,34 +1019,41 @@ async function fetchBinanceRaw(relativePath) {
   const isBook = relativePath.includes('ticker/24hr') && !relativePath.includes('symbol=');
   const hostName = (base) => base.replace('https://', '').split('.')[0];
 
-  // 🛡️ DÜZELTME: Paralel isteklerde isFapiProbing kilidi yüzünden 15 isteğin 14'ünün Spot'a (/api/v3) düşmesi engellendi!
-  // fapiDownUntil === 0 (Futures sağlıklı) iken tüm paralel istekler doğrudan Futures (fapi) kullanır.
+  // 🛡️ DÜZELTME: Her fapi mirror kendi engel durumunu (fapiMirrorDownUntil) tutar!
+  // fapi.binance.com ABD sunucusunda 451 verse bile break atılmaz; 2. mirror (www.binance.info) üzerinden tüm Futures koinleri eksiksiz alınır!
   const needProbeLock = fapiDownUntil > 0 && Date.now() >= fapiDownUntil;
   if (Date.now() >= fapiDownUntil && (!needProbeLock || !isFapiProbing)) {
     if (needProbeLock) isFapiProbing = true;
     try {
+      let triedFapi = 0;
+      let allFapiBlocked = true;
       for (const base of BINANCE_FAPI_MIRRORS) {
-        const hit = await fetchJson(base + relativePath, isBook ? 6000 : 4000);
+        if ((fapiMirrorDownUntil.get(base) || 0) > Date.now()) continue;
+        triedFapi++;
+        const hit = await fetchJson(base + relativePath, isBook ? 7000 : 5000);
         if (hit.banMs) {
-          fapiDownUntil = Date.now() + hit.banMs;
-          errors.push(`fapi ${hit.status}`);
-          break;
+          fapiMirrorDownUntil.set(base, Date.now() + hit.banMs);
+          errors.push(`${hostName(base)} ${hit.status}`);
+          continue;
         }
         if (hit.status === 451) {
-          fapiDownUntil = Date.now() + 30 * 60 * 1000;
-          errors.push('fapi 451');
-          break;
+          fapiMirrorDownUntil.set(base, Date.now() + 30 * 60 * 1000);
+          errors.push(`${hostName(base)} 451`);
+          continue;
         }
+        allFapiBlocked = false;
         if (hit.data && (!isBook || usableBook(hit.data))) {
           fapiDownUntil = 0;
           noteFeed(relativePath, 'futures');
           lastFeedError = '';
           return isBook ? normalizeTickerList(hit.data) : hit.data;
         }
-        errors.push(`fapi ${hit.status}`);
+        errors.push(`${hostName(base)} ${hit.status}`);
       }
-      // Sadece ana kitap (ticker/24hr) alınamadıysa 15 sn bekle; tekil sembol hatasında tüm fapi'yi kapatma!
-      if (isBook && Date.now() >= fapiDownUntil) fapiDownUntil = Date.now() + 15 * 1000;
+      // Yalnızca tüm Futures mirror'ları başarısız olursa kısa süre bekle; tekil sembol hatasında fapi'yi kapatma!
+      if (isBook && Date.now() >= fapiDownUntil) {
+        fapiDownUntil = Date.now() + (triedFapi === 0 || allFapiBlocked ? 5 * 60 * 1000 : 15 * 1000);
+      }
     } finally {
       if (needProbeLock) isFapiProbing = false;
     }
@@ -1199,11 +1214,11 @@ async function updateRadar() {
       return p >= 0.008 && volM >= 8.0;
     });
 
-    // 🚀 HEM YÜKSEK İVMELİ (+%10-%50) BREAKOUT KOİNLERİ HEM DE LİKİT DEVLERİ TARA
+    // 🚀 HEM YÜKSEK İVMELİ (+%10-%50) FUTURES BREAKOUT KOİNLERİ HEM DE LİKİT DEVLERİ TARA
     const byMomentum = [...validAll]
-      .filter(t => ((parseFloat(t.quoteVolume) || 0) / 1e6) >= 12.0 && Math.abs(parseFloat(t.priceChangePercent) || 0) <= 65)
+      .filter(t => ((parseFloat(t.quoteVolume) || 0) / 1e6) >= 10.0 && Math.abs(parseFloat(t.priceChangePercent) || 0) <= 65)
       .sort((a, b) => Math.abs(parseFloat(b.priceChangePercent) || 0) - Math.abs(parseFloat(a.priceChangePercent) || 0))
-      .slice(0, 75);
+      .slice(0, 80);
     const byVolume = [...validAll]
       .sort((a, b) => (parseFloat(b.quoteVolume) || 0) - (parseFloat(a.quoteVolume) || 0))
       .slice(0, 65);
@@ -1491,7 +1506,7 @@ async function scanLoop() {
         isVip
       };
     })
-    .filter(t => t.volM >= 12 && t.chg <= 65 && t.chg >= -40 && radarMap[t.symbol])
+    .filter(t => t.volM >= 10 && t.chg <= 65 && t.chg >= -40 && radarMap[t.symbol])
     .sort((a, b) => b.hotScore - a.hotScore)
     .slice(0, DYNAMIC.candidateSlice);
 
@@ -1646,9 +1661,9 @@ async function scanLoop() {
         const rangePos = rangeSpan3h > 0 ? ((curP - rInfo.low3h) / rangeSpan3h) * 100 : 50;
         const roomToHigh3hPct = (rInfo.high3h && curP > 0) ? ((rInfo.high3h - curP) / curP) * 100 : 99;
         const roomToLow3hPct = (rInfo.low3h && curP > 0) ? ((curP - rInfo.low3h) / curP) * 100 : 99;
-        // 🧱 DUVAR KURALI: <= -0.01 (3s duvarı gerçekten kırdı geçti) veya >= 0.35 (duvara en az +%0.35 boşluk var). +0.01% (duvarın hemen altı) engellenir!
-        const clearAirLong = roomToHigh3hPct <= -0.01 || roomToHigh3hPct >= 0.35;
-        const clearAirShort = roomToLow3hPct <= -0.01 || roomToLow3hPct >= 0.35;
+        // 🧱 DUVAR KURALI: <= -0.01 (3s duvarı gerçekten kırdı geçti) veya >= 0.45 (duvara en az +%0.45 boşluk var)
+        const clearAirLong = roomToHigh3hPct <= -0.01 || roomToHigh3hPct >= 0.45;
+        const clearAirShort = roomToLow3hPct <= -0.01 || roomToLow3hPct >= 0.45;
 
         // 📐 3 DK EMA9 & EMA21 TREND DİZİLİMİ:
         let ema9 = parseFloat(k3m[0][4]) || curP;
@@ -1659,8 +1674,8 @@ async function scanLoop() {
           ema9 = c * k9 + ema9 * (1 - k9);
           ema21 = c * k21 + ema21 * (1 - k21);
         }
-        const emaBull = curP > ema9 && ema9 >= ema21 * 0.9990;
-        const emaBear = curP < ema9 && ema9 <= ema21 * 1.0010;
+        const emaBull = curP > ema9 && ema9 >= ema21 * 0.9992;
+        const emaBear = curP < ema9 && ema9 <= ema21 * 1.0008;
 
         // 📐 VOLATİLİTE (3dk ATR-14, %): Stop mesafesi koinin normal gürültüsüne göre ayarlanır
         let trSum = 0, trCount = 0;
@@ -1673,35 +1688,41 @@ async function scanLoop() {
         }
         const atr3mPct = trCount > 0 ? trSum / trCount : 0.5;
 
-        // 🚀 YÜKSELENE LONG, DÜŞENE SHORT (Tepeden/Dipten Yorgun Giriş Engelli):
+        // 🚀 MARSCOIN V2 ÇİFT YÖNLÜ FİLTRE (Dip-Short ve Tepe-Long Yasak, Gerçek Volatilite Zorunlu):
         const radarOkLong =
           clearAirLong &&
           emaBull &&
-          chg1hCalc >= 0.20 &&
-          chg1hCalc <= 1.50 &&
-          chg15mTrue >= 0.20 &&
-          chg15mTrue <= 0.90 &&
-          (chg3hVal >= -0.35 || chg15mTrue >= 0.55) &&
-          chg24Val >= -4.0 &&
+          pos1h >= 25 &&
+          pos1h <= 90 &&
+          chg1hCalc >= 0.25 &&
+          chg1hCalc <= 3.50 &&
+          chg15mTrue >= 0.05 &&
+          chg15mTrue <= 1.40 &&
+          chg3hVal >= -0.50 &&
+          chg3hVal <= 6.50 &&
+          chg24Val >= -5.0 &&
           chg24Val <= 45.0 &&
-          atr3mPct >= 0.18 &&
-          atr3mPct <= 0.75 &&
-          rsi3m >= 48 &&
-          rsi3m <= 67;
+          atr3mPct >= 0.24 &&
+          atr3mPct <= 1.10 &&
+          rsi3m >= 44 &&
+          rsi3m <= 68;
         const radarOkShort =
           clearAirShort &&
           emaBear &&
-          chg1hCalc <= -0.20 &&
-          chg1hCalc >= -1.45 &&
-          chg15mTrue <= -0.20 &&
-          chg15mTrue >= -0.95 &&
-          (chg3hVal <= 0.35 || chg15mTrue <= -0.55) &&
-          chg24Val <= 65.0 &&
-          chg24Val >= -35.0 &&
-          atr3mPct >= 0.18 &&
-          atr3mPct <= 0.75 &&
-          rsi3m >= 29 &&
-          rsi3m <= 44;
+          pos1h >= 12 &&
+          pos1h <= 75 &&
+          chg1hCalc <= -0.25 &&
+          chg1hCalc >= -3.50 &&
+          chg15mTrue <= -0.05 &&
+          chg15mTrue >= -1.40 &&
+          chg3hVal <= 0.50 &&
+          chg3hVal >= -5.50 &&
+          chg24Val <= 50.0 &&
+          chg24Val >= -30.0 &&
+          atr3mPct >= 0.24 &&
+          atr3mPct <= 1.10 &&
+          rsi3m >= 32 &&
+          rsi3m <= 56;
 
         if (!radarOkLong && !radarOkShort) {
           // 👻 Radar'a ÇOK YAKIN elenen adayları da kaydet (yeni 1s/30dk/pos1h/RSI/ATR filtrelerinin etkisi ölçülebilsin)
@@ -1766,8 +1787,7 @@ async function scanLoop() {
         const noWickShort = candleSpan > 0 ? (lowerWick / candleSpan <= 0.40) : true;
 
         const vol3hCheck = rInfo.vol3hM || ((quote90mCalc * 2) / 1e6);
-        const hasRealLiquidity = vol24 >= 10 && vol3hCheck >= 1.0;
-        const noiseOk = atr3mPct < 0.85;
+        const hasRealLiquidity = vol24 >= 10 && vol3hCheck >= 0.8;
         let swingHigh = 0;
         let swingLow = Infinity;
         for (let m = Math.max(0, lastIdx - 16); m <= lastIdx - 3; m++) {
@@ -1776,55 +1796,67 @@ async function scanLoop() {
           if (hh > swingHigh) swingHigh = hh;
           if (ll < swingLow) swingLow = ll;
         }
-        const breakVolOk = baselineVol > 0 && (prevV >= baselineVol * 1.20 || volMult >= 1.15);
+        const breakVolOk = baselineVol > 0 && (prevV >= baselineVol * 1.15 || volMult >= 1.15);
         const prevBrokeHigh = swingHigh > 0 && prevC > swingHigh * 1.0002;
         const prevBrokeLow = swingLow < Infinity && prevC < swingLow * 0.9998;
-        const pulledToHigh = swingHigh > 0 && curL <= swingHigh * 1.0025 && curP >= swingHigh * 1.0000;
-        const pulledToLow = swingLow < Infinity && curH >= swingLow * 0.9975 && curP <= swingLow * 1.0000;
-        const maxTriggerPct = Math.min(0.45, atr3mPct * 1.65);
-        const buyersBack = curP > curO && curMovePct >= 0.04 && curMovePct <= maxTriggerPct && volMult >= 1.0 && noWickLong;
-        const sellersBack = curP < curO && curMovePct <= -0.04 && curMovePct >= -maxTriggerPct && volMult >= 1.0 && noWickShort;
+        const pulledToHigh = swingHigh > 0 && curL <= swingHigh * 1.0030 && curP >= swingHigh * 0.9995;
+        const pulledToLow = swingLow < Infinity && curH >= swingLow * 0.9970 && curP <= swingLow * 1.0005;
+        const maxTriggerPct = Math.min(0.75, atr3mPct * 1.85);
 
-        // ⚡ DOĞRUDAN TREND DEVAM TETİĞİ (Yükselene LONG, Düşene SHORT — Climax mum tepesi/dibi korumalı):
-        const directLongTrend =
+        // 📐 TETİK 1 — KIRILIM + GERİ ÇEKİLME ONAYI (RETEST):
+        const buyersBack = curP > curO && curMovePct >= 0.06 && curMovePct <= maxTriggerPct && volMult >= 0.95 && noWickLong;
+        const sellersBack = curP < curO && curMovePct <= -0.06 && curMovePct >= -maxTriggerPct && volMult >= 0.95 && noWickShort;
+        const retestLong = prevBrokeHigh && breakVolOk && pulledToHigh && buyersBack;
+        const retestShort = prevBrokeLow && breakVolOk && pulledToLow && sellersBack;
+
+        // 📐 TETİK 2 — TREND İÇİ SOLUKLANMA DÖNÜŞÜ (PULLBACK — Mumu kovalamadan EMA9 desteğinden dönüş):
+        const dippedToEma9Long = (prevMovePct <= -0.06 || curL <= ema9 * 1.0022) && curL >= ema21 * 0.9985;
+        const pullbackLong =
+          chg1hCalc >= 0.60 &&
+          dippedToEma9Long &&
+          curP > ema9 &&
           curP > curO &&
-          curMovePct >= 0.05 &&
+          curP >= prevH * 0.9990 &&
+          curMovePct >= 0.12 &&
           curMovePct <= maxTriggerPct &&
-          (prevMovePct >= 0.04 || chg15mTrue >= 0.35) &&
-          curP >= prevC &&
-          prevVolMult >= 0.70 &&
-          volMult >= 1.05 &&
+          volMult >= 1.15 &&
           noWickLong;
-        const directShortTrend =
+
+        const bouncedToEma9Short = (prevMovePct >= 0.06 || curH >= ema9 * 0.9978) && curH <= ema21 * 1.0015;
+        const pullbackShort =
+          chg1hCalc <= -0.60 &&
+          bouncedToEma9Short &&
+          curP < ema9 &&
           curP < curO &&
-          curMovePct <= -0.05 &&
+          curP <= prevL * 1.0010 &&
+          curMovePct <= -0.12 &&
           curMovePct >= -maxTriggerPct &&
-          (prevMovePct <= -0.04 || chg15mTrue <= -0.35) &&
-          curP <= prevC &&
-          prevVolMult >= 1.10 &&
-          volMult >= 1.05 &&
+          volMult >= 1.15 &&
           noWickShort;
 
         const btcBlocksLong = btc15mNumeric <= -0.35 || (btc15mNumeric < -0.10 && btc5mNumeric <= -0.20);
         const btcBlocksShort = btc15mNumeric >= 0.35 || (btc15mNumeric > 0.10 && btc5mNumeric >= 0.20);
 
-        const longTakerOk = taker15mCalc >= 55.0 && effectiveTaker >= 54.0;
-        const shortTakerOk = taker15mCalc <= 45.0 && effectiveTakerShort <= 45.5;
+        const longTakerOk = taker15mCalc >= 53.0 && effectiveTaker >= 52.5;
+        const shortTakerOk = taker15mCalc <= 47.0 && effectiveTakerShort <= 47.5;
 
         let isLongPump = false;
         let isRocketSignal = false;
-        if (hasRealLiquidity && radarOkLong && ((prevBrokeHigh && breakVolOk && pulledToHigh && buyersBack) || directLongTrend) && longTakerOk && !btcBlocksLong) {
+        let entryStrategyTag = 'RETEST';
+        if (hasRealLiquidity && radarOkLong && (retestLong || pullbackLong) && longTakerOk && !btcBlocksLong) {
           isLongPump = true;
           isRocketSignal = true;
-          const modeLbl = directLongTrend ? 'LONG TREND' : 'LONG RETEST';
-          radarTag = `[${modeLbl} | 1s +%${chg1hCalc.toFixed(2)} | 15dk +%${chg15mTrue.toFixed(2)} | ATR %${atr3mPct.toFixed(2)} | Alıcı %${taker15mCalc.toFixed(0)}]`;
+          entryStrategyTag = retestLong ? 'RETEST' : 'PULLBACK';
+          const modeLbl = retestLong ? 'LONG RETEST' : 'LONG PULLBACK';
+          radarTag = `[🚀 ${modeLbl} | 1s +%${chg1hCalc.toFixed(2)} | Pos1h %${pos1h.toFixed(0)} | ATR %${atr3mPct.toFixed(2)} | Alıcı %${taker15mCalc.toFixed(0)}]`;
         }
 
         let isShortDump = false;
-        if (hasRealLiquidity && radarOkShort && ((prevBrokeLow && breakVolOk && pulledToLow && sellersBack) || directShortTrend) && shortTakerOk && !btcBlocksShort) {
+        if (hasRealLiquidity && radarOkShort && (retestShort || pullbackShort) && shortTakerOk && !btcBlocksShort) {
           isShortDump = true;
-          const modeLbl = directShortTrend ? 'SHORT TREND' : 'SHORT RETEST';
-          radarTag = `[${modeLbl} | 1s %${chg1hCalc.toFixed(2)} | 15dk %${chg15mTrue.toFixed(2)} | ATR %${atr3mPct.toFixed(2)} | Alıcı %${taker15mCalc.toFixed(0)}]`;
+          entryStrategyTag = retestShort ? 'RETEST' : 'PULLBACK';
+          const modeLbl = retestShort ? 'SHORT RETEST' : 'SHORT PULLBACK';
+          radarTag = `[🩸 ${modeLbl} | 1s %${chg1hCalc.toFixed(2)} | Pos1h %${pos1h.toFixed(0)} | ATR %${atr3mPct.toFixed(2)} | Satıcı %${(100 - taker15mCalc).toFixed(0)}]`;
         }
 
         if (!isLongPump && !isShortDump) {
@@ -1883,11 +1915,20 @@ async function scanLoop() {
             continue;
           }
 
-          // Nominal $300 (10x, $30 teminat). Stop %0.80, 3 kademeli kâr kilidi (%0.40 -> BE +%0.12, %0.65 -> +%0.38, %0.90 -> +%0.65), ana hedef %1.20.
-          const baseMargin = getDynamicMargin();
-          const tradeSlPct = Number(CONFIG.slPct) || 0.80;
-          const volK = 1.0;
-          let tradeMargin = Number(baseMargin.toFixed(2));
+          // 🛡️ ATR'YE GÖRE ESNEYEN STOP (%0.75 - %1.35) + SABİT DOLAR RİSKİ (~%2.5 Kasa = ~$2.50 Max Kayıp):
+          const baseSl = Number(CONFIG.slPct) || 0.90;
+          const rawAtrSl = atr3mPct * 2.15;
+          const tradeSlPct = Number(Math.max(0.75, Math.min(1.35, Math.max(baseSl * 0.85, rawAtrSl))).toFixed(2));
+          const volK = Number(Math.max(1.0, Math.min(1.45, tradeSlPct / 0.90)).toFixed(2));
+
+          const baseRiskUsd = Number(CONFIG.riskPerTradeUsd) || 2.50;
+          const equityRiskUsd = Math.max(1.50, Math.min(4.00, Number((balance * 0.025).toFixed(2))));
+          const targetRiskUsd = circuitOn ? Math.min(1.50, equityRiskUsd) : Math.min(baseRiskUsd * 1.6, Math.max(1.50, equityRiskUsd));
+          const effectiveStopCostPct = tradeSlPct + 0.09; // Stop + gidiş-dönüş komisyon + stop kayması
+          const targetNominal = targetRiskUsd / (effectiveStopCostPct / 100);
+          const levNow = Math.max(5, Number(CONFIG.leverage) || 15);
+          const maxAllowedMargin = Math.min(35.0, Math.max(15.0, getDynamicMargin() * 1.25));
+          let tradeMargin = Number(Math.max(10.0, Math.min(maxAllowedMargin, targetNominal / levNow)).toFixed(2));
 
           // 🛡️ KASA SERBEST NAKİT KORUMASI: Açık pozisyonlar ve yeni işlem serbest bakiyeyi aşamaz
           const queuedMargin = scanEntryCandidates.reduce((acc, c) => acc + (Number(c.tradeMargin) || 0), 0);
@@ -1900,11 +1941,11 @@ async function scanLoop() {
             continue; // Yetersiz serbest teminat
           }
 
-          const tradeBePct = Number(CONFIG.bePct) || 0.30;
-          const tradeTp1Pct = Number(CONFIG.tp1Pct) || 0.90;
-          const tradeTp2Pct = tradeTp1Pct;
-          const tradeMoonPct = tradeTp1Pct;
-          radarTag += ` [SL: %${tradeSlPct.toFixed(2)} | ATR3m: %${atr3mPct.toFixed(2)} | Teminat: $${tradeMargin.toFixed(1)}]`;
+          const tradeBePct = Number(CONFIG.bePct) || 0.55;
+          const tradeTp1Pct = Number(CONFIG.tp1Pct) || 0.75;
+          const tradeTp2Pct = Number(CONFIG.tp2Pct) || 1.40;
+          const tradeMoonPct = Number(CONFIG.moonPct) || 2.80;
+          radarTag += ` [SL: %${tradeSlPct.toFixed(2)} | ATR3m: %${atr3mPct.toFixed(2)} | Risk: ~$${targetRiskUsd.toFixed(2)} | Teminat: $${tradeMargin.toFixed(1)}]`;
 
           let fillPx = side === "LONG" ? curP * 1.00015 : curP * 0.99985;
           let spreadBps = null;
@@ -1918,8 +1959,8 @@ async function scanLoop() {
               if (mid > 0) spreadBps = Number(((ask - bid) / mid * 10000).toFixed(2));
             }
           } catch (e) {}
-          // 🛡️ SPREAD KORUMASI: Makası 5.5 bps (%0.055) üzerindeki pahalı tahtalara girme!
-          if (spreadBps !== null && spreadBps > 5.5) {
+          // 🛡️ SPREAD KORUMASI: Makası 6.5 bps (%0.065) üzerindeki pahalı tahtalara girme!
+          if (spreadBps !== null && spreadBps > 6.5) {
             shadow('HIGH_SPREAD', { spreadBps });
             continue;
           }
@@ -1950,6 +1991,10 @@ async function scanLoop() {
             midPartialTaken: false,
             tp1Pnl: 0,
             tp2Pnl: 0,
+            tp1Gross: 0,
+            tp1Fee: 0,
+            tp2Gross: 0,
+            tp2Fee: 0,
             mfe: 0.0,
             mae: 0.0,
             pnl: 0.0,
@@ -1966,10 +2011,10 @@ async function scanLoop() {
             breakVol: Number(prevVolMult.toFixed(2)),
             trigger3m: Number(curMovePct.toFixed(3)),
             spreadBps,
-            strategy: 'RETEST',
+            strategy: entryStrategyTag,
             margin: tradeMargin,
             initialMargin: tradeMargin,
-            leverage: CONFIG.leverage,
+            leverage: levNow,
             slPct: tradeSlPct,
             volK: volK,
             atr3mPct: atr3mPct,
@@ -1977,9 +2022,9 @@ async function scanLoop() {
             tp1Pct: tradeTp1Pct,
             tp2Pct: tradeTp2Pct,
             moonPct: tradeMoonPct,
-            convictionTier: 'A_PLUS',
+            convictionTier: 'MARSCOIN_V2',
             convictionScore: 95,
-            convictionLabel: '🏆 A+ SNIPER (STRK/XPL profili)',
+            convictionLabel: entryStrategyTag === 'RETEST' ? '🚀 MARSCOIN RETEST' : '⚡ MARSCOIN PULLBACK',
             radarTag: radarTag,
             chg3h: chg3hVal,
             vol3hM: vol3hCheck,
@@ -2044,7 +2089,7 @@ async function scanLoop() {
           stopPrice: pick.side === 'LONG'
             ? pick.position.entryPrice * (1 + pick.tradeSlPct / 100)
             : pick.position.entryPrice * (1 - pick.tradeSlPct / 100),
-          tpPct: pick.tradeTp1Pct,
+          tpPct: Number((pick.tradeTp2Pct * pick.volK).toFixed(2)),
           margin: pick.tradeMargin,
           leverage: CONFIG.leverage,
           mfe: 0
@@ -2124,49 +2169,108 @@ async function fastRiskLoop() {
 
       let exitReason = null;
 
-      // 📐 VOLATİLİTE ÖLÇEĞİ: Tüm eşikler "normal koin" (%0.78 stop) birimindedir.
-      // nMove/nMfe = hareket / volK. Stop/kilit fiyatları ise eşik × volK ile hesaplanır.
-      const k = Math.max(1, Number(pos.volK) || 1);
-      const nMove = move / k;
-      const nMfe = mfe / k;
+      // 📐 VOLATİLİTE ÖLÇEĞİ (MARSCOIN V2 — 3 KADEMELİ RUNNER MOTORU):
+      const k = Math.max(1.0, Math.min(1.45, Number(pos.volK) || 1.0));
       const lockSpot = (pct) => isLong ? pos.entryPrice * (1 + pct / 100) : pos.entryPrice * (1 - pct / 100);
-
-      const tpPct = Number(pos.tp1Pct) || Number(CONFIG.tp1Pct) || 0.72;
-      const beTrigger = Math.min(Number(pos.bePct) || 0.30, tpPct * 0.42);
-      const tier1Trigger = Math.min(0.50, tpPct * 0.69); // +%0.50'de %100 pozisyonun stopu +%0.34'e kilitlenir!
-
-      // ========================================================
-      // 🛡️ 0. %100 TAM POZİSYON İZ SÜREN KÂR KİLİDİ (KÂRI YARIYA BÖLMEDEN TAŞIMA)
-      // ========================================================
-      // Kademe 1: +%0.30 MFE -> Stop +%0.12'ye çekilir ($0 Risk + +$0.15 net kâr!)
-      if (!pos.beLocked && mfe >= beTrigger && move > 0.14) {
-        const nextStop = lockSpot(0.12);
+      const tightenStop = (pct) => {
+        const nextStop = lockSpot(pct);
         if ((isLong && nextStop > pos.stopPrice) || (!isLong && nextStop < pos.stopPrice)) {
           pos.stopPrice = nextStop;
+          stateChanged = true;
         }
+      };
+
+      const beGoal = (Number(pos.bePct) || Number(CONFIG.bePct) || 0.55) * k;
+      const tp1Goal = (Number(pos.tp1Pct) || Number(CONFIG.tp1Pct) || 0.75) * k;
+      const tp2Goal = (Number(pos.tp2Pct) || Number(CONFIG.tp2Pct) || 1.40) * k;
+      const moonGoal = (Number(pos.moonPct) || Number(CONFIG.moonPct) || 2.80) * k;
+      const initMargin = pos.initialMargin || pos.margin || 25;
+      const makerRate = Number(CONFIG.makerRate) || 0.0002;
+
+      // ========================================================
+      // 💰 0. 3 KADEMELİ MARSCOIN RUNNER (TP1 %35 -> TP2 %35 -> %30 MOONSHOT)
+      // ========================================================
+      // Kademe 0: +%0.55*k MFE -> Stop +%0.15'e çekilir ($0 Risk, erken boğma yok!)
+      if (!pos.beLocked && mfe >= beGoal && move > 0.18) {
+        tightenStop(0.15);
         pos.beLocked = true;
         stateChanged = true;
-        addLog(`🛡️ [ERKEN BAŞABAŞ]: ${pos.symbol} (${pos.side}) +%${mfe.toFixed(2)} gördü ➔ Stop +%0.12 kâra çekildi ($0 Risk)!`, 'INFO');
+        addLog(`🛡️ [BAŞABAŞ KİLİDİ]: ${pos.symbol} (${pos.side}) +%${mfe.toFixed(2)} gördü ➔ Stop +%0.15 kâra çekildi ($0 Risk)!`, 'INFO');
       }
 
-      // Kademe 2: +%0.50 MFE -> %100 Tam pozisyonun stopu +%0.34'e (+$0.81 garanti net kâr) çekilir ve +%0.72 tam hedefe (+$2.04) sürülür!
-      if (!pos.tp1Taken && mfe >= tier1Trigger && move > 0.37) {
-        const nextStop = lockSpot(0.34);
-        if ((isLong && nextStop > pos.stopPrice) || (!isLong && nextStop < pos.stopPrice)) {
-          pos.stopPrice = nextStop;
+      // Kademe 1 (TP1): +%0.75*k -> %35 kâr cebe indirilir, kalan %65 stop +%0.25'e kilitlenir!
+      if (!pos.tp1Taken && move >= tp1Goal) {
+        const closePct1 = Number(CONFIG.tp1ClosePct) || 0.35;
+        const closedMargin = Math.min(initMargin * closePct1, pos.margin * 0.50);
+        if (closedMargin > 0.5) {
+          const closedNominal = closedMargin * pos.leverage;
+          const tp1Gross = closedNominal * (move / 100);
+          const tp1Fee = closedNominal * (makerRate + makerRate);
+          const tp1Net = tp1Gross - tp1Fee;
+
+          pos.tp1Taken = true;
+          pos.beLocked = true;
+          pos.tp1Pnl = (pos.tp1Pnl || 0) + tp1Net;
+          pos.tp1Gross = (pos.tp1Gross || 0) + tp1Gross;
+          pos.tp1Fee = (pos.tp1Fee || 0) + tp1Fee;
+          balance += tp1Net;
+          pos.margin = Number(Math.max(0.5, pos.margin - closedMargin).toFixed(4));
+          tightenStop(0.25);
+
+          const remNom = pos.margin * pos.leverage;
+          pos.feeUsd = remNom * (makerRate + CONFIG.feeRate);
+          pos.grossPnl = remNom * (move / 100);
+          pos.pnl = pos.grossPnl - pos.feeUsd;
+          pos.roi = ((pos.pnl + pos.tp1Pnl + (pos.tp2Pnl || 0)) / initMargin) * 100;
+          stateChanged = true;
+          addLog(`💰 [TP1 CEPTE] ${pos.symbol} (${pos.side}) +%${move.toFixed(2)} ➔ %35 Kapatıldı (+$${tp1Net.toFixed(2)}). Kalan %65 stop +%0.25 kilitli, TP2 +%${tp2Goal.toFixed(2)}!`, 'WIN');
         }
-        pos.tp1Taken = true;
-        pos.tier1Locked = true;
-        pos.beLocked = true;
-        stateChanged = true;
-        addLog(`🔒 [TAM POZİSYON KÂR KİLİDİ]: ${pos.symbol} (${pos.side}) +%${mfe.toFixed(2)} gördü ➔ %100 Pozisyon Stopu +%0.34'e (+$0.81) kilitlendi, hedef +%${tpPct.toFixed(2)}!`, 'WIN');
+      }
+
+      // Kademe 2 (TP2): +%1.40*k -> %35 daha cebe indirilir, kalan %30 Runner stopu TP1 (+%0.75*k) seviyesine kilitlenir!
+      if (pos.tp1Taken && !pos.tp2Taken && move >= tp2Goal) {
+        const closePct2 = Number(CONFIG.tp2ClosePct) || 0.35;
+        const closedMargin = Math.min(initMargin * closePct2, pos.margin * 0.60);
+        if (closedMargin > 0.5) {
+          const closedNominal = closedMargin * pos.leverage;
+          const tp2Gross = closedNominal * (move / 100);
+          const tp2Fee = closedNominal * (makerRate + makerRate);
+          const tp2Net = tp2Gross - tp2Fee;
+
+          pos.tp2Taken = true;
+          pos.tier1Locked = true;
+          pos.beLocked = true;
+          pos.tp2Pnl = (pos.tp2Pnl || 0) + tp2Net;
+          pos.tp2Gross = (pos.tp2Gross || 0) + tp2Gross;
+          pos.tp2Fee = (pos.tp2Fee || 0) + tp2Fee;
+          balance += tp2Net;
+          pos.margin = Number(Math.max(0.5, pos.margin - closedMargin).toFixed(4));
+          tightenStop(tp1Goal);
+
+          const remNom = pos.margin * pos.leverage;
+          pos.feeUsd = remNom * (makerRate + CONFIG.feeRate);
+          pos.grossPnl = remNom * (move / 100);
+          pos.pnl = pos.grossPnl - pos.feeUsd;
+          pos.roi = ((pos.pnl + (pos.tp1Pnl || 0) + pos.tp2Pnl) / initMargin) * 100;
+          stateChanged = true;
+          addLog(`🎯 [TP2 CEPTE] ${pos.symbol} (${pos.side}) +%${move.toFixed(2)} ➔ %35 Daha Alındı (+$${tp2Net.toFixed(2)}). %30 Runner +%${moonGoal.toFixed(2)} Moonshot'a sürülüyor!`, 'WIN');
+        }
+      }
+
+      // Dinamik İz Süren Runner Stopu (Büyük trendi boğmadan zirveden korur)
+      if (pos.tp2Taken && mfe >= moonGoal * 0.80) {
+        tightenStop(mfe - (0.35 * k));
+      } else if (pos.tp2Taken && mfe >= tp2Goal) {
+        tightenStop(Math.max(tp1Goal, mfe - (0.45 * k)));
+      } else if (pos.tp1Taken && mfe >= tp1Goal * 1.40) {
+        tightenStop(0.55 * k);
       }
 
       // ========================================================
       // 🛑 1. STOP LOSS VEYA KİLİTLİ STOP KONTROLÜ (EN YÜKSEK ÖNCELİK)
       // ========================================================
       const curNominal = pos.margin * pos.leverage;
-      const curFeeCost = curNominal * ((Number(CONFIG.makerRate) || 0.0002) + CONFIG.feeRate);
+      const curFeeCost = curNominal * (makerRate + CONFIG.feeRate);
       const isStopHit = (isLong && curP <= pos.stopPrice) || (!isLong && curP >= pos.stopPrice);
       if (isStopHit) {
         const fill = isLong ? pos.stopPrice * (1 - 0.0002) : pos.stopPrice * (1 + 0.0002);
@@ -2175,10 +2279,9 @@ async function fastRiskLoop() {
           : ((pos.entryPrice - fill) / pos.entryPrice) * 100;
         pos.currentPrice = fill;
         pos.pnl = (curNominal * (fillMove / 100)) - curFeeCost;
-        const totPnlPreview = pos.pnl + (pos.tp1Pnl || 0);
-        const initM = pos.initialMargin || pos.margin || 30;
-        pos.roi = (totPnlPreview / initM) * 100;
-        if ((isLong && pos.stopPrice > pos.entryPrice * 1.0025) || (!isLong && pos.stopPrice < pos.entryPrice * 0.9975)) {
+        const totPnlPreview = pos.pnl + (pos.tp1Pnl || 0) + (pos.tp2Pnl || 0);
+        pos.roi = (totPnlPreview / initMargin) * 100;
+        if ((isLong && pos.stopPrice > pos.entryPrice * 1.0020) || (!isLong && pos.stopPrice < pos.entryPrice * 0.9980)) {
           exitReason = `🔒 Garanti Kilitli Kâr Çıkışı (+%${pos.roi.toFixed(1)} ROI / Zirve: +%${mfe.toFixed(2)} Spot)`;
         } else if (pos.beLocked) {
           const lockPct = pos.entryPrice > 0 ? Math.abs((pos.stopPrice - pos.entryPrice) / pos.entryPrice) * 100 : 0;
@@ -2190,39 +2293,30 @@ async function fastRiskLoop() {
         }
       }
 
-      if (!exitReason && move >= tpPct) {
-        exitReason = `Retest kâr alındı (+%${move.toFixed(2)} / hedef %${tpPct.toFixed(2)})`;
+      // 🚀 Kademe 3: MOONSHOT HEDEFİ (%30 Runner hedefe ulaştı!)
+      if (!exitReason && move >= moonGoal) {
+        exitReason = `🎯 3 KADEMELİ MOONSHOT ALINDI (+%${move.toFixed(2)} / hedef %${moonGoal.toFixed(2)})`;
       }
 
-      // ⚡ 4. DAKİKA "SIFIR TEPKİ / TERS GİRİŞ" KESİCİSİ: Kazanan hiçbir işlem -%0.22'den fazla sarkmadı!
-      // 4 dakikada +%0.08 bile görememiş ve -%0.25 altına sarkmış hatalı girişi -%0.45/-%0.80'i beklemeden hemen kes!
-      if (!exitReason && !pos.beLocked && durMin >= 4 && mfe < 0.08 && move <= -0.25) {
-        exitReason = `Retest: 4 dk sıfır tepki (%${move.toFixed(2)} / MFE: +%${mfe.toFixed(2)})`;
+      // ⏱️ 25. DAKİKA ÖLÜ İŞLEM KORUMASI: 4 dk panik kesimi YOK — koin nefes alır, sadece 25 dk boyunca hiç ivme almayıp ekside kalanları temizler
+      if (!exitReason && !pos.beLocked && durMin >= 25 && mfe < 0.25 && move <= -0.25) {
+        exitReason = `⏱️ 25 dk ivme almadı (%${move.toFixed(2)} / MFE: +%${mfe.toFixed(2)})`;
       }
 
-      // ⏱️ 12. DAKİKA "BAŞARISIZ KIRILIM" (TIME-STOP) KORUMASI: 12 dakikada +%0.20 bile görememiş ve eksideki sahte kırılımı erken kes!
-      if (!exitReason && !pos.beLocked && durMin >= 12 && mfe < 0.20 && move <= -0.15) {
-        exitReason = `Retest: 12 dk kırılım çalışmadı (%${move.toFixed(2)} / MFE: +%${mfe.toFixed(2)})`;
-      }
-
-      if (!exitReason && !pos.beLocked && durMin >= 22 && mfe < 0.30) {
-        exitReason = `Retest: 22 dk yatay kaldı (%${move.toFixed(2)})`;
-      }
-
-      const maxHold = Number(CONFIG.maxTradeMin) || 35;
+      const maxHold = Number(CONFIG.maxTradeMin) || 60;
       if (!exitReason && durMin >= maxHold) {
         exitReason = pos.tp1Taken
-          ? `⏱️ Vur Kaç runner süresi doldu (${maxHold}dk / MFE: +%${mfe.toFixed(2)})`
-          : `⏱️ Vur Kaç süre doldu (${maxHold}dk / MFE: +%${mfe.toFixed(2)})`;
+          ? `⏱️ Runner süresi doldu (${maxHold}dk / MFE: +%${mfe.toFixed(2)})`
+          : `⏱️ Maksimum süre doldu (${maxHold}dk / MFE: +%${mfe.toFixed(2)})`;
       }
 
       // ========================================================
       // 🚨 8. AJAN ACİL DURUM TAHLİYESİ (MAKRO PİYASA TERS DÖNÜŞ FRENİ)
       // ========================================================
-      if (!exitReason && pos.roi <= -5.0) {
-        if (!isLong && (btc15mNumeric >= 0.65 || btc5mNumeric >= 0.70)) {
+      if (!exitReason && pos.roi <= -8.0 && !pos.tp1Taken) {
+        if (!isLong && (btc15mNumeric >= 0.70 || btc5mNumeric >= 0.75)) {
           exitReason = `🚨 BTC ters dönüş, SHORT erken kesildi (${btc15mTrend}, %${pos.roi.toFixed(1)} ROI)`;
-        } else if (isLong && (btc15mNumeric <= -0.65 || btc5mNumeric <= -0.70)) {
+        } else if (isLong && (btc15mNumeric <= -0.70 || btc5mNumeric <= -0.75)) {
           exitReason = `🚨 BTC ters dönüş, LONG erken kesildi (${btc15mTrend}, %${pos.roi.toFixed(1)} ROI)`;
         }
       }
@@ -2240,10 +2334,9 @@ async function fastRiskLoop() {
         const finalMove = isLong
           ? ((pos.currentPrice - pos.entryPrice) / pos.entryPrice) * 100
           : ((pos.entryPrice - pos.currentPrice) / pos.entryPrice) * 100;
-        const maker = Number(CONFIG.makerRate) || 0.0002;
-        const exitFeeRate = exitReason.includes('kâr alındı') ? maker : CONFIG.feeRate;
+        const exitFeeRate = (exitReason.includes('kâr alındı') || exitReason.includes('MOONSHOT')) ? makerRate : CONFIG.feeRate;
         pos.grossPnl = finalNominal * (finalMove / 100);
-        pos.feeUsd = finalNominal * (maker + exitFeeRate);
+        pos.feeUsd = finalNominal * (makerRate + exitFeeRate);
         pos.slipUsd = 0;
         pos.pnl = pos.grossPnl - pos.feeUsd;
         pos.roi = pos.margin > 0 ? (pos.pnl / pos.margin) * 100 : 0;
@@ -2418,8 +2511,8 @@ function closeTrade(pos, exitReason) {
     : 0;
   const margin = Number(pos.initialMargin || pos.margin) || 0;
   const leverage = Number(pos.leverage) || Number(CONFIG.leverage) || 0;
-  const totalGrossPnl = (pos.grossPnl || 0) + (pos.tp1Gross || 0);
-  const totalFeeUsd = (pos.feeUsd || 0) + (pos.tp1Fee || 0);
+  const totalGrossPnl = (pos.grossPnl || 0) + (pos.tp1Gross || 0) + (pos.tp2Gross || 0);
+  const totalFeeUsd = (pos.feeUsd || 0) + (pos.tp1Fee || 0) + (pos.tp2Fee || 0);
 
   const tradeRecord = {
     id: (history.length > 0 ? Math.max(...history.map(h => h.id || 0)) : 0) + 1,
@@ -2500,7 +2593,10 @@ function getStats() {
   const winRate = totalTrades > 0 ? ((wins / totalTrades) * 100).toFixed(1) : "0.0";
   const totalPnl = history.reduce((acc, h) => acc + (h.pnl || 0), 0);
   const totalRoi = (totalPnl / CONFIG.initialBalance) * 100;
-  const megaWins = history.filter(h => String(h.exitReason || '').includes('kâr alındı')).length;
+  const megaWins = history.filter(h => {
+    const r = String(h.exitReason || '');
+    return r.includes('MOONSHOT') || r.includes('TP1+TP2') || r.includes('kâr alındı');
+  }).length;
 
   const peak = getPeakBalance();
   const ddPct = peak > 0 ? (((peak - balance) / peak) * 100).toFixed(1) : "0.0";
@@ -4089,17 +4185,20 @@ function renderActiveRows(positions) {
   }
   return positions.map((p, idx) => {
     const isLong = p.side === 'LONG';
-    const isWin = (p.pnl || 0) >= 0;
-    const stopText = p.beLocked 
-      ? (p.tp2Taken 
-          ? '<span class="badge-be" style="background:#059669;color:#fff;">🎯 TP1+TP2 ALINDI (+%0.70 KİLİT)</span>' 
-          : (p.tp1Taken 
-              ? '<span class="badge-be" style="background:#10b981;color:#fff;">💰 TP1 CEPTE (+%0.28 KİLİT)</span>' 
+    const totOpenPnl = (p.pnl || 0) + (p.tp1Pnl || 0) + (p.tp2Pnl || 0);
+    const initM = p.initialMargin || p.margin || 25;
+    const totOpenRoi = initM > 0 ? (totOpenPnl / initM) * 100 : (p.roi || 0);
+    const isWin = totOpenPnl >= 0;
+    const stopText = p.beLocked
+      ? (p.tp2Taken
+          ? '<span class="badge-be" style="background:#059669;color:#fff;">🎯 TP1+TP2 CEPTE (RUNNER)</span>'
+          : (p.tp1Taken
+              ? '<span class="badge-be" style="background:#10b981;color:#fff;">💰 TP1 CEPTE (+%0.25 KİLİT)</span>'
               : '<span class="badge-be">🛡️ BAŞABAŞ ($0 RİSK)</span>'))
       : `<span class="badge-sl">🛑 STOP: -%${(p.slPct || CONFIG.slPct).toFixed(2)}</span>`;
 
-    const roiStr = (p.roi >= 0 ? '+' : '') + (p.roi || 0).toFixed(1) + '%';
-    const pnlStr = (p.pnl >= 0 ? '+$' : '-$') + Math.abs(p.pnl || 0).toFixed(2);
+    const roiStr = (totOpenRoi >= 0 ? '+' : '') + totOpenRoi.toFixed(1) + '%';
+    const pnlStr = (totOpenPnl >= 0 ? '+$' : '-$') + Math.abs(totOpenPnl).toFixed(2);
 
     return `
       <tr>
@@ -4163,16 +4262,19 @@ function renderActiveCards(positions) {
   }
   return positions.map((p, idx) => {
     const isLong = p.side === 'LONG';
-    const isWin = (p.pnl || 0) >= 0;
-    const stopText = p.beLocked 
-      ? (p.tp2Taken 
-          ? '<span class="badge-be" style="background:#059669;color:#fff;">🎯 TP1+TP2 ALINDI (+%0.70 KİLİT)</span>' 
-          : (p.tp1Taken 
-              ? '<span class="badge-be" style="background:#10b981;color:#fff;">💰 TP1 CEPTE (+%0.28 KİLİT)</span>' 
+    const totOpenPnl = (p.pnl || 0) + (p.tp1Pnl || 0) + (p.tp2Pnl || 0);
+    const initM = p.initialMargin || p.margin || 25;
+    const totOpenRoi = initM > 0 ? (totOpenPnl / initM) * 100 : (p.roi || 0);
+    const isWin = totOpenPnl >= 0;
+    const stopText = p.beLocked
+      ? (p.tp2Taken
+          ? '<span class="badge-be" style="background:#059669;color:#fff;">🎯 TP1+TP2 CEPTE (RUNNER)</span>'
+          : (p.tp1Taken
+              ? '<span class="badge-be" style="background:#10b981;color:#fff;">💰 TP1 CEPTE (+%0.25 KİLİT)</span>'
               : '<span class="badge-be">🛡️ BAŞABAŞ ($0 RİSK)</span>'))
       : `<span class="badge-sl">🛑 STOP: -%${(p.slPct || CONFIG.slPct).toFixed(2)}</span>`;
-    const roiStr = (p.roi >= 0 ? '+' : '') + (p.roi || 0).toFixed(1) + '%';
-    const pnlStr = (p.pnl >= 0 ? '+$' : '-$') + Math.abs(p.pnl || 0).toFixed(2);
+    const roiStr = (totOpenRoi >= 0 ? '+' : '') + totOpenRoi.toFixed(1) + '%';
+    const pnlStr = (totOpenPnl >= 0 ? '+$' : '-$') + Math.abs(totOpenPnl).toFixed(2);
 
     return `
       <div class="pos-card-mobile ${isLong ? 'card-long' : 'card-short'}">
