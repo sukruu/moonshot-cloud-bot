@@ -98,11 +98,11 @@ function applyCircuitBreaker() {
   if (profitGuard) {
     CONFIG.maxSlots = 2;
     CONFIG.marginPerTrade = dynamicMargin;
-    DYNAMIC.mode = 'MARSCOIN_SURU';
+    DYNAMIC.mode = 'MARSCOIN_V2_RUNNER';
   } else {
     CONFIG.maxSlots = userRisk.maxSlots || 3;
     CONFIG.marginPerTrade = dynamicMargin;
-    DYNAMIC.mode = 'MARSCOIN_SURU';
+    DYNAMIC.mode = 'MARSCOIN_V2_RUNNER';
   }
 }
 
@@ -150,13 +150,41 @@ const BANNED_SYMBOLS = new Set([
   'BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT',
   'USDCUSDT', 'FDUSDUSDT', 'TUSDUSDT', 'EURUSDT',
   'BFUSDUSDT', 'USD1USDT', 'RLUSDUSDT', 'RWUSDUSDT', 'USDEUSDT', 'USDPUSDT',
-  'AMPUSDT', 'XAUTUSDT', 'PAXGUSDT'
+  'AMPUSDT', 'XAUTUSDT', 'PAXGUSDT', 'XAUUSDT', 'XAGUSDT', 'XPTUSDT', 'XPDUSDT',
+  'CLUSDT', 'BZUSDT', 'NATGASUSDT', 'COPPERUSDT', 'DEFIUSDT', 'BTCDOMUSDT', 'ALLUSDT'
 ]);
 
 const KNOWN_CRYPTO_B = new Set(['ARBUSDT', 'CKBUSDT', 'TRBUSDT', 'PHBUSDT', 'AMBUSDT', 'BBUSDT', 'BELUSDT', 'BLZUSDT', 'BOMEUSDT']);
-const SYMBOL_REGEX_GLOBAL = /^[A-Z0-9]{2,12}USDT$/;
+const SYMBOL_REGEX_GLOBAL = /^[A-Z0-9]{2,14}USDT$/;
+const nonCryptoFuturesSymbols = new Set(); // /fapi/v1/exchangeInfo ile otomatik dolan 248+ TradFi hisse/ETF/emtia/delist listesi
+let lastExchangeInfoRefresh = 0;
+
+async function refreshExchangeInfoFilter() {
+  const now = Date.now();
+  if (lastExchangeInfoRefresh > 0 && (now - lastExchangeInfoRefresh) < 6 * 60 * 60 * 1000) return;
+  try {
+    const info = await fetchBinance('/fapi/v1/exchangeInfo');
+    if (info && Array.isArray(info.symbols) && info.symbols.length > 50) {
+      const blocked = new Set();
+      for (const s of info.symbols) {
+        if (!s || !s.symbol || !s.symbol.endsWith('USDT')) continue;
+        const isPureCryptoPerp =
+          s.status === 'TRADING' &&
+          s.contractType === 'PERPETUAL' &&
+          s.underlyingType === 'COIN';
+        if (!isPureCryptoPerp) blocked.add(s.symbol);
+      }
+      nonCryptoFuturesSymbols.clear();
+      blocked.forEach(sym => nonCryptoFuturesSymbols.add(sym));
+      lastExchangeInfoRefresh = now;
+      addLog(`🛡️ [KRİPTO FİLTRESİ]: ${blocked.size} adet TradFi hisse/ETF/emtia/delist kontratı taramadan çıkarıldı (Sadece saf Kripto Futures).`, 'INFO');
+    }
+  } catch (e) {}
+}
+
 function isTradableCryptoSymbol(sym) {
   if (!sym || !SYMBOL_REGEX_GLOBAL.test(sym) || sym.startsWith("USDC") || BANNED_SYMBOLS.has(sym)) return false;
+  if (nonCryptoFuturesSymbols.has(sym)) return false;
   if (/(UP|DOWN|BULL|BEAR)USDT$/.test(sym)) return false;
   // Spot yedekte gelen ABD hisse senedi / ETF tokenlarını (INTCBUSDT, SOXLBUSDT, AMDBUSDT, CRCLBUSDT, SNDKBUSDT, TQQQBUSDT vb.) engelle
   if (sym.endsWith("BUSDT") && !KNOWN_CRYPTO_B.has(sym)) return false;
@@ -921,6 +949,9 @@ function warnFetch(msg) {
 }
 
 function getCachePolicy(relativePath) {
+  if (relativePath.includes('exchangeInfo')) {
+    return { ttlMs: 6 * 60 * 60 * 1000, staleMs: 24 * 60 * 60 * 1000 };
+  }
   if (relativePath.includes('ticker/24hr')) {
     return { ttlMs: 8000, staleMs: 300000 }; // 8 sn taze, 5 dakika stale toleransı
   }
@@ -1164,6 +1195,7 @@ async function updateRadar() {
   if (isRadarRunning) return;
   isRadarRunning = true;
   try {
+    await refreshExchangeInfoFilter();
     const tickers = await fetchBinance('/fapi/v1/ticker/24hr');
     if (!tickers || !Array.isArray(tickers)) return;
 
@@ -1688,58 +1720,70 @@ async function scanLoop() {
         }
         const atr3mPct = trCount > 0 ? trSum / trCount : 0.5;
 
-        // 🚀 MARSCOIN V2 ÇİFT YÖNLÜ FİLTRE (Dip-Short ve Tepe-Long Yasak, Gerçek Volatilite Zorunlu):
+        // 🚀 MARSCOIN V2 ÇİFT YÖNLÜ FİLTRE (Aşırı Uzamış Tepe/Dip Engelli, RETEST Kanal Ucuyla Çelişmez!):
+        // Not: RETEST doğası gereği 1s kanal ucunda (pos1h ~%85-%105 LONG / -%5-%18 SHORT) olur;
+        // aşırı uzamış dip-short/tepe-long tuzağı |1s| <= %2.60, |3s| <= %4.80, RSI ve 3s kanal (rangePos) ile engellenir!
+        const notFloorDumpShort = rangePos >= 8 || roomToLow3hPct <= -0.01;
+        const notCeilingExhaustLong = rangePos <= 95 || roomToHigh3hPct <= -0.01;
+
         const radarOkLong =
           clearAirLong &&
           emaBull &&
-          pos1h >= 25 &&
-          pos1h <= 90 &&
+          notCeilingExhaustLong &&
+          pos1h >= 30 &&
+          pos1h <= 106 &&
           chg1hCalc >= 0.25 &&
-          chg1hCalc <= 3.50 &&
+          chg1hCalc <= 2.80 &&
           chg15mTrue >= 0.05 &&
           chg15mTrue <= 1.40 &&
           chg3hVal >= -0.50 &&
-          chg3hVal <= 6.50 &&
+          chg3hVal <= 5.00 &&
           chg24Val >= -5.0 &&
           chg24Val <= 45.0 &&
           atr3mPct >= 0.24 &&
           atr3mPct <= 1.10 &&
-          rsi3m >= 44 &&
-          rsi3m <= 68;
+          rsi3m >= 42 &&
+          rsi3m <= 69;
         const radarOkShort =
           clearAirShort &&
           emaBear &&
-          pos1h >= 12 &&
-          pos1h <= 75 &&
+          notFloorDumpShort &&
+          pos1h >= -6 &&
+          pos1h <= 70 &&
           chg1hCalc <= -0.25 &&
-          chg1hCalc >= -3.50 &&
+          chg1hCalc >= -2.60 &&
           chg15mTrue <= -0.05 &&
           chg15mTrue >= -1.40 &&
           chg3hVal <= 0.50 &&
-          chg3hVal >= -5.50 &&
+          chg3hVal >= -4.80 &&
           chg24Val <= 50.0 &&
           chg24Val >= -30.0 &&
           atr3mPct >= 0.24 &&
           atr3mPct <= 1.10 &&
-          rsi3m >= 32 &&
-          rsi3m <= 56;
+          rsi3m >= 31 &&
+          rsi3m <= 58;
 
         if (!radarOkLong && !radarOkShort) {
-          // 👻 Radar'a ÇOK YAKIN elenen adayları da kaydet (yeni 1s/30dk/pos1h/RSI/ATR filtrelerinin etkisi ölçülebilsin)
-            const nearLong = chg24Val >= 0.20 && chg15Long >= -0.05;
-            const nearShort = chg24Val <= -0.20 && chg15Short <= 0.05;
-            if (nearLong || nearShort) {
-              const nSide = nearLong ? 'LONG' : 'SHORT';
-              let why = 'RADAR_OTHER';
-              if (nSide === 'LONG') {
-                if (chg24Val < 0.40 || chg24Val > 35) why = 'RADAR_24H';
-                else if (chg3hVal <= 0) why = 'RADAR_3H';
-                else why = 'RADAR_SIGNAL';
-              } else {
-                if (chg24Val > -0.40 || chg24Val < -35) why = 'RADAR_24H';
-                else if (chg3hVal >= 0) why = 'RADAR_3H';
-                else why = 'RADAR_SIGNAL';
-              }
+          // 👻 Radar'a ÇOK YAKIN elenen adayları GERÇEK eleme sebebiyle kaydet
+          const nearLong = chg15mTrue >= 0.05 && chg1hCalc >= 0.15;
+          const nearShort = chg15mTrue <= -0.05 && chg1hCalc <= -0.15;
+          if (nearLong || nearShort) {
+            const nSide = nearLong ? 'LONG' : 'SHORT';
+            let why = 'RADAR_OTHER';
+            if (atr3mPct < 0.24 || atr3mPct > 1.10) why = 'RADAR_ATR';
+            else if (nSide === 'LONG') {
+              if (!emaBull) why = 'RADAR_EMA';
+              else if (!clearAirLong) why = 'RADAR_WALL';
+              else if (rsi3m < 42 || rsi3m > 69) why = 'RADAR_RSI';
+              else if (pos1h < 30 || pos1h > 106) why = 'RADAR_POS1H';
+              else why = 'RADAR_CHG';
+            } else {
+              if (!emaBear) why = 'RADAR_EMA';
+              else if (!clearAirShort) why = 'RADAR_WALL';
+              else if (rsi3m < 31 || rsi3m > 58) why = 'RADAR_RSI';
+              else if (pos1h < -6 || pos1h > 70) why = 'RADAR_POS1H';
+              else why = 'RADAR_CHG';
+            }
             recordShadowSignal({
               symbol: sym, side: nSide, stage: why, price: curP,
               chg15: Number((nSide === 'LONG' ? chg15Long : chg15Short).toFixed(2)),
@@ -1810,28 +1854,32 @@ async function scanLoop() {
         const retestShort = prevBrokeLow && breakVolOk && pulledToLow && sellersBack;
 
         // 📐 TETİK 2 — TREND İÇİ SOLUKLANMA DÖNÜŞÜ (PULLBACK — Mumu kovalamadan EMA9 desteğinden dönüş):
-        const dippedToEma9Long = (prevMovePct <= -0.06 || curL <= ema9 * 1.0022) && curL >= ema21 * 0.9985;
+        const dippedToEma9Long = (prevMovePct <= 0.05 || curL <= ema9 * 1.0025) && curL >= ema21 * 0.9985;
         const pullbackLong =
-          chg1hCalc >= 0.60 &&
+          pos1h >= 30 &&
+          pos1h <= 88 &&
+          chg1hCalc >= 0.55 &&
           dippedToEma9Long &&
           curP > ema9 &&
           curP > curO &&
-          curP >= prevH * 0.9990 &&
+          curP > prevC &&
           curMovePct >= 0.12 &&
           curMovePct <= maxTriggerPct &&
-          volMult >= 1.15 &&
+          volMult >= 1.10 &&
           noWickLong;
 
-        const bouncedToEma9Short = (prevMovePct >= 0.06 || curH >= ema9 * 0.9978) && curH <= ema21 * 1.0015;
+        const bouncedToEma9Short = (prevMovePct >= -0.05 || curH >= ema9 * 0.9975) && curH <= ema21 * 1.0015;
         const pullbackShort =
-          chg1hCalc <= -0.60 &&
+          pos1h >= 12 &&
+          pos1h <= 70 &&
+          chg1hCalc <= -0.55 &&
           bouncedToEma9Short &&
           curP < ema9 &&
           curP < curO &&
-          curP <= prevL * 1.0010 &&
+          curP < prevC &&
           curMovePct <= -0.12 &&
           curMovePct >= -maxTriggerPct &&
-          volMult >= 1.15 &&
+          volMult >= 1.10 &&
           noWickShort;
 
         const btcBlocksLong = btc15mNumeric <= -0.35 || (btc15mNumeric < -0.10 && btc5mNumeric <= -0.20);
@@ -2501,8 +2549,20 @@ function closeTrade(pos, exitReason) {
     formattedExitReason = `🎯 3 KADEMELİ MOONSHOT ALINDI (Toplam: +$${totalTradePnl.toFixed(2)} / +%${totalTradeRoi.toFixed(1)} ROI)`;
   }
 
-  // 🛡️ Aynı koinde peş peşe testere/yorgunluk işlemine girmemek için 15 dakika (1 tam 15m mum) soğuma süresi!
-  coinCooldowns[pos.symbol] = now + (15 * 60 * 1000);
+  // 🛡️ Aynı koinde ardışık zarar kalkanı + 15 dk soğuma (2 ardışık zararda 4 saat soğuma!)
+  if (totalTradePnl <= -0.05) {
+    coinLossCount[pos.symbol] = (coinLossCount[pos.symbol] || 0) + 1;
+    const coolMin = coinLossCount[pos.symbol] >= 2 ? 240 : 15;
+    coinCooldowns[pos.symbol] = now + (coolMin * 60 * 1000);
+    if (coinLossCount[pos.symbol] >= 2) {
+      addLog(`🛡️ [2-ZARAR KALKANI]: ${pos.symbol} üst üste 2 kez zarar etti ➔ 4 saat soğumaya alındı!`, 'WARN');
+    }
+  } else if (totalTradePnl > 0.05) {
+    coinLossCount[pos.symbol] = 0;
+    coinCooldowns[pos.symbol] = now + (15 * 60 * 1000);
+  } else {
+    coinCooldowns[pos.symbol] = now + (15 * 60 * 1000);
+  }
 
   const exitMovePct = pos.entryPrice > 0
     ? (pos.side === 'LONG'
@@ -2555,7 +2615,7 @@ function closeTrade(pos, exitReason) {
     leverage,
     notional: Number((margin * leverage).toFixed(2)),
     slPct: pos.slPct != null ? Number(pos.slPct) : null,
-    tpPct: pos.tp1Pct != null ? Number(pos.tp1Pct) : null,
+    tpPct: pos.moonPct != null ? Number((pos.moonPct * (pos.volK || 1)).toFixed(2)) : (pos.tp1Pct != null ? Number(pos.tp1Pct) : null),
     exitMovePct: Number(exitMovePct.toFixed(3)),
     givebackPct: Number(((pos.mfe || 0) - exitMovePct).toFixed(3)),
     chg1h: pos.chg1h != null ? pos.chg1h : null,
@@ -4650,6 +4710,21 @@ const server = http.createServer(async (req, res) => {
     const idx = activePositions.findIndex(p => p.id === id);
     if (idx !== -1) {
       const closed = activePositions.splice(idx, 1)[0];
+      try {
+        const pData = await fetchBinance(`/fapi/v1/ticker/price?symbol=${closed.symbol}`);
+        if (pData && pData.price) closed.currentPrice = parseFloat(pData.price);
+      } catch (e) {}
+      const isLong = closed.side === 'LONG';
+      const curMove = closed.entryPrice > 0
+        ? (isLong ? ((closed.currentPrice - closed.entryPrice) / closed.entryPrice) * 100 : ((closed.entryPrice - closed.currentPrice) / closed.entryPrice) * 100)
+        : 0;
+      const nom = (closed.margin || 0) * (closed.leverage || CONFIG.leverage || 15);
+      const maker = Number(CONFIG.makerRate) || 0.0002;
+      closed.grossPnl = nom * (curMove / 100);
+      closed.feeUsd = nom * (maker + CONFIG.feeRate);
+      closed.slipUsd = 0;
+      closed.pnl = closed.grossPnl - closed.feeUsd;
+      closed.roi = closed.margin > 0 ? (closed.pnl / closed.margin) * 100 : 0;
       closeTrade(closed, "🛑 Manuel Kapatıldı");
       persistState();
     }
@@ -4667,9 +4742,9 @@ const server = http.createServer(async (req, res) => {
     history = [];
     coinLossCount = {};
     coinCooldowns = {};
-    DYNAMIC.mode = 'MARSCOIN_SURU';
-    DYNAMIC.vol3hMin = 1.0;
-    DYNAMIC.candidateSlice = 35;
+    DYNAMIC.mode = 'MARSCOIN_V2_RUNNER';
+    DYNAMIC.vol3hMin = 0.8;
+    DYNAMIC.candidateSlice = 45;
     circuitOn = false;
     CONFIG.maxSlots = userRisk.maxSlots;
     CONFIG.marginPerTrade = userRisk.marginPerTrade;

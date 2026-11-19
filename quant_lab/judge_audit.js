@@ -121,13 +121,13 @@ class JudicialAuditCourt {
           offenses.push(`Yetersiz Satıcı Baskısı (%${(100 - taker).toFixed(1)})`);
         }
 
-        // Trend Kusuru
-        if (side === 'LONG' && chg24 < -2.0) {
+        // Trend Kusuru (Marscoin v2 aşırı alım/satım dönüşleriyle uyumlu)
+        if (side === 'LONG' && chg24 < -8.0) {
           score -= 20;
-          offenses.push(`Piyasa Nizamına Aykırı (Günlük Düşüşte Long: %${chg24})`);
-        } else if (side === 'SHORT' && chg24 > 2.0) {
+          offenses.push(`Piyasa Nizamına Aykırı (Günlük Çöküşte Long: %${chg24})`);
+        } else if (side === 'SHORT' && chg24 > 15.0) {
           score -= 20;
-          offenses.push(`Piyasa Nizamına Aykırı (Günlük Yükselişte Short: +%${chg24})`);
+          offenses.push(`Piyasa Nizamına Aykırı (Aşırı Rallide Erken Short: +%${chg24})`);
         }
 
         score = Math.max(10, Math.min(100, score));
