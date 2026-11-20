@@ -46,13 +46,13 @@ let CONFIG = {
   feeRate: 0.0005,           // Binance Futures taker %0.05 (TEK YÖN)
   scanIntervalMs: 5000,      // 15dk kapalı mum motoru için 5 sn tarama (hızlı + rate-limit dostu)
   riskIntervalMs: 1000,
-  radarIntervalMs: 30000
+  radarIntervalMs: 45000
 };
 
 // Giriş genişliği. Ajan toplantısı bunu değiştirmez.
 let DYNAMIC = {
   vol3hMin: 0.8,
-  candidateSlice: 55,
+  candidateSlice: 120,
   regime: 'WHALE_15M',
   mode: 'MARSCOIN_15M_WHALE',
   updatedAt: 0
@@ -1490,32 +1490,35 @@ function evaluateWhaleSpike15m(k, idx) {
   const upperWick = span > 0 ? (h - Math.max(c, o)) / span : 0;
   const lowerWick = span > 0 ? (Math.min(c, o) - l) / span : 0;
 
-  const diag = { atr15, volMult, taker, move, chg1h, chg3h, chg4h, ema20, ema50, rsi15, closePx: c, candleTs: Number(k[idx][0]) || 0 };
+  const distEma20 = ema20 > 0 ? Math.abs((c - ema20) / ema20) * 100 : 0;
+  const diag = { atr15, volMult, taker, move, chg1h, chg3h, chg4h, ema20, ema50, distEma20, rsi15, closePx: c, candleTs: Number(k[idx][0]) || 0 };
 
   if (atr15 < 1.05 || atr15 > 3.50) return { approved: false, why: 'ATR15', ...diag };
   if (volMult < 2.50) return { approved: false, why: 'VOL_LOW', ...diag };
-  // 🌋 Wyckoff Hacim Tükenişi (Climax) Kalkanı: 6x+ hacimli mum = likidasyon/FOMO zirvesi, balina mala çıkıyor.
-  // 10g CSV: Vol>5.5x n=7 → 1W/6L (-$11.66, H1 ve H2 ikisi de zarar) | Portföy sim: tavan 6–7x → H1 ve H2 ikisi de iyileşti.
-  if (volMult > 6.00) return { approved: false, why: 'VOL_CLIMAX', ...diag };
+  // 🌋 Wyckoff Hacim Tükenişi (Climax) + Anti-Chase Kalkanı (102 saf kripto 10.4g önyargısız testte H1+H2 kanıtlı):
+  // - Vol > 5.5x: likidasyon/FOMO zirvesi (VELVET 5.78x, SKY 5.86x gibi)
+  // - distEma20 > %4.5 veya |move| > 2.4x ATR: hareket bitmiş, EMA20'den aşırı kopmuş geç kovalama (-$36.7 / -$49.7)
+  if (volMult > 5.50) return { approved: false, why: 'VOL_CLIMAX', ...diag };
+  if (distEma20 > 4.50) return { approved: false, why: 'EMA_STRETCH', ...diag };
 
   const longOk =
     move >= atr15 * 0.90 &&
-    move <= atr15 * 3.80 &&
+    move <= atr15 * 2.40 &&
     c > ema20 &&
     ema20 > ema50 &&
     taker >= 56.0 &&
     chg4h >= 2.0 &&
-    chg4h <= 15.0 &&
+    chg4h <= 12.0 &&
     upperWick <= 0.45;
 
   const shortOk =
     move <= -atr15 * 0.90 &&
-    move >= -atr15 * 3.80 &&
+    move >= -atr15 * 2.40 &&
     c < ema20 &&
     ema20 < ema50 &&
     taker <= 44.0 &&
     chg4h <= -2.0 &&
-    chg4h >= -15.0 &&
+    chg4h >= -12.0 &&
     lowerWick <= 0.45;
 
   if (longOk) {
@@ -1956,29 +1959,34 @@ async function scanLoop() {
         isVip
       };
     })
-    .filter(t => t.volM >= 10 && t.chg <= 80 && t.chg >= -50 && radarMap[t.symbol])
+    // 🚀 TÜM LİKİT SAF KRİPTO FUTURES'LAR (≥$10M, ~105-120 koin) TARANIR — radarMap kör noktası kaldırıldı!
+    // Böylece uyuyup yeni uyanan BARDUSDT (+$8.88) gibi Moonshot'lar 15dk kapanış anında kaçmaz!
+    .filter(t => t.volM >= 10 && t.chg <= 80 && t.chg >= -50)
     .sort((a, b) => b.hotScore - a.hotScore)
-    .slice(0, DYNAMIC.candidateSlice);
+    .slice(0, Math.max(120, Number(DYNAMIC.candidateSlice) || 120));
+
+    const secIn15mNow = Math.floor((now / 1000) % 900);
+    const expectedClosedTs = (Math.floor(now / 900000) * 900000) - 900000;
 
     if (now - lastScanHeartbeat > 60000 && topCandidates.length > 0) {
       lastScanHeartbeat = now;
-      const secIn15m = Math.floor((now / 1000) % 900);
-      const windowLbl = (secIn15m <= 240 || secIn15m >= 810)
-        ? '⚡ 15dk Teyit Penceresi AÇIK'
-        : `⏳ Sonraki 15dk teyit: ${Math.ceil((810 - secIn15m) / 60)} dk`;
-      addLog(`🐋 [15dk Balina Tarayıcı]: ${validTickers.length} Saf Kripto (${topCandidates.length} Aday) | Lider: ${topCandidates[0].symbol} (24s: %${topCandidates[0].chg.toFixed(1)}, Puan: ${topCandidates[0].hotScore.toFixed(0)}) | ${windowLbl} | Slot: ${activePositions.length}/${CONFIG.maxSlots}`);
+      const windowLbl = (secIn15mNow >= 4 && secIn15mNow <= 180)
+        ? '⚡ 15dk Kapanış Taraması AÇIK'
+        : `⏳ Sonraki 15dk mum: ${Math.ceil((900 - secIn15mNow) / 60)} dk`;
+      addLog(`🐋 [15dk Balina Tarayıcı]: ${validTickers.length} Saf Kripto (${topCandidates.length} Likit Aday ≥$10M) | Lider: ${topCandidates[0].symbol} (24s: %${topCandidates[0].chg.toFixed(1)}, Puan: ${topCandidates[0].hotScore.toFixed(0)}) | ${windowLbl} | Slot: ${activePositions.length}/${CONFIG.maxSlots}`);
     }
 
     if (!global.whaleEvaluatedCandles) global.whaleEvaluatedCandles = new Map();
 
-    // 🛡️ API AĞIRLIK KORUMASI: 15dk teyit penceresi dışındayken (240sn..810sn arası) 55 koin için boşuna kline çekip 429 yeme!
-    const secIn15mNow = Math.floor((now / 1000) % 900);
-    if (secIn15mNow > 240 && secIn15mNow < 810) {
+    // 🛡️ API AĞIRLIK KORUMASI & REPLAY 1-E-1 EŞİTLEME:
+    // Yalnızca 15dk mum kapandıktan hemen sonra (4sn..180sn) tara ve her koini o kapanış için YALNIZCA 1 KEZ değerlendir!
+    // (Kapanmamış LATE_15M mumlara erken atlama yok; ~110 koin ~3 saniyede taranır, kalan 14.5 dk 0 kline ağırlığı!)
+    if (secIn15mNow < 4 || secIn15mNow > 180) {
       return;
     }
 
-    // 5'li paralel 15dk kline taraması (Geçmiş Replay Backtest ile 1-e-1 aynı motor!)
-    const chunkSize = 5;
+    // 10'lu paralel 15dk kline taraması (~110 koin = ~3 sn, Geçmiş Replay Backtest ile 1-e-1 aynı motor!)
+    const chunkSize = 10;
     const scanEntryCandidates = [];
 
     for (let ci = 0; ci < topCandidates.length; ci += chunkSize) {
@@ -1987,6 +1995,7 @@ async function scanLoop() {
 
       const chunkData = await Promise.all(chunk.map(async item => {
         const sym = item.symbol;
+        if (global.whaleEvaluatedCandles.get(sym) === expectedClosedTs) return null;
         if (activeSyms.has(sym)) return null;
         if (activePositions.some(x => x.symbol === sym)) return null;
         if (coinCooldowns[sym] && coinCooldowns[sym] > Date.now()) return null;
@@ -2010,28 +2019,15 @@ async function scanLoop() {
         const rInfo = radarMap[sym] || {};
         const lastIdx = k15m.length - 1;
         const closedIdx = lastIdx - 1;
-        const curBarStart = Number(k15m[lastIdx][0]) || now;
-        const elapsedSec = (now - curBarStart) / 1000;
         const curP = parseFloat(k15m[lastIdx][4]) || lastP;
 
-        // 🕐 KAPALI 15DK MUM ONAYI (ilk 4 dk içinde) VEYA SON 90 SANİYE GERÇEK 2.5x HACİM ONAYI:
-        let evalIdx = -1;
-        let evalMode = '';
-        if (elapsedSec >= 0 && elapsedSec <= 240) {
-          evalIdx = closedIdx;
-          evalMode = 'CLOSED_15M';
-        } else if (elapsedSec >= 810) {
-          evalIdx = lastIdx;
-          evalMode = 'LATE_15M';
-        } else {
-          continue; // Mum ortasındaki sahte fitillere atlama; gerçek 15dk balina kapanışını bekle!
-        }
-
-        const targetCandleTs = Number(k15m[evalIdx][0]) || 0;
-        const dedupKey = `${sym}:${targetCandleTs}`;
+        // 🕐 KESİN KAPALI 15DK MUM ONAYI (Replay ile %100 aynı mum!)
+        const targetCandleTs = Number(k15m[closedIdx][0]) || 0;
+        if (targetCandleTs !== expectedClosedTs) continue; // Binance yeni mumu henüz açmadı; 5sn sonraki turda tekrar dene
         if (global.whaleEvaluatedCandles.get(sym) === targetCandleTs) continue;
+        global.whaleEvaluatedCandles.set(sym, targetCandleTs);
 
-        const sig = evaluateWhaleSpike15m(k15m, evalIdx);
+        const sig = evaluateWhaleSpike15m(k15m, closedIdx);
         if (!sig) continue;
 
         const shadow = (stage, extra = {}) => recordShadowSignal({
@@ -2052,10 +2048,9 @@ async function scanLoop() {
           continue;
         }
 
-        // Fiyat kapalı mumdan çok uzaklaştıysa (%0.65+) kovalama!
+        // Fiyat kapalı mumdan çok uzaklaştıysa (%1.10+) kovalama (hızlı breakout'ları boğmadan runaway kovalamayı önler)
         const driftPct = sig.closePx > 0 ? Math.abs((curP - sig.closePx) / sig.closePx) * 100 : 0;
-        if (evalMode === 'CLOSED_15M' && driftPct > 0.65) {
-          global.whaleEvaluatedCandles.set(sym, targetCandleTs);
+        if (driftPct > 1.10) {
           shadow('DRIFT_SKIP', { driftPct: Number(driftPct.toFixed(2)) });
           continue;
         }
@@ -2117,7 +2112,8 @@ async function scanLoop() {
             if (mid > 0) spreadBps = Number(((ask - bid) / mid * 10000).toFixed(2));
           }
         } catch (e) {}
-        if (spreadBps !== null && spreadBps > 8.0) {
+        // 15dk swing hedefleri (%4.5-%9.8) için 1-tick ($0.08-$0.11 koin = 9-12 bps) spread yüzünden PONS/BARD gibi Moonshot'ları yasaklama!
+        if (spreadBps !== null && spreadBps > 22.0) {
           shadow('HIGH_SPREAD', { spreadBps });
           continue;
         }
@@ -4864,7 +4860,7 @@ const server = http.createServer(async (req, res) => {
     coinCooldowns = {};
     DYNAMIC.mode = 'MARSCOIN_15M_WHALE';
     DYNAMIC.vol3hMin = 0.8;
-    DYNAMIC.candidateSlice = 55;
+    DYNAMIC.candidateSlice = 120;
     circuitOn = false;
     CONFIG.maxSlots = userRisk.maxSlots;
     CONFIG.marginPerTrade = userRisk.marginPerTrade;
