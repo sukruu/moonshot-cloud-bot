@@ -115,7 +115,7 @@ function engineSnapshot() {
     userSlots: userRisk.maxSlots,
     userMargin: userRisk.marginPerTrade,
     gates: {
-      entry: '15dk Balina (2.5–5.5x · Taker ≥%60)',
+      entry: '15dk Balina · ≥%60 Baskı',
       book: 'defter fiyatı',
       judge: 'açık',
       flow: '15dk & 4s Saf Kripto Futures balina akışı',
@@ -3163,8 +3163,8 @@ function serveDashboardHtml() {
     }
     .agent-row .status-pill {
       font-size: 11px;
-      padding: 2px 7px;
-      max-width: 168px;
+      padding: 2px 8px;
+      max-width: 215px;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
@@ -3182,6 +3182,8 @@ function serveDashboardHtml() {
       border: 1px solid var(--border);
     }
     .status-pill.green { background: var(--green-bg); color: var(--green); border-color: var(--green-border); }
+    .status-pill.red { background: var(--red-bg); color: var(--red); border-color: var(--red-border); }
+    .status-pill.amber { background: var(--amber-bg); color: var(--amber); border-color: var(--amber-border); }
     .status-pill.purple,
     .status-pill.blue,
     .status-pill.cyan,
@@ -3210,7 +3212,11 @@ function serveDashboardHtml() {
     .param-header { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); font-weight: 600; margin-bottom: 4px; }
     .param-input-wrap { display: flex; align-items: baseline; justify-content: space-between; }
     .param-input-wrap input { width: 58px; background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 4px 6px; color: var(--text); font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 650; outline: none; }
-    .param-unit { font-size: 9px; color: var(--muted); }
+    .param-static-val { display: flex; align-items: baseline; justify-content: space-between; padding: 4px 2px; font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 700; color: var(--text); }
+    .param-unit { font-size: 9.5px; color: var(--muted); font-family: -apple-system, "Segoe UI", sans-serif; font-weight: 600; }
+    .sidebar-plan-card { background: var(--panel2); border: 1px solid var(--border); border-radius: 7px; padding: 8px 10px; margin-bottom: 8px; display: flex; flex-direction: column; gap: 6px; }
+    .sidebar-plan-row { font-size: 11px; line-height: 1.4; color: var(--text-secondary); }
+    .sidebar-plan-row b { color: var(--text); font-weight: 700; }
 
     /* HERO PERF */
     .perf-hero-card {
@@ -3545,7 +3551,7 @@ function serveDashboardHtml() {
           <button id="themeToggleBtn" onclick="toggleTheme()" class="theme-toggle-btn">☀️ Açık Mod</button>
         </h2>
 
-        <div class="sidebar-section-title" style="margin-top:0;">MOTOR</div>
+        <div class="sidebar-section-title" style="margin-top:0;">DURUM</div>
         <div class="unified-agent-box">
           <div class="mini-status-bar">
             <div class="mini-status-chip">
@@ -3563,29 +3569,21 @@ function serveDashboardHtml() {
           </div>
           <div class="agent-compact-list">
             <div class="agent-row">
-              <span class="agent-name">Giriş</span>
+              <span class="agent-name">Piyasa</span>
+              <span class="status-pill ${liveBtcRegime.regime === 'BULL' ? 'green' : (liveBtcRegime.regime === 'BEAR' ? 'red' : (liveBtcRegime.regime === 'CHOP' ? 'amber' : ''))}" id="gateBtcRegime">${liveBtcRegime.label}</span>
+            </div>
+            <div class="agent-row">
+              <span class="agent-name">Motor</span>
               <span class="status-pill green" id="gateEngine">${gateEntryLbl}</span>
             </div>
-            <div class="agent-row">
-              <span class="agent-name">BTC Rejimi</span>
-              <span class="status-pill ${liveBtcRegime.regime === 'BULL' ? 'green' : (liveBtcRegime.regime === 'BEAR' ? 'purple' : '')}" id="gateBtcRegime">${liveBtcRegime.label}</span>
-            </div>
-            <div class="agent-row">
-              <span class="agent-name">Emir defteri</span>
-              <span class="status-pill green" id="gateBook">${gateSnap.book || 'OBI'}</span>
-            </div>
-            <div class="agent-row">
-              <span class="agent-name">Yargıç</span>
-              <span class="status-pill green" id="gateJudge">${gateSnap.judge || 'açık'}</span>
-            </div>
-            <div class="agent-row">
-              <span class="agent-name">Devre kesici</span>
-              <span class="status-pill" id="gateBreaker">${stats.circuit ? 'AÇIK' : 'kapalı'}</span>
+            <div class="agent-row" id="gateBreakerRow" style="display:${stats.circuit ? 'flex' : 'none'};">
+              <span class="agent-name">Devre Kesici</span>
+              <span class="status-pill red" id="gateBreaker">🛑 KORUMA AKTİF</span>
             </div>
           </div>
         </div>
 
-        <div class="sidebar-section-title" style="margin-top:5px;">💰 SEANS PERFORMANSI</div>
+        <div class="sidebar-section-title" style="margin-top:8px;">💰 SEANS PERFORMANSI</div>
         <div class="perf-hero-card">
           <div>
             <span class="perf-hero-title">KASA BAKİYESİ</span>
@@ -3613,44 +3611,31 @@ function serveDashboardHtml() {
           </div>
         </div>
 
-        <div class="sidebar-section-title">⚙️ TEMEL RİSK & POZİSYON</div>
+        <div class="sidebar-section-title">⚙️ RİSK & AYARLAR</div>
         <div class="param-grid-2x2">
           <div class="param-card">
-            <div class="param-header"><span>MAX SLOT</span><span>yön başı 2</span></div>
+            <div class="param-header"><span>MAX İŞLEM</span><span>max 2/yön</span></div>
             <div class="param-input-wrap"><input type="number" id="inpSlots" value="${CONFIG.maxSlots}"><span class="param-unit">adet</span></div>
           </div>
-          <div class="param-card">
-            <div class="param-header"><span>RİSK / İŞLEM</span><span>sabit %2.5</span></div>
-            <div class="param-input-wrap"><input type="number" id="inpMargin" value="${CONFIG.marginPerTrade}" title="Baz teminat; işlem riski kasanın %2.5'ine (~$2.50) göre otomatik ölçeklenir"><span class="param-unit">$</span></div>
+          <div class="param-card" title="Her işlemde en fazla kasanın %2.5'i riske edilir; pozisyon büyüklüğü otomatik ayarlanır">
+            <div class="param-header"><span>İŞLEM RİSKİ</span><span>otomatik</span></div>
+            <div class="param-static-val"><span>%2.5</span><span class="param-unit" id="stRiskUsd">~$${(parseFloat(stats.balance || 100) * 0.025).toFixed(2)}</span></div>
           </div>
           <div class="param-card">
-            <div class="param-header"><span>KALDIRAÇ</span><span>etkin ~1.1x</span></div>
+            <div class="param-header"><span>KALDIRAÇ</span><span>sınır</span></div>
             <div class="param-input-wrap"><input type="number" id="inpLev" value="${CONFIG.leverage}"><span class="param-unit">x</span></div>
           </div>
-          <div class="param-card">
-            <div class="param-header"><span>STOP LOSS</span><span>dinamik ATR</span></div>
-            <div class="param-input-wrap"><input type="text" id="inpSl" value="1.0–2.8" readonly title="15dk ATR × 1.50 ile otomatik hesaplanır (%1.00–%2.80)" style="cursor:default;opacity:0.85;"><span class="param-unit">%</span></div>
+          <div class="param-card" title="Koindeki 15dk oynaklığa (ATR) göre %1.0 ile %2.8 arasında otomatik belirlenir">
+            <div class="param-header"><span>ZARAR KES</span><span>otomatik</span></div>
+            <div class="param-static-val"><span>%1 – %2.8</span></div>
           </div>
         </div>
 
-        <div class="sidebar-section-title">ÇIKIŞ & KÂR KİLİDİ (CANLI = REPLAY)</div>
-        <div style="background:linear-gradient(90deg, var(--blue-bg) 0%, var(--panel) 100%); border-left:3px solid var(--blue); border:1px solid var(--blue-border); border-radius:5px; padding:6px 8px; margin-bottom:5px; display:flex; justify-content:space-between; align-items:center; box-shadow:var(--shadow-sm);">
-          <div>
-            <div style="font-size:10px;font-weight:800;color:var(--blue);letter-spacing:0.3px;">🎯 MOONSHOT HEDEFİ (ATR-BAZLI)</div>
-            <div style="font-size:8.5px;color:var(--muted);margin-top:1px;">Pozisyonun %100'ü iz sürenle taşınır</div>
-          </div>
-          <div style="font-family:'JetBrains Mono';font-size:11px;font-weight:800;color:var(--blue);background:var(--panel2);padding:3px 7px;border-radius:4px;border:1px solid var(--blue-border);white-space:nowrap;">L 5.0R · S 2.5R</div>
-        </div>
-        <div style="background:var(--panel); border:1px solid var(--border); border-radius:5px; padding:6px 8px; margin-bottom:5px;">
-          <div style="font-size:10px;font-weight:800;color:var(--green);letter-spacing:0.3px;">🛡️ ASİMETRİK RUNNER İZ SÜREN</div>
-          <div style="font-size:8.5px;color:var(--muted);margin-top:2px;line-height:1.45;">
-            <b>LONG:</b> 1.0R BE (+%0.15) ➔ 1.4R Trail (0.85R) ➔ 3.0R+ (0.60R)<br>
-            <b>SHORT:</b> 0.75R BE (+%0.15) ➔ 0.90R Trail (0.45R)
-          </div>
-        </div>
-        <div style="background:var(--panel); border:1px solid var(--border); border-radius:5px; padding:6px 8px; margin-bottom:6px;">
-          <div style="font-size:10px;font-weight:800;color:var(--text);letter-spacing:0.3px;">⏱️ MAX ${CONFIG.maxTradeMin} DK (8 SAAT) · 2-ZARAR KALKANI</div>
-          <div style="font-size:8.5px;color:var(--muted);margin-top:1px;">Erken zaman kesmesi yok · Aynı koinde 2 zarar ➔ 4s soğuma</div>
+        <div class="sidebar-section-title">🎯 ÇIKIŞ & KORUMA PLANI</div>
+        <div class="sidebar-plan-card">
+          <div class="sidebar-plan-row">🟢 <b>LONG:</b> Kâr gelince stop başabaşa çekilir, iz sürenle <b>5 kata kadar</b> taşınır.</div>
+          <div class="sidebar-plan-row">🔴 <b>SHORT:</b> Erken kâr kilidi açılır, ani tepkide kârı korur (<b>2.5 kat hedef</b>).</div>
+          <div class="sidebar-plan-row">🛡️ <b>Koruma:</b> Aynı koinde 2 zarar ➔ <b>4s mola</b> · Maks. süre <b>8 saat</b>.</div>
         </div>
 
         <div class="action-buttons-grid">
@@ -4017,6 +4002,10 @@ function serveDashboardHtml() {
 
         // Performans & İstatistikler
         document.getElementById("stBalance").innerText = '$' + data.stats.balance;
+        const riskUsdEl = document.getElementById("stRiskUsd");
+        if (riskUsdEl) {
+          riskUsdEl.innerText = '~$' + (parseFloat(data.stats.balance || 100) * 0.025).toFixed(2);
+        }
         const pnlEl = document.getElementById("stPnl");
         pnlEl.innerText = (parseFloat(data.stats.totalPnl) >= 0 ? '+' : '') + '$' + data.stats.totalPnl + ' (%' + data.stats.totalRoi + ')';
         pnlEl.style.color = parseFloat(data.stats.totalPnl) >= 0 ? 'var(--green)' : 'var(--red)';
@@ -4046,17 +4035,14 @@ function serveDashboardHtml() {
         const gbr = document.getElementById('gateBtcRegime');
         if (gbr && data.btcRegime && data.btcRegime.label) {
           gbr.innerText = data.btcRegime.label;
-          gbr.className = 'status-pill ' + (data.btcRegime.regime === 'BULL' ? 'green' : (data.btcRegime.regime === 'BEAR' ? 'purple' : ''));
+          gbr.className = 'status-pill ' + (data.btcRegime.regime === 'BULL' ? 'green' : (data.btcRegime.regime === 'BEAR' ? 'red' : (data.btcRegime.regime === 'CHOP' ? 'amber' : '')));
         }
-        const gb = document.getElementById('gateBook');
-        if (gb && g.book) gb.innerText = g.book;
-        const gj = document.getElementById('gateJudge');
-        if (gj && g.judge) gj.innerText = g.judge;
-
+        const brRow = document.getElementById("gateBreakerRow");
         const br = document.getElementById("gateBreaker");
+        if (brRow) brRow.style.display = data.stats.circuit ? 'flex' : 'none';
         if (br) {
-          br.innerText = data.stats.circuit ? ('AÇIK · $' + data.stats.liveMargin) : 'kapalı';
-          br.className = 'status-pill ' + (data.stats.circuit ? 'purple' : '');
+          br.innerText = data.stats.circuit ? '🛑 KORUMA AKTİF' : 'kapalı';
+          br.className = 'status-pill ' + (data.stats.circuit ? 'red' : '');
         }
 
         const dBox = document.getElementById("dialogueBox");
@@ -4269,7 +4255,7 @@ function serveDashboardHtml() {
 
     // Parametreleri Dinamik Güncelleme (sunucuya + tarayıcı hafızasına kaydeder)
     const LS_SET = 'moon_settings';
-    const SET_IDS = { slots: 'inpSlots', margin: 'inpMargin', lev: 'inpLev' };
+    const SET_IDS = { slots: 'inpSlots', lev: 'inpLev' };
     let settingsSynced = false;
 
     function readSettingsFromInputs() {
