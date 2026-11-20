@@ -1495,11 +1495,11 @@ function evaluateWhaleSpike15m(k, idx) {
 
   if (atr15 < 1.05 || atr15 > 3.50) return { approved: false, why: 'ATR15', ...diag };
   if (volMult < 2.50) return { approved: false, why: 'VOL_LOW', ...diag };
-  // 🌋 Wyckoff Hacim Tükenişi (Climax) + Anti-Chase Kalkanı (102 saf kripto 10.4g önyargısız testte H1+H2 kanıtlı):
+  // 🌋 Wyckoff Hacim Tükenişi (Climax) + Taze Hareket (Anti-Chase) Kalkanı (62.5g 102 saf kripto H1+H2 + 6/6 10-günlük dönem kanıtlı):
   // - Vol > 5.5x: likidasyon/FOMO zirvesi (VELVET 5.78x, SKY 5.86x gibi)
-  // - distEma20 > %4.5 veya |move| > 2.4x ATR: hareket bitmiş, EMA20'den aşırı kopmuş geç kovalama (-$36.7 / -$49.7)
+  // - distEma20 > %4.0 veya |chg4h| > %6.0 veya |move| > 2.4x ATR: hareket bitmiş/tükenmiş geç kovalama (H1 -3.5R & H2 -4.0R = -7.5R zarar)
   if (volMult > 5.50) return { approved: false, why: 'VOL_CLIMAX', ...diag };
-  if (distEma20 > 4.50) return { approved: false, why: 'EMA_STRETCH', ...diag };
+  if (distEma20 > 4.00) return { approved: false, why: 'EMA_STRETCH', ...diag };
 
   const longOk =
     move >= atr15 * 0.90 &&
@@ -1508,7 +1508,7 @@ function evaluateWhaleSpike15m(k, idx) {
     ema20 > ema50 &&
     taker >= 60.0 &&
     chg4h >= 2.0 &&
-    chg4h <= 12.0 &&
+    chg4h <= 6.0 &&
     upperWick <= 0.45;
 
   const shortOk =
@@ -1518,7 +1518,7 @@ function evaluateWhaleSpike15m(k, idx) {
     ema20 < ema50 &&
     taker <= 40.0 &&
     chg4h <= -2.0 &&
-    chg4h >= -12.0 &&
+    chg4h >= -6.0 &&
     lowerWick <= 0.45;
 
   if (longOk) {
