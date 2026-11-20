@@ -52,7 +52,7 @@ let CONFIG = {
 // Giriş genişliği. Ajan toplantısı bunu değiştirmez.
 let DYNAMIC = {
   vol3hMin: 0.8,
-  candidateSlice: 120,
+  candidateSlice: 200,
   regime: 'WHALE_15M',
   mode: 'MARSCOIN_15M_WHALE',
   updatedAt: 0
@@ -412,22 +412,7 @@ function initStorage() {
     if (fs.existsSync(HISTORY_FILE)) {
       history = JSON.parse(fs.readFileSync(HISTORY_FILE, 'utf8'));
       if (!Array.isArray(history)) history = [];
-      const stamp = (h) => {
-        const n = Number(h.entryTimeMs) || 0;
-        if (n > 0) return n;
-        const ds = String(h.entryTimeStr || h.dateFullStr || '');
-        const m = ds.match(/(\d{2})\.(\d{2})\.(\d{4})\s+(\d{2}):(\d{2}):(\d{2})/);
-        if (!m) return 0;
-        return Date.UTC(+m[3], +m[2] - 1, +m[1], +m[4] - 3, +m[5], +m[6]);
-      };
-      const newestMs = history.reduce((mx, h) => Math.max(mx, stamp(h)), 0);
-      const staleBook = history.length > 0 && newestMs > 0 && (Date.now() - newestMs) > 36 * 60 * 60 * 1000;
-      if (staleBook) {
-        history = [];
-        balance = CONFIG.initialBalance;
-        activePositions = [];
-        addLog('Eski işlem defteri (36 saatten eski) yok sayıldı. Kasa $100.', 'RESET');
-      } else if (history.length > 0) {
+      if (history.length > 0) {
         const totalPnl = history.reduce((acc, h) => acc + (h.pnl || 0), 0);
         const activeTpPnl = Array.isArray(activePositions) ? activePositions.reduce((acc, p) => acc + (p.tp1Pnl || 0) + (p.tp2Pnl || 0), 0) : 0;
         balance = CONFIG.initialBalance + totalPnl + activeTpPnl;
@@ -1114,9 +1099,13 @@ async function fetchBinanceRaw(relativePath) {
     errors.push('fapi bekliyor');
   }
 
-  // Spot fallback'i SADECE Futures genel olarak kapalıyken (veya fiyat/book dışı genel fallback olarak) kullan;
-  // tekil Futures kline/bookTicker/exchangeInfo isteklerini Spot Taker verisiyle kirletme!
-  const allowSpotFallback = !relativePath.includes('/fapi/v1/klines') && !relativePath.includes('/fapi/v1/exchangeInfo') && !relativePath.includes('/fapi/v1/ticker/bookTicker');
+  // Futures işlem/fiyat uçlarını (klines, exchangeInfo, bookTicker, ticker/price) ASLA Spot verisiyle kirletme!
+  // Spot-Futures makası (%0.3-%0.8) sahte stop-loss veya yanlış Taker sinyaline yol açar; 1sn sonra Futures tekrar denenir.
+  const allowSpotFallback =
+    !relativePath.includes('/fapi/v1/klines') &&
+    !relativePath.includes('/fapi/v1/exchangeInfo') &&
+    !relativePath.includes('/fapi/v1/ticker/bookTicker') &&
+    !relativePath.includes('/fapi/v1/ticker/price');
   if (!allowSpotFallback) {
     lastFeedError = errors.slice(0, 4).join(', ');
     return null;
@@ -1822,8 +1811,10 @@ let lastScanHeartbeat = 0;
 async function scanLoop() {
   if (isScanRunning || !isBotActive) return;
   isScanRunning = true;
+  const scanEpoch = resetEpoch;
   try {
     applyCircuitBreaker();
+    await refreshExchangeInfoFilter();
     if (activePositions.length >= CONFIG.maxSlots) {
       checkSlotRotation();
       return;
@@ -1910,23 +1901,8 @@ async function scanLoop() {
         if (oldest.p > 0) rollMovePct = ((newest.p - oldest.p) / oldest.p) * 100;
       }
 
-      // 🐋 15DK BALİNA ÖNCELİĞİ: Güçlü 15dk ivme + baskın Taker olan koinler en üste çıkar!
-      const rInfo = radarMap[sym];
-      let radarBoost = 0;
-      if (rInfo) {
-        if (rInfo.signal && rInfo.signal.includes("BALİNA")) radarBoost += 65;
-        else if (rInfo.signal && (rInfo.signal.includes("ROKET") || rInfo.signal.includes("BOĞA") || rInfo.signal.includes("SIÇRAMA") || rInfo.signal.includes("AYI") || rInfo.signal.includes("ŞELALE"))) radarBoost += 35;
-        const c15 = Number(rInfo.chg15m) || 0;
-        const t15 = Number(rInfo.taker15m) || 50;
-        if (c15 >= 0.70 && c15 <= 7.50 && t15 >= 55) radarBoost += 70;
-        if (c15 <= -0.70 && c15 >= -7.50 && t15 <= 45) radarBoost += 70;
-        const buyTaker = rInfo.takerBuyRatio || 50;
-        const sellTaker = 100 - buyTaker;
-        if (buyTaker >= 54.0 || sellTaker >= 54.0 || t15 >= 56.0 || (100 - t15) >= 56.0) radarBoost += 20;
-      }
-
       const cappedDailyChg = Math.min(Math.abs(rawChg), 45.0);
-      const hotScore = (Math.abs(rollMovePct) * 25) + radarBoost + (cappedDailyChg * 1.5) + Math.min(volM * 0.15, 20) + (isVip ? 15 : 0);
+      const hotScore = (Math.abs(rollMovePct) * 25) + (cappedDailyChg * 1.5) + Math.min(volM * 0.15, 20) + (isVip ? 15 : 0);
 
       return {
         ...t,
@@ -1937,11 +1913,10 @@ async function scanLoop() {
         isVip
       };
     })
-    // 🚀 TÜM LİKİT SAF KRİPTO FUTURES'LAR (≥$10M, ~105-120 koin) TARANIR — radarMap kör noktası kaldırıldı!
-    // Böylece uyuyup yeni uyanan BARDUSDT (+$8.88) gibi Moonshot'lar 15dk kapanış anında kaçmaz!
+    // 🚀 TÜM LİKİT SAF KRİPTO FUTURES'LAR (≥$10M, 200 koine kadar kesintisiz) TARANIR!
     .filter(t => t.volM >= 10 && t.chg <= 80 && t.chg >= -50)
     .sort((a, b) => b.hotScore - a.hotScore)
-    .slice(0, Math.max(120, Number(DYNAMIC.candidateSlice) || 120));
+    .slice(0, Math.max(200, Number(DYNAMIC.candidateSlice) || 200));
 
     const secIn15mNow = Math.floor((now / 1000) % 900);
     const expectedClosedTs = (Math.floor(now / 900000) * 900000) - 900000;
@@ -2237,6 +2212,8 @@ async function scanLoop() {
       }
     }
 
+    if (resetEpoch !== scanEpoch || !isBotActive) return;
+
     if (scanEntryCandidates.length > 0 && activePositions.length < CONFIG.maxSlots) {
       scanEntryCandidates.sort((a, b) => b.entryScore - a.entryScore);
       const taken = new Set(activePositions.map((p) => p.symbol));
@@ -2483,13 +2460,16 @@ function schedulePostTradeTelemetry(tradeRecord, entryTimeMs) {
     { key: 'cp15m', min: 15 }
   ];
   const now = Date.now();
+  const capturedEpoch = resetEpoch;
   for (const cp of checkpoints) {
     if (tradeRecord[cp.key] !== null && tradeRecord[cp.key] !== undefined) continue;
     const targetMs = entryTimeMs + (cp.min * 60 * 1000);
     const delayMs = Math.max(1000, targetMs - now);
     setTimeout(async () => {
+      if (resetEpoch !== capturedEpoch) return;
       try {
         const pData = await fetchBinance(`/fapi/v1/ticker/price?symbol=${tradeRecord.symbol}`);
+        if (resetEpoch !== capturedEpoch) return;
         if (pData && pData.price && tradeRecord.entryPrice > 0) {
           const curP = parseFloat(pData.price);
           const isLong = tradeRecord.side === "LONG";
@@ -2607,16 +2587,18 @@ function closeTrade(pos, exitReason) {
   const totalTradeRoi = (totalTradePnl / initialMargin) * 100;
   
   let formattedExitReason = exitReason;
-  const anyTpTaken = pos.tp1Taken || pos.tp2Taken;
-  const tpTag = pos.tp2Taken ? "TP1+TP2 CEPTE" : (pos.tp1Taken ? "TP1 CEPTE" : "");
-  if (anyTpTaken && exitReason.includes("Başabaş")) {
-    formattedExitReason = `🛡️ ${tpTag} + Kalan Başabaş Kapandı (+%${totalTradeRoi.toFixed(1)} ROI / +$${totalTradePnl.toFixed(2)})`;
-  } else if (anyTpTaken && exitReason.includes("Garanti Kilitli")) {
-    formattedExitReason = `🔒 ${tpTag} + Runner Kilitli Kâr (+%${totalTradeRoi.toFixed(1)} ROI / +$${totalTradePnl.toFixed(2)} / Zirve: +%${(pos.mfe || 0).toFixed(2)} Spot)`;
-  } else if (anyTpTaken && (exitReason.includes("Lazer Kâr Kilidi") || exitReason.includes("Zirve Kâr Neşteri"))) {
-    formattedExitReason = `🏆 ${tpTag} + Zirve Kâr Neşteri (+%${totalTradeRoi.toFixed(1)} ROI / +${totalTradePnl.toFixed(2)} / Zirve: +%${(pos.mfe || 0).toFixed(2)} Spot)`;
-  } else if (anyTpTaken && exitReason.includes("MOONSHOT")) {
-    formattedExitReason = `🎯 3 KADEMELİ MOONSHOT ALINDI (Toplam: +$${totalTradePnl.toFixed(2)} / +%${totalTradeRoi.toFixed(1)} ROI)`;
+  const hasPartialTp = Math.abs(pos.tp1Pnl || 0) > 0.001 || Math.abs(pos.tp2Pnl || 0) > 0.001;
+  const tpTag = (pos.tp2Pnl ? "TP1+TP2 CEPTE" : (pos.tp1Pnl ? "TP1 CEPTE" : ""));
+  const signRoi = `${totalTradeRoi >= 0 ? '+' : ''}%${totalTradeRoi.toFixed(1)}`;
+  const signPnl = `${totalTradePnl >= 0 ? '+$' : '-$'}${Math.abs(totalTradePnl).toFixed(2)}`;
+  if (hasPartialTp && exitReason.includes("Başabaş")) {
+    formattedExitReason = `🛡️ ${tpTag} + Kalan Başabaş Kapandı (${signRoi} ROI / ${signPnl})`;
+  } else if (hasPartialTp && exitReason.includes("Garanti Kilitli")) {
+    formattedExitReason = `🔒 ${tpTag} + Runner Kilitli Kâr (${signRoi} ROI / ${signPnl} / Zirve: +%${(pos.mfe || 0).toFixed(2)} Spot)`;
+  } else if (hasPartialTp && exitReason.includes("MOONSHOT")) {
+    formattedExitReason = `🎯 3 KADEMELİ MOONSHOT ALINDI (Toplam: ${signPnl} / ${signRoi} ROI)`;
+  } else if (!hasPartialTp && exitReason.includes("Garanti Kilitli")) {
+    formattedExitReason = `🔒 Runner İz Süren Kilitli Kâr (${signRoi} ROI / ${signPnl} / Zirve: +%${(pos.mfe || 0).toFixed(2)} Spot)`;
   }
 
   // 🛡️ Aynı koinde ardışık zarar kalkanı + 30 dk soğuma (2 ardışık zararda 4 saat soğuma!)
@@ -4418,7 +4400,8 @@ const pingStats = {
 
 // 5. HTTP SUNUCUSU
 const server = http.createServer(async (req, res) => {
-  const parsedUrl = new URL(req.url, `http://${req.headers.host}`);
+  try {
+  const parsedUrl = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
   const pathname = parsedUrl.pathname;
 
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -4531,7 +4514,7 @@ const server = http.createServer(async (req, res) => {
 
   if (pathname === '/api/radar') {
     const tf = parsedUrl.searchParams.get('tf') || '15m';
-    const items = tf === '15m' ? radarList : await scanRadarBoard(tf);
+    const items = (tf === '15m' && radarList.length > 0) ? radarList : await scanRadarBoard(tf);
     const tagged = items.map(x => ({
       ...x,
       bot: tf === '15m' && (radarLeaderLong.has(x.symbol) || radarLeaderShort.has(x.symbol))
@@ -4742,8 +4725,9 @@ const server = http.createServer(async (req, res) => {
     if (global.whaleEvaluatedCandles) global.whaleEvaluatedCandles.clear();
     DYNAMIC.mode = 'MARSCOIN_15M_WHALE';
     DYNAMIC.vol3hMin = 0.8;
-    DYNAMIC.candidateSlice = 120;
+    DYNAMIC.candidateSlice = 200;
     circuitOn = false;
+    isBotActive = true;
     CONFIG.maxSlots = userRisk.maxSlots;
     CONFIG.marginPerTrade = userRisk.marginPerTrade;
     try {
@@ -4832,6 +4816,14 @@ const server = http.createServer(async (req, res) => {
 
   res.writeHead(404, { 'Content-Type': 'text/plain' });
   res.end("Not Found");
+  } catch (err) {
+    try {
+      if (!res.headersSent) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, error: err && err.message ? err.message : 'Sunucu hatası' }));
+      }
+    } catch (e) {}
+  }
 });
 
 // SUNUCUYU BAŞLAT
