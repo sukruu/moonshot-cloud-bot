@@ -115,7 +115,7 @@ function engineSnapshot() {
     userSlots: userRisk.maxSlots,
     userMargin: userRisk.marginPerTrade,
     gates: {
-      entry: '15dk Balina (2.5–5.5x) · Anti-Chase',
+      entry: '15dk Balina (2.5–5.5x · Taker ≥%60)',
       book: 'defter fiyatı',
       judge: 'açık',
       flow: '15dk & 4s Saf Kripto Futures balina akışı',
@@ -1506,7 +1506,7 @@ function evaluateWhaleSpike15m(k, idx) {
     move <= atr15 * 2.40 &&
     c > ema20 &&
     ema20 > ema50 &&
-    taker >= 56.0 &&
+    taker >= 60.0 &&
     chg4h >= 2.0 &&
     chg4h <= 12.0 &&
     upperWick <= 0.45;
@@ -1516,7 +1516,7 @@ function evaluateWhaleSpike15m(k, idx) {
     move >= -atr15 * 2.40 &&
     c < ema20 &&
     ema20 < ema50 &&
-    taker <= 44.0 &&
+    taker <= 40.0 &&
     chg4h <= -2.0 &&
     chg4h >= -12.0 &&
     lowerWick <= 0.45;
@@ -1788,7 +1788,7 @@ async function runHistoricalReplay(hours = 72, maxCoins = 45) {
           const q = parseFloat(k[i][7]) || 0;
           const tb = parseFloat(k[i][10]) || 0;
           const takerFast = q > 0 ? (tb / q) * 100 : 50;
-          if (takerFast > 44 && takerFast < 56) continue;
+          if (takerFast > 40 && takerFast < 60) continue;
           const sig = evaluateWhaleSpike15m(k, i);
           if (sig && sig.approved) {
             if (btcReg && ((sig.side === 'LONG' && btcReg !== 'BULL') || (sig.side === 'SHORT' && btcReg !== 'BEAR'))) continue;
@@ -3751,7 +3751,7 @@ function serveDashboardHtml() {
         <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
           <div>
             <h2 style="margin:0; color:#38bdf8;">⏪ GERÇEK GEÇMİŞ REPLAY & EXCEL AKTARICI</h2>
-            <div style="font-size:12px; color:var(--muted); margin-top:4px;">Birebir canlı <b>15dk Balina Motoru (2.5x–5.5x Hacim + EMA20/50 + BTC 15dk Rejim Kalkanı + LONG 5.0R / SHORT 0.90R İz Süren)</b> ile geçmiş Binance Futures mumlarını tarar.</div>
+            <div style="font-size:12px; color:var(--muted); margin-top:4px;">Birebir canlı <b>15dk Balina Motoru (2.5x–5.5x Hacim + Taker ≥%60 + EMA20/50 + BTC 15dk Rejim Kalkanı + LONG 5.0R / SHORT 0.90R İz Süren)</b> ile geçmiş Binance Futures mumlarını tarar.</div>
           </div>
           <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
             <select id="selReplayHours" onchange="loadReplay()" style="background:var(--panel2); color:var(--text); border:1px solid var(--border); border-radius:6px; padding:6px 8px; font-weight:800;">
