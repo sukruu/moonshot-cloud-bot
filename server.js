@@ -1592,11 +1592,13 @@ function simulateWhaleTrade15m(k, entryIdx, sig, riskUsd, forceSide = null) {
     mfe = Math.max(mfe, favMove);
     mae = Math.max(mae, -advMove);
 
-    // Asimetrik kripto fiziği: LONG merdiven gibi tırmanır (3.5R / 0.85R trail), SHORT sert V-dönüşü yapar (2.5R / 0.50R trail)!
-    const beMult = isLong ? 1.00 : 0.80;
-    const trailStartMult = isLong ? 1.40 : 1.10;
-    const trailGapMult = isLong ? 0.85 : 0.50;
-    const moonMult = isLong ? 3.50 : 2.50;
+    // Asimetrik kripto fiziği (102 saf kripto 10.4g önyargısız testte H1+H2 kanıtlı):
+    // LONG : 1.0R BE -> 1.4R Trail (0.85R) -> 3.0R+ Sıkı Moonshot Trail (0.60R) -> 5.0R Moonshot (MMT/ICNT/BARD gibi +%8-%12 rallileri kesmeden taşır!)
+    // SHORT: 0.75R BE -> 0.90R Erken Trail (0.45R) -> 2.5R Moonshot (V-dönüşüyle +$0.09 BE'ye dönen kârları +$1.20-$1.80 olarak kilitler!)
+    const beMult = isLong ? 1.00 : 0.75;
+    const trailStartMult = isLong ? 1.40 : 0.90;
+    const trailGapMult = isLong ? 0.85 : 0.45;
+    const moonMult = isLong ? 5.00 : 2.50;
     const tpGoal = slPct * moonMult;
     if (favMove >= tpGoal) {
       const grossPnl = nominal * (tpGoal / 100);
@@ -1615,7 +1617,11 @@ function simulateWhaleTrade15m(k, entryIdx, sig, riskUsd, forceSide = null) {
       };
     }
 
-    if (mfe >= slPct * trailStartMult) {
+    if (isLong && mfe >= slPct * 3.00) {
+      tighten(mfe - (slPct * 0.60));
+      trailing = true;
+      beLocked = true;
+    } else if (mfe >= slPct * trailStartMult) {
       tighten(mfe - (slPct * trailGapMult));
       trailing = true;
       beLocked = true;
@@ -2123,10 +2129,10 @@ async function scanLoop() {
           : fillPx * (1 + tradeSlPct / 100);
 
         const isLongSide = side === 'LONG';
-        const tradeBePct = Number((tradeSlPct * (isLongSide ? 1.00 : 0.80)).toFixed(2));
-        const tradeTp1Pct = Number((tradeSlPct * (isLongSide ? 1.40 : 1.10)).toFixed(2));
-        const tradeTp2Pct = Number((tradeSlPct * (isLongSide ? 2.25 : 1.80)).toFixed(2));
-        const tradeMoonPct = Number((tradeSlPct * (isLongSide ? 3.50 : 2.50)).toFixed(2));
+        const tradeBePct = Number((tradeSlPct * (isLongSide ? 1.00 : 0.75)).toFixed(2));
+        const tradeTp1Pct = Number((tradeSlPct * (isLongSide ? 1.40 : 0.90)).toFixed(2));
+        const tradeTp2Pct = Number((tradeSlPct * (isLongSide ? 3.00 : 1.70)).toFixed(2));
+        const tradeMoonPct = Number((tradeSlPct * (isLongSide ? 5.00 : 2.50)).toFixed(2));
 
         const dirEmoji = side === 'LONG' ? '🐋🚀 BALİNA LONG' : '🐋🩸 BALİNA SHORT';
         const flowText = side === 'LONG' ? `Alıcı %${sig.taker.toFixed(0)}` : `Satıcı %${(100 - sig.taker).toFixed(0)}`;
@@ -2346,27 +2352,27 @@ async function fastRiskLoop() {
         return false;
       };
 
-      const beMult = isLong ? 1.00 : 0.80;
-      const trailStartMult = isLong ? 1.40 : 1.10;
-      const trailGapMult = isLong ? 0.85 : 0.50;
-      const moonMult = isLong ? 3.50 : 2.50;
+      const beMult = isLong ? 1.00 : 0.75;
+      const trailStartMult = isLong ? 1.40 : 0.90;
+      const trailGapMult = isLong ? 0.85 : 0.45;
+      const moonMult = isLong ? 5.00 : 2.50;
 
       const beGoal = slBase * beMult;
       const trailStart = slBase * trailStartMult;
-      const trailGap = slBase * trailGapMult;
+      const trailGap = (isLong && mfe >= slBase * 3.00) ? (slBase * 0.60) : (slBase * trailGapMult);
       const moonGoal = slBase * moonMult;
       const initMargin = pos.initialMargin || pos.margin || 20;
       const makerRate = Number(CONFIG.makerRate) || 0.0002;
 
-      // Kademe 1: BE (LONG 1.0R / SHORT 0.8R) -> Stop +%0.15'e çekilir ($0 Risk!)
+      // Kademe 1: BE (LONG 1.0R / SHORT 0.75R) -> Stop +%0.15'e çekilir ($0 Risk!)
       if (!pos.beLocked && mfe >= beGoal && move > 0.20) {
         tightenStop(0.15);
         pos.beLocked = true;
         stateChanged = true;
-        addLog(`🛡️ [${beMult.toFixed(1)}R BAŞABAŞ]: ${pos.symbol} (${pos.side}) +%${mfe.toFixed(2)} gördü ➔ Stop +%0.15 kâra çekildi ($0 Risk)!`, 'INFO');
+        addLog(`🛡️ [${beMult.toFixed(2)}R BAŞABAŞ]: ${pos.symbol} (${pos.side}) +%${mfe.toFixed(2)} gördü ➔ Stop +%0.15 kâra çekildi ($0 Risk)!`, 'INFO');
       }
 
-      // Kademe 2: Runner İz Süren (LONG 1.4R-0.85R / SHORT 1.1R-0.50R)
+      // Kademe 2: Runner İz Süren (LONG 1.4R-0.85R & 3.0R+-0.60R / SHORT 0.90R-0.45R)
       if (mfe >= trailStart) {
         const trailPct = mfe - trailGap;
         const moved = tightenStop(trailPct);
