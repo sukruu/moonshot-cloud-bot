@@ -953,7 +953,7 @@ function getCachePolicy(relativePath) {
   if (relativePath.includes('exchangeInfo')) {
     return { ttlMs: 6 * 60 * 60 * 1000, staleMs: 24 * 60 * 60 * 1000 };
   }
-  if (relativePath.includes('limit=1000') || relativePath.includes('limit=500')) {
+  if (relativePath.includes('limit=1500') || relativePath.includes('limit=1000') || relativePath.includes('limit=500') || relativePath.includes('endTime=')) {
     return { ttlMs: 10 * 60 * 1000, staleMs: 30 * 60 * 1000 }; // Geçmiş Replay mumları 10 dk önbellekte kalır (429 rate-limit engeli!)
   }
   if (relativePath.includes('ticker/24hr')) {
@@ -1065,7 +1065,7 @@ async function fetchBinanceRaw(relativePath) {
       for (const base of BINANCE_FAPI_MIRRORS) {
         if ((fapiMirrorDownUntil.get(base) || 0) > Date.now()) continue;
         triedFapi++;
-        const reqTimeout = isBook ? 8000 : (relativePath.includes('limit=1000') || relativePath.includes('limit=500') || relativePath.includes('exchangeInfo') ? 12000 : 5500);
+        const reqTimeout = isBook ? 8000 : (relativePath.includes('limit=1500') || relativePath.includes('limit=1000') || relativePath.includes('limit=500') || relativePath.includes('endTime=') || relativePath.includes('exchangeInfo') ? 12000 : 5500);
         const hit = await fetchJson(base + relativePath, reqTimeout);
         if (hit.banMs) {
           fapiMirrorDownUntil.set(base, Date.now() + hit.banMs);
@@ -1650,11 +1650,87 @@ function simulateWhaleTrade15m(k, entryIdx, sig, riskUsd, forceSide = null) {
   return null;
 }
 
+// 🧭 BTC 15DK EMA20/EMA50 REJİM MOTORU (62.5 günlük 102 saf kripto Walk-Forward + Double-Taker testinde kanıtlı):
+// - BULL (c > EMA20 > EMA50): Sadece LONG balina kırılımları açılır
+// - BEAR (c < EMA20 < EMA50): Sadece SHORT balina kırılımları açılır
+// - CHOP (BTC EMA20/50 arasında testere): İki yön de otomatik beklemeye geçer (testere katliamını engeller!)
+let liveBtcRegime = { ts: 0, regime: 'UNKNOWN', label: '⏳ BTC Rejimi hesaplanıyor', close: 0, ema20: 0, ema50: 0 };
+
+function formatBtcRegimeLabel(regime) {
+  if (regime === 'BULL') return '🟢 BTC BOĞA (Sadece LONG)';
+  if (regime === 'BEAR') return '🔴 BTC AYI (Sadece SHORT)';
+  if (regime === 'CHOP') return '🟡 BTC TESTERE (Beklemede)';
+  return '⏳ BTC Rejimi hesaplanıyor';
+}
+
+function buildBtcRegimeMap15m(btcKlines) {
+  const byTs = new Map();
+  let latest = { ts: 0, regime: 'UNKNOWN', label: formatBtcRegimeLabel('UNKNOWN'), close: 0, ema20: 0, ema50: 0 };
+  if (!Array.isArray(btcKlines) || btcKlines.length < 55) return { byTs, latest };
+  let ema20 = parseFloat(btcKlines[0][4]) || 0;
+  let ema50 = ema20;
+  for (let i = 0; i < btcKlines.length; i++) {
+    const c = parseFloat(btcKlines[i][4]) || ema20;
+    if (i > 0) {
+      ema20 = (c * (2 / 21)) + (ema20 * (19 / 21));
+      ema50 = (c * (2 / 51)) + (ema50 * (49 / 51));
+    }
+    if (i >= 50) {
+      let regime = 'CHOP';
+      if (c > ema20 && ema20 > ema50) regime = 'BULL';
+      else if (c < ema20 && ema20 < ema50) regime = 'BEAR';
+      const ts = Number(btcKlines[i][0]) || 0;
+      byTs.set(ts, regime);
+      latest = { ts, regime, label: formatBtcRegimeLabel(regime), close: c, ema20, ema50 };
+    }
+  }
+  return { byTs, latest };
+}
+
+async function fetchKlines15mPaged(sym, totalBars) {
+  const want = Math.max(80, Math.min(3000, Math.round(totalBars)));
+  if (want <= 1500) {
+    let k = await fetchBinance(`/fapi/v1/klines?symbol=${sym}&interval=15m&limit=${want}`);
+    if (!Array.isArray(k) || k.length < 75) {
+      await new Promise(r => setTimeout(r, 350));
+      k = await fetchBinance(`/fapi/v1/klines?symbol=${sym}&interval=15m&limit=${want}`);
+    }
+    return Array.isArray(k) ? k : null;
+  }
+  const pages = Math.ceil(want / 1500);
+  const chunks = [];
+  let endTime = null;
+  for (let p = 0; p < pages; p++) {
+    const reqLimit = Math.min(1500, want - (p * 1500) + 10);
+    const pathUrl = `/fapi/v1/klines?symbol=${sym}&interval=15m&limit=${reqLimit}` + (endTime ? `&endTime=${endTime}` : '');
+    let k = await fetchBinance(pathUrl);
+    if (!Array.isArray(k) || k.length < 20) {
+      await new Promise(r => setTimeout(r, 350));
+      k = await fetchBinance(pathUrl);
+    }
+    if (!Array.isArray(k) || k.length === 0) break;
+    chunks.unshift(k);
+    if (k.length < reqLimit - 20) break;
+    endTime = Number(k[0][0]) - 1;
+  }
+  const merged = [];
+  let lastTs = -1;
+  for (const ch of chunks) {
+    for (const row of ch) {
+      const ts = Number(row[0]) || 0;
+      if (ts <= lastTs) continue;
+      lastTs = ts;
+      merged.push(row);
+    }
+  }
+  return merged.length >= 75 ? merged : null;
+}
+
 const replayCache = new Map();
 let replayInFlight = null;
 
 async function runHistoricalReplay(hours = 72, maxCoins = 45) {
-  const hClamped = Math.max(12, Math.min(240, Math.round(Number(hours) || 72)));
+  const hClamped = Math.max(12, Math.min(720, Math.round(Number(hours) || 72)));
   const cClamped = Math.max(15, Math.min(55, Math.round(Number(maxCoins) || 45)));
   const cacheKey = `${hClamped}:${cClamped}`;
   const cached = replayCache.get(cacheKey);
@@ -1682,18 +1758,17 @@ async function runHistoricalReplay(hours = 72, maxCoins = 45) {
         if (picked.length >= cClamped) break;
       }
 
-      const barLimit = Math.min(1000, Math.ceil(hClamped * 4) + 65);
+      const barLimit = Math.min(2950, Math.ceil(hClamped * 4) + 65);
+      const btcKlines = await fetchKlines15mPaged('BTCUSDT', barLimit);
+      const btcRegime = buildBtcRegimeMap15m(btcKlines);
+
       const coinKlines = [];
       // 🛡️ Kibar 5'li tarama + rate-limit koruması (Futures koinlerinin Spot'a düşüp eksilmesini önler!)
       for (let i = 0; i < picked.length; i += 5) {
         const chunk = picked.slice(i, i + 5);
         const part = await Promise.all(chunk.map(async sym => {
           try {
-            let k = await fetchBinance(`/fapi/v1/klines?symbol=${sym}&interval=15m&limit=${barLimit}`);
-            if (!Array.isArray(k) || k.length < 75) {
-              await new Promise(r => setTimeout(r, 400));
-              k = await fetchBinance(`/fapi/v1/klines?symbol=${sym}&interval=15m&limit=${barLimit}`);
-            }
+            const k = await fetchKlines15mPaged(sym, barLimit);
             return (Array.isArray(k) && k.length >= 75) ? { symbol: sym, k } : null;
           } catch (e) { return null; }
         }));
@@ -1708,12 +1783,15 @@ async function runHistoricalReplay(hours = 72, maxCoins = 45) {
         for (let i = 60; i < k.length - 2; i++) {
           const ts = Number(k[i][0]) || 0;
           if (ts < cutoffTs) continue;
+          const btcReg = btcRegime.byTs.get(ts);
+          if (btcRegime.byTs.size > 0 && (!btcReg || btcReg === 'CHOP')) continue;
           const q = parseFloat(k[i][7]) || 0;
           const tb = parseFloat(k[i][10]) || 0;
           const takerFast = q > 0 ? (tb / q) * 100 : 50;
           if (takerFast > 44 && takerFast < 56) continue;
           const sig = evaluateWhaleSpike15m(k, i);
           if (sig && sig.approved) {
+            if (btcReg && ((sig.side === 'LONG' && btcReg !== 'BULL') || (sig.side === 'SHORT' && btcReg !== 'BEAR'))) continue;
             events.push({ ...sig, symbol: cd.symbol, idx: i, k });
           }
         }
@@ -1974,20 +2052,41 @@ async function scanLoop() {
     const secIn15mNow = Math.floor((now / 1000) % 900);
     const expectedClosedTs = (Math.floor(now / 900000) * 900000) - 900000;
 
+    // 🧭 BTC 15dk EMA20/EMA50 Rejimini tazele (ilk açılışta veya yeni 15dk mum kapandığında 1 kez çeker!)
+    if (liveBtcRegime.ts !== expectedClosedTs && (liveBtcRegime.regime === 'UNKNOWN' || secIn15mNow >= 4)) {
+      try {
+        const btcK = await fetchBinance('/fapi/v1/klines?symbol=BTCUSDT&interval=15m&limit=120');
+        if (Array.isArray(btcK) && btcK.length >= 60) {
+          const closedBtcIdx = btcK.length - 2;
+          const closedBtcTs = Number(btcK[closedBtcIdx][0]) || 0;
+          if (closedBtcTs === expectedClosedTs || liveBtcRegime.regime === 'UNKNOWN') {
+            liveBtcRegime = buildBtcRegimeMap15m(btcK.slice(0, closedBtcIdx + 1)).latest;
+          }
+        }
+      } catch (e) {}
+    }
+
     if (now - lastScanHeartbeat > 60000 && topCandidates.length > 0) {
       lastScanHeartbeat = now;
       const windowLbl = (secIn15mNow >= 4 && secIn15mNow <= 180)
         ? '⚡ 15dk Kapanış Taraması AÇIK'
         : `⏳ Sonraki 15dk mum: ${Math.ceil((900 - secIn15mNow) / 60)} dk`;
-      addLog(`🐋 [15dk Balina Tarayıcı]: ${validTickers.length} Saf Kripto (${topCandidates.length} Likit Aday ≥$10M) | Lider: ${topCandidates[0].symbol} (24s: %${topCandidates[0].chg.toFixed(1)}, Puan: ${topCandidates[0].hotScore.toFixed(0)}) | ${windowLbl} | Slot: ${activePositions.length}/${CONFIG.maxSlots}`);
+      addLog(`🐋 [15dk Balina Tarayıcı]: ${validTickers.length} Saf Kripto (${topCandidates.length} Likit Aday ≥$10M) | ${liveBtcRegime.label} | Lider: ${topCandidates[0].symbol} (24s: %${topCandidates[0].chg.toFixed(1)}) | ${windowLbl} | Slot: ${activePositions.length}/${CONFIG.maxSlots}`);
     }
 
     if (!global.whaleEvaluatedCandles) global.whaleEvaluatedCandles = new Map();
 
     // 🛡️ API AĞIRLIK KORUMASI & REPLAY 1-E-1 EŞİTLEME:
     // Yalnızca 15dk mum kapandıktan hemen sonra (4sn..180sn) tara ve her koini o kapanış için YALNIZCA 1 KEZ değerlendir!
-    // (Kapanmamış LATE_15M mumlara erken atlama yok; ~110 koin ~3 saniyede taranır, kalan 14.5 dk 0 kline ağırlığı!)
     if (secIn15mNow < 4 || secIn15mNow > 180) {
+      return;
+    }
+
+    // 🧭 BTC Rejimi henüz yeni mumu görmediyse 5sn bekle; TESTERE (CHOP) ise 100 altkoini boşuna tarama!
+    if (liveBtcRegime.ts !== expectedClosedTs) {
+      return;
+    }
+    if (liveBtcRegime.regime === 'CHOP') {
       return;
     }
 
@@ -2051,6 +2150,12 @@ async function scanLoop() {
 
         if (!sig.approved) {
           if (sig.volMult >= 1.8) shadow(`WHALE_${sig.why}`, { volMult: Number(sig.volMult.toFixed(2)) });
+          continue;
+        }
+
+        // 🧭 BTC 15dk EMA20/EMA50 Rejim Uyumu (Replay ile %100 birebir!)
+        if ((sig.side === 'LONG' && liveBtcRegime.regime !== 'BULL') || (sig.side === 'SHORT' && liveBtcRegime.regime !== 'BEAR')) {
+          shadow('BTC_REGIME_SKIP', { btcRegime: liveBtcRegime.regime });
           continue;
         }
 
@@ -3646,7 +3751,7 @@ function serveDashboardHtml() {
         <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
           <div>
             <h2 style="margin:0; color:#38bdf8;">⏪ GERÇEK GEÇMİŞ REPLAY BACKTEST (GİRSEYDİK NE OLURDU?)</h2>
-            <div style="font-size:12px; color:var(--muted); margin-top:4px;">Birebir canlı <b>15dk Balina Motoru (2.5x Hacim + EMA20/50 + 3.5R İz Süren Runner)</b> ile geçmiş Binance Futures mumlarını kronolojik tarar. Aynı mumda hem stop hem hedef varsa önce STOP sayar, tam komisyon ve kayma düşer.</div>
+            <div style="font-size:12px; color:var(--muted); margin-top:4px;">Birebir canlı <b>15dk Balina Motoru (2.5x–5.5x Hacim + EMA20/50 + BTC 15dk Rejim Kalkanı + LONG 5.0R / SHORT 0.90R İz Süren)</b> ile geçmiş Binance Futures mumlarını kronolojik tarar. Aynı mumda hem stop hem hedef varsa önce STOP sayar, tam komisyon ve kayma düşer.</div>
           </div>
           <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
             <select id="selReplayHours" onchange="loadReplay()" style="background:var(--panel2); color:var(--text); border:1px solid var(--border); border-radius:6px; padding:6px 8px; font-weight:800;">
@@ -3654,6 +3759,7 @@ function serveDashboardHtml() {
               <option value="72" selected>Son 3 Gün (72s)</option>
               <option value="168">Son 7 Gün (168s)</option>
               <option value="240">Son 10 Gün (240s)</option>
+              <option value="720">Son 30 Gün (720s · Walk-Forward)</option>
             </select>
             <button class="theme-toggle-btn" id="btnRunReplay" onclick="loadReplay()">⏪ Geçmişi Simüle Et</button>
             <button class="theme-toggle-btn" onclick="exportReplayExcel()">📥 Replay Excel / CSV</button>
@@ -4700,6 +4806,7 @@ const server = http.createServer(async (req, res) => {
       dynamic: DYNAMIC,
       pingStats: pingStats,
       shadowCount: shadowSignals.length,
+      btcRegime: liveBtcRegime,
       feed: {
         book: bookFeed,
         futuresSymbols: [...symbolFeed.values()].filter(v => v === 'futures').length,
