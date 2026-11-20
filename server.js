@@ -115,7 +115,7 @@ function engineSnapshot() {
     userSlots: userRisk.maxSlots,
     userMargin: userRisk.marginPerTrade,
     gates: {
-      entry: '15dk Balina (2.5x+) | LONG 3.5R Geniş Trail · SHORT 2.5R Sıkı Trail',
+      entry: '15dk Balina (2.5–5.5x) · Anti-Chase',
       book: 'defter fiyatı',
       judge: 'açık',
       flow: '15dk & 4s Saf Kripto Futures balina akışı',
@@ -3567,6 +3567,10 @@ function serveDashboardHtml() {
               <span class="status-pill green" id="gateEngine">${gateEntryLbl}</span>
             </div>
             <div class="agent-row">
+              <span class="agent-name">BTC Rejimi</span>
+              <span class="status-pill ${liveBtcRegime.regime === 'BULL' ? 'green' : (liveBtcRegime.regime === 'BEAR' ? 'purple' : '')}" id="gateBtcRegime">${liveBtcRegime.label}</span>
+            </div>
+            <div class="agent-row">
               <span class="agent-name">Emir defteri</span>
               <span class="status-pill green" id="gateBook">${gateSnap.book || 'OBI'}</span>
             </div>
@@ -3612,45 +3616,41 @@ function serveDashboardHtml() {
         <div class="sidebar-section-title">⚙️ TEMEL RİSK & POZİSYON</div>
         <div class="param-grid-2x2">
           <div class="param-card">
-            <div class="param-header"><span>MAX SLOT</span><span>yön başı 1</span></div>
+            <div class="param-header"><span>MAX SLOT</span><span>yön başı 2</span></div>
             <div class="param-input-wrap"><input type="number" id="inpSlots" value="${CONFIG.maxSlots}"><span class="param-unit">adet</span></div>
           </div>
           <div class="param-card">
-            <div class="param-header"><span>TEMİNAT</span><span>kâğıt</span></div>
-            <div class="param-input-wrap"><input type="number" id="inpMargin" value="${CONFIG.marginPerTrade}"><span class="param-unit">$</span></div>
+            <div class="param-header"><span>RİSK / İŞLEM</span><span>sabit %2.5</span></div>
+            <div class="param-input-wrap"><input type="number" id="inpMargin" value="${CONFIG.marginPerTrade}" title="Baz teminat; işlem riski kasanın %2.5'ine (~$2.50) göre otomatik ölçeklenir"><span class="param-unit">$</span></div>
           </div>
           <div class="param-card">
-            <div class="param-header"><span>KALDIRAÇ</span><span>sabit</span></div>
+            <div class="param-header"><span>KALDIRAÇ</span><span>etkin ~1.1x</span></div>
             <div class="param-input-wrap"><input type="number" id="inpLev" value="${CONFIG.leverage}"><span class="param-unit">x</span></div>
           </div>
           <div class="param-card">
-            <div class="param-header"><span>STOP LOSS</span><span>sabit</span></div>
-            <div class="param-input-wrap"><input type="number" id="inpSl" value="${CONFIG.slPct.toFixed(2)}" step="0.1"><span class="param-unit">%</span></div>
+            <div class="param-header"><span>STOP LOSS</span><span>dinamik ATR</span></div>
+            <div class="param-input-wrap"><input type="text" id="inpSl" value="1.0–2.8" readonly title="15dk ATR × 1.50 ile otomatik hesaplanır (%1.00–%2.80)" style="cursor:default;opacity:0.85;"><span class="param-unit">%</span></div>
           </div>
         </div>
 
-        <div class="sidebar-section-title">ÇIKIŞ & KÂR KİLİDİ</div>
+        <div class="sidebar-section-title">ÇIKIŞ & KÂR KİLİDİ (CANLI = REPLAY)</div>
         <div style="background:linear-gradient(90deg, var(--blue-bg) 0%, var(--panel) 100%); border-left:3px solid var(--blue); border:1px solid var(--blue-border); border-radius:5px; padding:6px 8px; margin-bottom:5px; display:flex; justify-content:space-between; align-items:center; box-shadow:var(--shadow-sm);">
           <div>
-            <div style="font-size:10px;font-weight:800;color:var(--blue);letter-spacing:0.3px;">ANA HEDEF (TP)</div>
-            <div style="font-size:8.5px;color:var(--muted);margin-top:1px;">Pozisyonun tamamı kârla kapanır</div>
+            <div style="font-size:10px;font-weight:800;color:var(--blue);letter-spacing:0.3px;">🎯 MOONSHOT HEDEFİ (ATR-BAZLI)</div>
+            <div style="font-size:8.5px;color:var(--muted);margin-top:1px;">Pozisyonun %100'ü iz sürenle taşınır</div>
           </div>
-          <div style="display:flex;align-items:baseline;gap:2px;background:var(--panel2);padding:2px 6px;border-radius:4px;border:1px solid var(--blue-border);">
-            <input type="number" id="inpTp1" value="${(CONFIG.tp1Pct || 1.20).toFixed(2)}" step="0.1" style="width:52px;background:none;border:none;color:var(--blue);font-family:'JetBrains Mono';font-size:13px;font-weight:650;text-align:right;outline:none;">
-            <span style="font-size:10px;color:var(--blue);opacity:0.7;">%</span>
+          <div style="font-family:'JetBrains Mono';font-size:11px;font-weight:800;color:var(--blue);background:var(--panel2);padding:3px 7px;border-radius:4px;border:1px solid var(--blue-border);white-space:nowrap;">L 5.0R · S 2.5R</div>
+        </div>
+        <div style="background:var(--panel); border:1px solid var(--border); border-radius:5px; padding:6px 8px; margin-bottom:5px;">
+          <div style="font-size:10px;font-weight:800;color:var(--green);letter-spacing:0.3px;">🛡️ ASİMETRİK RUNNER İZ SÜREN</div>
+          <div style="font-size:8.5px;color:var(--muted);margin-top:2px;line-height:1.45;">
+            <b>LONG:</b> 1.0R BE (+%0.15) ➔ 1.4R Trail (0.85R) ➔ 3.0R+ (0.60R)<br>
+            <b>SHORT:</b> 0.75R BE (+%0.15) ➔ 0.90R Trail (0.45R)
           </div>
         </div>
-        <div style="background:var(--panel); border:1px solid var(--border); border-radius:5px; padding:6px 8px; margin-bottom:5px; display:flex; justify-content:space-between; align-items:center;">
-          <div>
-            <div style="font-size:10px;font-weight:800;color:var(--green);letter-spacing:0.3px;">🛡️ 3 KADEMELİ İZ SÜREN KİLİT</div>
-            <div style="font-size:8.5px;color:var(--muted);margin-top:1px;">+%0.40 ➔ BE (+%0.12) | +%0.65 ➔ +%0.38 | +%0.90 ➔ +%0.65</div>
-          </div>
-        </div>
-        <div style="background:var(--panel); border:1px solid var(--border); border-radius:5px; padding:6px 8px; margin-bottom:6px; display:flex; justify-content:space-between; align-items:center;">
-          <div>
-            <div style="font-size:10px;font-weight:800;color:var(--text);letter-spacing:0.3px;">⏱️ 22 DK / 35 DK / ${CONFIG.maxTradeMin} DK</div>
-            <div style="font-size:8.5px;color:var(--muted);margin-top:1px;">Ölü işlem 22dk'da, yatay 35dk'da, süre ${CONFIG.maxTradeMin}dk'da kesilir</div>
-          </div>
+        <div style="background:var(--panel); border:1px solid var(--border); border-radius:5px; padding:6px 8px; margin-bottom:6px;">
+          <div style="font-size:10px;font-weight:800;color:var(--text);letter-spacing:0.3px;">⏱️ MAX ${CONFIG.maxTradeMin} DK (8 SAAT) · 2-ZARAR KALKANI</div>
+          <div style="font-size:8.5px;color:var(--muted);margin-top:1px;">Erken zaman kesmesi yok · Aynı koinde 2 zarar ➔ 4s soğuma</div>
         </div>
 
         <div class="action-buttons-grid">
@@ -4187,6 +4187,11 @@ function serveDashboardHtml() {
         if (ge && g.entry) {
           ge.innerText = g.entry.length > 38 ? g.entry.slice(0, 36) + '…' : g.entry;
         }
+        const gbr = document.getElementById('gateBtcRegime');
+        if (gbr && data.btcRegime && data.btcRegime.label) {
+          gbr.innerText = data.btcRegime.label;
+          gbr.className = 'status-pill ' + (data.btcRegime.regime === 'BULL' ? 'green' : (data.btcRegime.regime === 'BEAR' ? 'purple' : ''));
+        }
         const gb = document.getElementById('gateBook');
         if (gb && g.book) gb.innerText = g.book;
         const gj = document.getElementById('gateJudge');
@@ -4408,7 +4413,7 @@ function serveDashboardHtml() {
 
     // Parametreleri Dinamik Güncelleme (sunucuya + tarayıcı hafızasına kaydeder)
     const LS_SET = 'moon_settings';
-    const SET_IDS = { slots: 'inpSlots', margin: 'inpMargin', lev: 'inpLev', sl: 'inpSl', tp1: 'inpTp1' };
+    const SET_IDS = { slots: 'inpSlots', margin: 'inpMargin', lev: 'inpLev' };
     let settingsSynced = false;
 
     function readSettingsFromInputs() {
