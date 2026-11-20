@@ -361,7 +361,7 @@ function loadSettings() {
     const isOldLegacy =
       (clean.slPct === 0.45 && clean.tp1Pct === 0.72) ||
       (clean.slPct === 0.90 && clean.tp1Pct === 0.75 && clean.moonPct === 2.80) ||
-      (clean.slPct === 0.80 && (clean.tp1Pct === 0.90 || clean.tp1Pct === 1.20 || clean.tp1Pct === 1.60));
+      (clean.slPct === 0.80 && (clean.tp1Pct === 0.48 || clean.tp1Pct === 0.90 || clean.tp1Pct === 1.20 || clean.tp1Pct === 1.60));
     if (isOldLegacy) {
       clean.leverage = 10;
       clean.marginPerTrade = 20;
@@ -963,10 +963,10 @@ function getCachePolicy(relativePath) {
     return { ttlMs: 30 * 60 * 1000, staleMs: 60 * 60 * 1000 };
   }
   if (relativePath.includes('interval=15m')) {
-    return { ttlMs: 35000, staleMs: 120000 }; // 35 sn taze (15m mumlar için)
+    return { ttlMs: 15000, staleMs: 90000 }; // 15 sn taze (15m rollover kilitlenmesini önler)
   }
   if (relativePath.includes('interval=3m')) {
-    return { ttlMs: 5000, staleMs: 25000 }; // 5 sn taze (3m mumlar için)
+    return { ttlMs: 5000, staleMs: 25000 };
   }
   if (relativePath.includes('klines')) {
     return { ttlMs: 5000, staleMs: 25000 };
@@ -975,6 +975,23 @@ function getCachePolicy(relativePath) {
     return { ttlMs: 1000, staleMs: 10000 };
   }
   return { ttlMs: 2000, staleMs: 15000 };
+}
+
+function normalizeBinanceRelativePath(url) {
+  let relativePath = url;
+  if (String(url).startsWith('http')) {
+    try {
+      const parsed = new URL(url);
+      relativePath = parsed.pathname + parsed.search;
+    } catch (e) {
+      relativePath = String(url).replace(/^https?:\/\/[^\/]+/, '');
+    }
+  }
+  return relativePath;
+}
+
+function invalidateBinanceCache(url) {
+  binanceCache.delete(normalizeBinanceRelativePath(url));
 }
 
 function normalizeTickerList(data) {
@@ -1097,6 +1114,14 @@ async function fetchBinanceRaw(relativePath) {
     errors.push('fapi bekliyor');
   }
 
+  // Spot fallback'i SADECE Futures genel olarak kapalıyken (veya fiyat/book dışı genel fallback olarak) kullan;
+  // tekil Futures kline/bookTicker/exchangeInfo isteklerini Spot Taker verisiyle kirletme!
+  const allowSpotFallback = !relativePath.includes('/fapi/v1/klines') && !relativePath.includes('/fapi/v1/exchangeInfo') && !relativePath.includes('/fapi/v1/ticker/bookTicker');
+  if (!allowSpotFallback) {
+    lastFeedError = errors.slice(0, 4).join(', ');
+    return null;
+  }
+
   const spotPath = relativePath.replace(/^\/fapi\/v1\//, '/api/v3/');
   const spotHosts = BINANCE_SPOT_MIRRORS.slice(0, isBook ? 3 : 2);
   for (const spotBase of spotHosts) {
@@ -1137,15 +1162,7 @@ async function fetchBinanceRaw(relativePath) {
 }
 
 async function fetchBinance(url) {
-  let relativePath = url;
-  if (url.startsWith("http")) {
-    try {
-      const parsed = new URL(url);
-      relativePath = parsed.pathname + parsed.search;
-    } catch (e) {
-      relativePath = url.replace(/^https?:\/\/[^\/]+/, "");
-    }
-  }
+  const relativePath = normalizeBinanceRelativePath(url);
 
   const now = Date.now();
   const policy = getCachePolicy(relativePath);
@@ -1162,11 +1179,12 @@ async function fetchBinance(url) {
     try {
       const fresh = await fetchBinanceRaw(relativePath);
       if (fresh !== null && fresh !== undefined) {
-        binanceCache.set(relativePath, { data: fresh, ts: Date.now() });
+        const storedAt = Date.now();
+        binanceCache.set(relativePath, { data: fresh, ts: storedAt, staleUntil: storedAt + policy.staleMs });
         if (binanceCache.size > 1500) {
-          const cutoff = Date.now() - 120000;
+          const pruneNow = Date.now();
           for (const [k, v] of binanceCache.entries()) {
-            if (v.ts < cutoff) binanceCache.delete(k);
+            if ((v.staleUntil || (v.ts + 120000)) < pruneNow) binanceCache.delete(k);
           }
         }
         return fresh;
@@ -1218,145 +1236,19 @@ async function updateRadar() {
       }
       btcPriceHistory.push({ t: now, p: p });
       btcPriceHistory = btcPriceHistory.filter(x => now - x.t <= 15 * 60 * 1000);
-      
+
       if (btcPriceHistory.length > 0) {
         const oldest15m = btcPriceHistory[0].p;
         const oldest5mObj = btcPriceHistory.find(x => now - x.t <= 5 * 60 * 1000);
         const oldest5m = oldest5mObj ? oldest5mObj.p : oldest15m;
-        
-        btc15mNumeric = ((p - oldest15m) / oldest15m) * 100;
-        btc5mNumeric = ((p - oldest5m) / oldest5m) * 100;
-        
+
+        btc15mNumeric = oldest15m > 0 ? ((p - oldest15m) / oldest15m) * 100 : 0;
+        btc5mNumeric = oldest5m > 0 ? ((p - oldest5m) / oldest5m) * 100 : 0;
+
         const f15 = `${btc15mNumeric >= 0 ? '+' : ''}${btc15mNumeric.toFixed(2)}%`;
-        const f5 = `${btc5mNumeric >= 0 ? '+' : ''}${btc5mNumeric.toFixed(2)}%`;
-        
         btc15mTrend = `15m: ${f15}`;
-        btc15mIsGreen = btc15mNumeric >= 0; // UI color based on 15m trend
+        btc15mIsGreen = btc15mNumeric >= 0;
       }
-    }
-
-    const tickerMap = {};
-    tickers.forEach(t => {
-      tickerMap[t.symbol] = {
-        lastPrice: parseFloat(t.lastPrice) || 0,
-        chg24h: parseFloat(t.priceChangePercent) || 0,
-        vol24hM: (parseFloat(t.quoteVolume) || 0) / 1e6
-      };
-    });
-
-    const validAll = tickers.filter(t => {
-      if (!isTradableCryptoSymbol(t.symbol)) return false;
-      const p = parseFloat(t.lastPrice) || 0;
-      const volM = (parseFloat(t.quoteVolume) || 0) / 1e6;
-      return p >= 0.008 && volM >= 8.0;
-    });
-
-    // 🚀 HEM YÜKSEK İVMELİ (+%10-%50) FUTURES BREAKOUT KOİNLERİ HEM DE LİKİT DEVLERİ TARA
-    const byMomentum = [...validAll]
-      .filter(t => ((parseFloat(t.quoteVolume) || 0) / 1e6) >= 10.0 && Math.abs(parseFloat(t.priceChangePercent) || 0) <= 65)
-      .sort((a, b) => Math.abs(parseFloat(b.priceChangePercent) || 0) - Math.abs(parseFloat(a.priceChangePercent) || 0))
-      .slice(0, 80);
-    const byVolume = [...validAll]
-      .sort((a, b) => (parseFloat(b.quoteVolume) || 0) - (parseFloat(a.quoteVolume) || 0))
-      .slice(0, 65);
-
-    const seenRadarSyms = new Set();
-    const valid = [];
-    for (const item of [...byMomentum, ...byVolume]) {
-      if (!seenRadarSyms.has(item.symbol)) {
-        seenRadarSyms.add(item.symbol);
-        valid.push(item);
-      }
-      if (valid.length >= 120) break;
-    }
-
-    const chunkSize = 15;
-    const scanned = [];
-    const freshRadarMap = {};
-    for (let i = 0; i < Math.min(valid.length, 105); i += chunkSize) {
-      const chunk = valid.slice(i, i + chunkSize);
-      await Promise.all(chunk.map(async item => {
-        const sym = item.symbol;
-        const klines = await fetchBinance(`/fapi/v1/klines?symbol=${sym}&interval=15m&limit=12`);
-        if (klines && klines.length > 0) {
-          const open3h = parseFloat(klines[0][1]);
-          const close3h = parseFloat(klines[klines.length - 1][4]);
-          const high3h = Math.max(...klines.map(k => parseFloat(k[2])));
-          const low3h = Math.min(...klines.map(k => parseFloat(k[3])));
-          const volUsdt = klines.reduce((acc, k) => acc + (parseFloat(k[7]) || 0), 0);
-          const takerBuyUsdt = klines.reduce((acc, k) => acc + (parseFloat(k[10]) || 0), 0);
-
-          const takerRatio = volUsdt > 0 ? (takerBuyUsdt / volUsdt) * 100 : 50;
-          const chg3h = open3h > 0 ? ((close3h - open3h) / open3h) * 100 : 0;
-
-          // ⚡ GERÇEK ANLIK 15M BALİNA & İVME TESPİTİ
-          const last15 = klines[klines.length - 1];
-          const open15 = parseFloat(last15[1]);
-          const high15 = parseFloat(last15[2]);
-          const low15 = parseFloat(last15[3]);
-          const close15 = parseFloat(last15[4]);
-          const vol15 = parseFloat(last15[7]) || 0;
-          const takerBuy15 = parseFloat(last15[10]) || 0;
-          const chg15m = open15 > 0 ? ((close15 - open15) / open15) * 100 : 0;
-          const taker15m = vol15 > 0 ? (takerBuy15 / vol15) * 100 : 50;
-
-          const tInfo = tickerMap[sym] || {};
-
-          let signal = "⚖️ NÖTR";
-          const isWhaleBull = (chg15m >= 1.2 && taker15m >= 54.0) || (chg3h >= 3.5 && takerRatio >= 54.0);
-          const isWhaleBear = (chg15m <= -1.2 && taker15m <= 46.0) || (chg3h <= -3.5 && takerRatio <= 46.0);
-
-          if (isWhaleBull) signal = "🐋🚀 BALİNA BOĞA";
-          else if (isWhaleBear) signal = "🐋🩸 BALİNA AYI";
-          else if (chg3h >= 1.8 && takerRatio >= 51.5) signal = "🟢 GÜÇLÜ BOĞA";
-          else if (chg3h <= -1.8 && takerRatio <= 48.5) signal = "🔴 GÜÇLÜ AYI";
-          else if (chg15m >= 1.5) signal = "⚡ ANLIK SIÇRAMA";
-
-          const rItem = {
-            symbol: sym,
-            lastPrice: close3h,
-            open15m: open15,
-            high15m: high15,
-            low15m: low15,
-            chg3h,
-            chg15m,
-            vol3hM: volUsdt / 1e6,
-            vol15m: vol15,
-            range3h: `$${low3h.toFixed(4)} - $${high3h.toFixed(4)}`,
-            low3h,
-            high3h,
-            takerBuyRatio: takerRatio,
-            taker15m,
-            chg24h: tInfo.chg24h || 0,
-            vol24hM: tInfo.vol24hM || 0,
-            signal,
-            lastUpdate: Date.now()
-          };
-
-          freshRadarMap[sym] = rItem;
-          scanned.push(rItem);
-        }
-      }));
-    }
-
-    if (scanned.length > 0) {
-      radarMap = freshRadarMap;
-      radarList = scanned.sort((a, b) => Math.abs(b.chg15m) - Math.abs(a.chg15m));
-      const liquid = scanned.filter(x => (x.vol24hM || 0) >= 10);
-      radarLeaderLong = new Set(
-        liquid
-          .filter(x => x.chg15m >= 0.65 && x.chg15m <= 6.5 && (x.taker15m || 50) >= 56 && (x.chg3h || 0) >= 0.5)
-          .sort((a, b) => b.chg15m - a.chg15m)
-          .slice(0, 10)
-          .map(x => x.symbol)
-      );
-      radarLeaderShort = new Set(
-        liquid
-          .filter(x => x.chg15m <= -0.65 && x.chg15m >= -6.5 && (x.taker15m || 50) <= 44 && (x.chg3h || 0) <= -0.5)
-          .sort((a, b) => a.chg15m - b.chg15m)
-          .slice(0, 10)
-          .map(x => x.symbol)
-      );
     }
   } catch (err) {
   } finally {
@@ -1727,7 +1619,7 @@ async function fetchKlines15mPaged(sym, totalBars) {
 }
 
 const replayCache = new Map();
-let replayInFlight = null;
+const replayInFlightMap = new Map();
 
 async function runHistoricalReplay(hours = 72, maxCoins = 45) {
   const hClamped = Math.max(12, Math.min(720, Math.round(Number(hours) || 72)));
@@ -1735,9 +1627,9 @@ async function runHistoricalReplay(hours = 72, maxCoins = 45) {
   const cacheKey = `${hClamped}:${cClamped}`;
   const cached = replayCache.get(cacheKey);
   if (cached && (Date.now() - cached.ts) < 5 * 60 * 1000) return cached.result;
-  if (replayInFlight) return replayInFlight;
+  if (replayInFlightMap.has(cacheKey)) return replayInFlightMap.get(cacheKey);
 
-  replayInFlight = (async () => {
+  const p = (async () => {
     try {
       await refreshExchangeInfoFilter();
       const tickers = await fetchBinance('/fapi/v1/ticker/24hr');
@@ -1825,15 +1717,16 @@ async function runHistoricalReplay(hours = 72, maxCoins = 45) {
       };
 
       for (const ev of events) {
+        const evEntryTs = ev.candleTs + (15 * 60 * 1000);
         openSlots.sort((a, b) => a.exitTs - b.exitTs);
         for (let j = 0; j < openSlots.length; ) {
-          if (openSlots[j].exitTs <= ev.candleTs) { settleSlot(openSlots[j]); openSlots.splice(j, 1); }
+          if (openSlots[j].exitTs <= evEntryTs) { settleSlot(openSlots[j]); openSlots.splice(j, 1); }
           else j++;
         }
         if (openSlots.length >= 3) continue;
         if (openSlots.some(p => p.symbol === ev.symbol)) continue;
         if (openSlots.filter(p => p.side === ev.side).length >= 2) continue;
-        if ((coinCd[ev.symbol] || 0) > ev.candleTs) continue;
+        if ((coinCd[ev.symbol] || 0) > evEntryTs) continue;
 
         const riskUsd = Math.max(1.50, Math.min(5.00, bal * 0.025));
         const res = simulateWhaleTrade15m(ev.k, ev.idx, ev, riskUsd);
@@ -1916,11 +1809,12 @@ async function runHistoricalReplay(hours = 72, maxCoins = 45) {
       }
       return result;
     } finally {
-      replayInFlight = null;
+      replayInFlightMap.delete(cacheKey);
     }
   })();
 
-  return replayInFlight;
+  replayInFlightMap.set(cacheKey, p);
+  return p;
 }
 
 // 2. CANLI TARAMA (350+ KOİN BALİNA & MOONSHOT AVCISI)
@@ -2052,13 +1946,17 @@ async function scanLoop() {
     const secIn15mNow = Math.floor((now / 1000) % 900);
     const expectedClosedTs = (Math.floor(now / 900000) * 900000) - 900000;
 
-    // 🧭 BTC 15dk EMA20/EMA50 Rejimini tazele (ilk açılışta veya yeni 15dk mum kapandığında 1 kez çeker!)
+    // 🧭 BTC 15dk EMA20/EMA50 Rejimini tazele (250 mum: Replay ile %0.00 sapma + taze rollover cache koruma!)
     if (liveBtcRegime.ts !== expectedClosedTs && (liveBtcRegime.regime === 'UNKNOWN' || secIn15mNow >= 4)) {
       try {
-        const btcK = await fetchBinance('/fapi/v1/klines?symbol=BTCUSDT&interval=15m&limit=120');
+        const btcPath = '/fapi/v1/klines?symbol=BTCUSDT&interval=15m&limit=250';
+        const btcK = await fetchBinance(btcPath);
         if (Array.isArray(btcK) && btcK.length >= 60) {
           const closedBtcIdx = btcK.length - 2;
           const closedBtcTs = Number(btcK[closedBtcIdx][0]) || 0;
+          if (closedBtcTs !== expectedClosedTs) {
+            invalidateBinanceCache(btcPath); // Binance henüz yeni mumu kapatmadıysa 15s cache kilidini anında kır!
+          }
           if (closedBtcTs === expectedClosedTs || liveBtcRegime.regime === 'UNKNOWN') {
             liveBtcRegime = buildBtcRegimeMap15m(btcK.slice(0, closedBtcIdx + 1)).latest;
           }
@@ -2106,29 +2004,32 @@ async function scanLoop() {
         if (coinCooldowns[sym] && coinCooldowns[sym] > Date.now()) return null;
         const lastP = parseFloat(item.lastPrice);
         if (lastP < 0.008) return null;
-        const k15m = await fetchBinance(`/fapi/v1/klines?symbol=${sym}&interval=15m&limit=80`);
-        return { sym, lastP, k15m, chg: parseFloat(item.priceChangePercent) || 0, isVip: item.isVip, volM: item.volM };
+        const k15mPath = `/fapi/v1/klines?symbol=${sym}&interval=15m&limit=250`;
+        const k15m = await fetchBinance(k15mPath);
+        return { sym, lastP, k15m, k15mPath, chg: parseFloat(item.priceChangePercent) || 0, isVip: item.isVip, volM: item.volM };
       }));
 
       for (const data of chunkData) {
         if (!data || !data.k15m || data.k15m.length < 65) continue;
         if (activePositions.length >= CONFIG.maxSlots) break;
 
-        const { sym, lastP, k15m, chg } = data;
+        const { sym, lastP, k15m, k15mPath, chg } = data;
         if (activePositions.some(x => x.symbol === sym) || activeSyms.has(sym) || (coinCooldowns[sym] && coinCooldowns[sym] > Date.now())) continue;
         if (coinLossCount[sym] >= 2) {
           if (coinCooldowns[sym] && coinCooldowns[sym] > Date.now()) continue;
           coinLossCount[sym] = 1;
         }
 
-        const rInfo = radarMap[sym] || {};
         const lastIdx = k15m.length - 1;
         const closedIdx = lastIdx - 1;
         const curP = parseFloat(k15m[lastIdx][4]) || lastP;
 
         // 🕐 KESİN KAPALI 15DK MUM ONAYI (Replay ile %100 aynı mum!)
         const targetCandleTs = Number(k15m[closedIdx][0]) || 0;
-        if (targetCandleTs !== expectedClosedTs) continue; // Binance yeni mumu henüz açmadı; 5sn sonraki turda tekrar dene
+        if (targetCandleTs !== expectedClosedTs) {
+          invalidateBinanceCache(k15mPath); // Eski mum önbellekte kalıp 35sn dondurmasın; 5sn sonraki turda taze çek!
+          continue;
+        }
         if (global.whaleEvaluatedCandles.get(sym) === targetCandleTs) continue;
         global.whaleEvaluatedCandles.set(sym, targetCandleTs);
 
@@ -2145,7 +2046,7 @@ async function scanLoop() {
           cur3m: Number((sig.move || 0).toFixed(2)),
           prev3m: Number((sig.chg1h || 0).toFixed(2)),
           atr3m: Number((sig.atr15 || 0).toFixed(2)),
-          signal: rInfo.signal || '⚖️ NÖTR', ...extra
+          signal: sig.approved ? (sig.side === 'LONG' ? '🐋🚀 BALİNA BOĞA' : '🐋🩸 BALİNA AYI') : '⚖️ NÖTR', ...extra
         });
 
         if (!sig.approved) {
@@ -2159,7 +2060,7 @@ async function scanLoop() {
           continue;
         }
 
-        // Fiyat kapalı mumdan çok uzaklaştıysa (%1.10+) kovalama (hızlı breakout'ları boğmadan runaway kovalamayı önler)
+        // Fiyat kapalı mumdan çok uzaklaştıysa (%1.10+) kovalama
         const driftPct = sig.closePx > 0 ? Math.abs((curP - sig.closePx) / sig.closePx) * 100 : 0;
         if (driftPct > 1.10) {
           shadow('DRIFT_SKIP', { driftPct: Number(driftPct.toFixed(2)) });
@@ -2172,8 +2073,6 @@ async function scanLoop() {
         }
 
         const side = sig.side;
-        const maxSameSide = 2;
-        if (activePositions.filter(p => p.side === side).length + scanEntryCandidates.filter(c => c.side === side).length >= maxSameSide) continue;
 
         let judgeClearance = null;
         try {
@@ -2195,6 +2094,7 @@ async function scanLoop() {
         if (activePositions.length >= CONFIG.maxSlots) continue;
 
         // 🛡️ 15DK ATR STOP (%1.00 - %2.80) + SABİT %2.5 (~$2.50) RİSK ÖLÇEKLEMESİ:
+        // Not: Serbest teminat ve maxSameSide kesintisi sıralama SONRASINDA uygulanır ki en güçlü balina adayı elenmesin!
         const tradeSlPct = Number(Math.max(1.00, Math.min(2.80, sig.atr15 * 1.50)).toFixed(2));
         const baseRiskUsd = Number(CONFIG.riskPerTradeUsd) || 2.50;
         const equityRiskUsd = Math.max(1.50, Math.min(5.00, Number((balance * 0.025).toFixed(2))));
@@ -2203,13 +2103,7 @@ async function scanLoop() {
         const targetNominal = targetRiskUsd / (effectiveStopCostPct / 100);
         const levNow = Math.max(5, Number(CONFIG.leverage) || 10);
         const maxAllowedMargin = Math.min(35.0, Math.max(15.0, balance * 0.34));
-        let tradeMargin = Number(Math.max(6.0, Math.min(maxAllowedMargin, targetNominal / levNow)).toFixed(2));
-
-        const queuedMargin = scanEntryCandidates.reduce((acc, c) => acc + (Number(c.tradeMargin) || 0), 0);
-        const curUsedMargin = activePositions.reduce((acc, p) => acc + (p.margin || 0), 0) + queuedMargin;
-        const curFreeMargin = Math.max(0, balance - curUsedMargin);
-        if (tradeMargin > curFreeMargin) tradeMargin = Number(curFreeMargin.toFixed(2));
-        if (tradeMargin < 6.0) continue;
+        const tradeMargin = Number(Math.max(6.0, Math.min(maxAllowedMargin, targetNominal / levNow)).toFixed(2));
 
         let fillPx = side === "LONG" ? curP * 1.0002 : curP * 0.9998;
         let spreadBps = null;
@@ -2223,11 +2117,26 @@ async function scanLoop() {
             if (mid > 0) spreadBps = Number(((ask - bid) / mid * 10000).toFixed(2));
           }
         } catch (e) {}
-        // 15dk swing hedefleri (%4.5-%9.8) için 1-tick ($0.08-$0.11 koin = 9-12 bps) spread yüzünden PONS/BARD gibi Moonshot'ları yasaklama!
         if (spreadBps !== null && spreadBps > 22.0) {
           shadow('HIGH_SPREAD', { spreadBps });
           continue;
         }
+        // Defter giriş fiyatı (ask/bid) da drift + EMA20 kuralını aşmamalı!
+        const fillDriftPct = sig.closePx > 0 ? Math.abs((fillPx - sig.closePx) / sig.closePx) * 100 : 0;
+        if (fillDriftPct > 1.10) {
+          shadow('DRIFT_SKIP', { driftPct: Number(fillDriftPct.toFixed(2)) });
+          continue;
+        }
+        if ((side === 'LONG' && fillPx <= sig.ema20) || (side === 'SHORT' && fillPx >= sig.ema20)) {
+          shadow('EMA_LOST');
+          continue;
+        }
+
+        const win3h = k15m.slice(Math.max(0, closedIdx - 11), closedIdx + 1);
+        const low3h = win3h.length ? Math.min(...win3h.map(b => parseFloat(b[3]) || fillPx)) : fillPx;
+        const high3h = win3h.length ? Math.max(...win3h.map(b => parseFloat(b[2]) || fillPx)) : fillPx;
+        const vol3hM = win3h.reduce((acc, b) => acc + (parseFloat(b[7]) || 0), 0) / 1e6;
+        const range3hStr = `$${low3h.toFixed(4)} - $${high3h.toFixed(4)}`;
 
         const stopPrice = side === "LONG"
           ? fillPx * (1 - tradeSlPct / 100)
@@ -2243,15 +2152,14 @@ async function scanLoop() {
         const flowText = side === 'LONG' ? `Alıcı %${sig.taker.toFixed(0)}` : `Satıcı %${(100 - sig.taker).toFixed(0)}`;
         const radarTag = `[${dirEmoji} | 15dk ${sig.move >= 0 ? '+' : ''}%${sig.move.toFixed(2)} | Hacim ${sig.volMult.toFixed(1)}x | 4s ${sig.chg4h >= 0 ? '+' : ''}%${sig.chg4h.toFixed(1)} | ${flowText}] [SL: %${tradeSlPct.toFixed(2)} | ATR15m: %${sig.atr15.toFixed(2)} | Risk: ~$${targetRiskUsd.toFixed(2)}]`;
 
-        const isRadarLeader = (side === 'LONG' && radarLeaderLong.has(sym)) || (side === 'SHORT' && radarLeaderShort.has(sym));
-        const entryScore = sig.score + (isRadarLeader ? 20 : 0) + Math.min(data.volM || 0, 100) * 0.15;
+        const entryScore = sig.score;
 
         const position = {
           id: Date.now() + Math.random().toString(36).substring(2, 6),
           symbol: sym,
           side: side,
           entryPrice: fillPx,
-          currentPrice: curP,
+          currentPrice: fillPx,
           entryTime: Date.now(),
           stopPrice: stopPrice,
           beLocked: false,
@@ -2297,11 +2205,11 @@ async function scanLoop() {
           convictionLabel: side === 'LONG' ? '🐋 BALİNA ROKET 15M' : '🐋 BALİNA ŞELALE 15M',
           radarTag: radarTag,
           chg3h: Number(sig.chg3h.toFixed(2)),
-          vol3hM: Number((rInfo.vol3hM || 0).toFixed(1)),
+          vol3hM: Number(vol3hM.toFixed(1)),
           chg24h: Number(chg.toFixed(2)),
-          range3h: rInfo.range3h || "",
+          range3h: range3hStr,
           takerBuyRatio: Number(sig.taker.toFixed(1)),
-          signal: rInfo.signal || (side === "LONG" ? "🐋🚀 BALİNA BOĞA" : "🐋🩸 BALİNA AYI"),
+          signal: side === "LONG" ? "🐋🚀 BALİNA BOĞA" : "🐋🩸 BALİNA AYI",
           btc5mEntry: btc5mNumeric,
           btc15mEntry: btc15mNumeric
         };
@@ -2342,7 +2250,12 @@ async function scanLoop() {
       let bookedMargin = activePositions.reduce((acc, p) => acc + (p.margin || 0), 0);
       for (const pick of scanEntryCandidates) {
         if (opened >= room || taken.has(pick.sym) || (sideCounts[pick.side] || 0) >= maxSameSide) continue;
-        if (bookedMargin + pick.tradeMargin > balance) continue;
+        const curFree = Math.max(0, Number((balance - bookedMargin).toFixed(2)));
+        let finalMargin = Math.min(pick.tradeMargin, curFree);
+        if (finalMargin < 6.0) continue;
+        pick.tradeMargin = Number(finalMargin.toFixed(2));
+        pick.position.margin = pick.tradeMargin;
+        pick.position.initialMargin = pick.tradeMargin;
         taken.add(pick.sym);
         sideCounts[pick.side] = (sideCounts[pick.side] || 0) + 1;
         bookedMargin += pick.tradeMargin;
@@ -2368,8 +2281,9 @@ async function scanLoop() {
           mfe: 0
         });
         if (randomOpen.length > 20) randomOpen.shift();
+        const moonR = pick.side === 'LONG' ? '5.0R' : '2.5R';
         addLog(
-          `🐋 POZİSYON AÇILDI: [${pick.side}] ${pick.sym} @ $${pick.curP.toFixed(4)} | ${pick.radarTag} | Teminat: $${pick.tradeMargin.toFixed(1)} (${pick.position.leverage}x) | SL: -%${pick.tradeSlPct.toFixed(2)} | BE: +%${pick.tradeSlPct.toFixed(2)} | Trail: +%${pick.tradeTp1Pct.toFixed(2)} | Moon(3.5R): +%${pick.tradeMoonPct.toFixed(2)}`,
+          `🐋 POZİSYON AÇILDI: [${pick.side}] ${pick.sym} @ $${pick.curP.toFixed(4)} | ${pick.radarTag} | Teminat: $${pick.tradeMargin.toFixed(1)} (${pick.position.leverage}x) | SL: -%${pick.tradeSlPct.toFixed(2)} | BE: +%${pick.position.bePct.toFixed(2)} | Trail: +%${pick.tradeTp1Pct.toFixed(2)} | Moon(${moonR}): +%${pick.tradeMoonPct.toFixed(2)}`,
           'TRADE'
         );
       }
@@ -4064,9 +3978,11 @@ function serveDashboardHtml() {
           tbody.innerHTML = data.positions.map((p, idx) => {
             const isLong = p.side === 'LONG';
             const isWin = (p.pnl || 0) >= 0;
-            const stopText = p.beLocked 
-              ? '<span class="badge-be">🛡️ KÂR KİLİDİ ($0 RİSK)</span>' 
-              : '<span class="badge-sl">🛑 RİSK YÖNETİMİ AKTİF</span>';
+            const stopText = p.beLocked
+              ? (p.tp1Taken
+                  ? '<span class="badge-be" style="background:#059669;color:#fff;">🔒 RUNNER İZ SÜREN</span>'
+                  : '<span class="badge-be">🛡️ KÂR KİLİDİ ($0 RİSK)</span>')
+              : '<span class="badge-sl">🛑 STOP: -%' + (p.slPct || 1.5).toFixed(2) + '</span>';
 
             const roiStr = (p.roi >= 0 ? '+' : '') + (p.roi || 0).toFixed(2) + '%';
             const pnlStr = (p.pnl >= 0 ? '+$' : '-$') + Math.abs(p.pnl || 0).toFixed(2);
@@ -4122,9 +4038,11 @@ function serveDashboardHtml() {
             activeCardsEl.innerHTML = data.positions.map((p, idx) => {
               const isLong = p.side === 'LONG';
               const isWin = (p.pnl || 0) >= 0;
-              const stopText = p.beLocked 
-                ? '<span class="badge-be">🛡️ BAŞABAŞ ($0 RİSK)</span>' 
-                : ('<span class="badge-sl">🛑 STOP: -%' + (data.stats && data.stats.slPct ? data.stats.slPct : 1.5).toFixed(2) + '</span>');
+              const stopText = p.beLocked
+                ? (p.tp1Taken
+                    ? '<span class="badge-be" style="background:#059669;color:#fff;">🔒 RUNNER İZ SÜREN</span>'
+                    : '<span class="badge-be">🛡️ BAŞABAŞ ($0 RİSK)</span>')
+                : ('<span class="badge-sl">🛑 STOP: -%' + (p.slPct || 1.5).toFixed(2) + '</span>');
               const roiStr = (p.roi >= 0 ? '+' : '') + (p.roi || 0).toFixed(1) + '%';
               const pnlStr = (p.pnl >= 0 ? '+$' : '-$') + Math.abs(p.pnl || 0).toFixed(2);
 
@@ -4818,6 +4736,10 @@ const server = http.createServer(async (req, res) => {
     history = [];
     coinLossCount = {};
     coinCooldowns = {};
+    randomOpen = [];
+    randomClosed = [];
+    dayBanLogged.clear();
+    if (global.whaleEvaluatedCandles) global.whaleEvaluatedCandles.clear();
     DYNAMIC.mode = 'MARSCOIN_15M_WHALE';
     DYNAMIC.vol3hMin = 0.8;
     DYNAMIC.candidateSlice = 120;
