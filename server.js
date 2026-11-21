@@ -1591,10 +1591,11 @@ async function fetchKlines15mPaged(sym, totalBars) {
   for (let p = 0; p < pages; p++) {
     const reqLimit = Math.min(1500, want - (p * 1500) + 10);
     const pathUrl = `/fapi/v1/klines?symbol=${sym}&interval=15m&limit=${reqLimit}` + (endTime ? `&endTime=${endTime}` : '');
-    let k = await fetchBinance(pathUrl);
-    if (!Array.isArray(k) || k.length < 20) {
-      await new Promise(r => setTimeout(r, 350));
+    let k = null;
+    for (let att = 0; att < 3; att++) {
+      if (att > 0) await new Promise(r => setTimeout(r, 400 * att));
       k = await fetchBinance(pathUrl);
+      if (Array.isArray(k) && k.length >= 20) break;
     }
     if (!Array.isArray(k) || k.length === 0) break;
     chunks.unshift(k);
@@ -1616,6 +1617,7 @@ async function fetchKlines15mPaged(sym, totalBars) {
 
 const replayCache = new Map();
 const replayInFlightMap = new Map();
+let replaySerialQueue = Promise.resolve();
 
 async function runHistoricalReplay(hours = 72, maxCoins = 45) {
   const hClamped = Math.max(12, Math.min(720, Math.round(Number(hours) || 72)));
@@ -1625,8 +1627,15 @@ async function runHistoricalReplay(hours = 72, maxCoins = 45) {
   if (cached && (Date.now() - cached.ts) < 5 * 60 * 1000) return cached.result;
   if (replayInFlightMap.has(cacheKey)) return replayInFlightMap.get(cacheKey);
 
+  const prevJob = replaySerialQueue;
+  let releaseQueue;
+  replaySerialQueue = new Promise(r => { releaseQueue = r; });
+
   const p = (async () => {
     try {
+      await prevJob.catch(() => {});
+      const cachedAfterWait = replayCache.get(cacheKey);
+      if (cachedAfterWait && (Date.now() - cachedAfterWait.ts) < 5 * 60 * 1000) return cachedAfterWait.result;
       await refreshExchangeInfoFilter();
       const tickers = await fetchBinance('/fapi/v1/ticker/24hr');
       if (!Array.isArray(tickers)) return { ok: false, error: 'Binance Futures verisi alınamadı.' };
@@ -1800,12 +1809,13 @@ async function runHistoricalReplay(hours = 72, maxCoins = 45) {
         },
         trades: trades.slice().reverse()
       };
-      if (coinKlines.length >= Math.floor(picked.length * 0.65)) {
+      if (Array.isArray(btcKlines) && btcKlines.length >= Math.floor(barLimit * 0.85) && coinKlines.length >= Math.floor(picked.length * 0.65)) {
         replayCache.set(cacheKey, { ts: Date.now(), result });
       }
       return result;
     } finally {
       replayInFlightMap.delete(cacheKey);
+      if (releaseQueue) releaseQueue();
     }
   })();
 
