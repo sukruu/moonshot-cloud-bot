@@ -1374,30 +1374,37 @@ function evaluateWhaleSpike15m(k, idx) {
   const distEma20 = ema20 > 0 ? Math.abs((c - ema20) / ema20) * 100 : 0;
   const diag = { atr15, volMult, taker, move, chg1h, chg3h, chg4h, ema20, ema50, distEma20, rsi15, closePx: c, candleTs: Number(k[idx][0]) || 0 };
 
-  if (atr15 < 1.05 || atr15 > 3.50) return { approved: false, why: 'ATR15', ...diag };
+  if (atr15 < 0.90 || atr15 > 3.50) return { approved: false, why: 'ATR15', ...diag };
   if (volMult < 2.50) return { approved: false, why: 'VOL_LOW', ...diag };
-  // 🌋 Wyckoff Hacim Tükenişi (Climax) + Taze Hareket (Anti-Chase) Kalkanı (62.5g 102 saf kripto H1+H2 + 6/6 10-günlük dönem kanıtlı):
-  // - Vol > 5.5x: likidasyon/FOMO zirvesi (VELVET 5.78x, SKY 5.86x gibi)
-  // - distEma20 > %4.0 veya |chg4h| > %6.0 veya |move| > 2.4x ATR: hareket bitmiş/tükenmiş geç kovalama (H1 -3.5R & H2 -4.0R = -7.5R zarar)
+  // 🌋 Wyckoff Hacim Tükenişi (Climax) + Taze Hareket (Anti-Chase) + 🌀 Sıkışmış Yay (Coiled-Spring) Kalkanı:
+  // - ATR 0.90..1.05 arası yatay sıkışmadan yeni patlayan koinlerde (WHALE_ATR15'e takılan %49 adayın kârlı kısmı):
+  //   EMA20'ye yakın taze kalkış (distEma20 <= %2.80), en az %1.00 net 15dk mum boyu ve ≥%61 Taker baskısı aranır.
+  //   (62.5g 102 koinde işlem sayısını +%51 artırır: 80 -> 121 işlem, 6/6 dönem pozitif, H1 +7.4R & H2 +7.4R, MT $176.8 -> $256.7, DT $160.6 -> $228.6!)
   if (volMult > 5.50) return { approved: false, why: 'VOL_CLIMAX', ...diag };
-  if (distEma20 > 4.00) return { approved: false, why: 'EMA_STRETCH', ...diag };
+  const isCoiledSpring = atr15 < 1.05;
+  const maxDistAllowed = isCoiledSpring ? 2.80 : 4.00;
+  if (distEma20 > maxDistAllowed) return { approved: false, why: 'EMA_STRETCH', ...diag };
+
+  const minMoveReq = isCoiledSpring ? Math.max(1.00, atr15 * 0.90) : (atr15 * 0.90);
+  const minTakerLong = isCoiledSpring ? 61.0 : 60.0;
+  const maxTakerShort = isCoiledSpring ? 39.0 : 40.0;
 
   const longOk =
-    move >= atr15 * 0.90 &&
+    move >= minMoveReq &&
     move <= atr15 * 2.40 &&
     c > ema20 &&
     ema20 > ema50 &&
-    taker >= 60.0 &&
+    taker >= minTakerLong &&
     chg4h >= 2.0 &&
     chg4h <= 6.0 &&
     upperWick <= 0.45;
 
   const shortOk =
-    move <= -atr15 * 0.90 &&
+    move <= -minMoveReq &&
     move >= -atr15 * 2.40 &&
     c < ema20 &&
     ema20 < ema50 &&
-    taker <= 40.0 &&
+    taker <= maxTakerShort &&
     chg4h <= -2.0 &&
     chg4h >= -6.0 &&
     lowerWick <= 0.45;
