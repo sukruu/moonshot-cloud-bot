@@ -1378,11 +1378,11 @@ function evaluateWhaleSpike15m(k, idx) {
   if (volMult < 2.50) return { approved: false, why: 'VOL_LOW', ...diag };
   // 🌋 Wyckoff Hacim Tükenişi (Climax) + Taze Hareket (Anti-Chase) + 🌀 Sıkışmış Yay (Coiled-Spring) Kalkanı:
   // - ATR 0.90..1.05 arası yatay sıkışmadan yeni patlayan koinlerde (WHALE_ATR15'e takılan %49 adayın kârlı kısmı):
-  //   EMA20'ye yakın taze kalkış (distEma20 <= %2.80), en az %1.00 net 15dk mum boyu ve ≥%61 Taker baskısı aranır.
-  //   (62.5g 102 koinde işlem sayısını +%51 artırır: 80 -> 121 işlem, 6/6 dönem pozitif, H1 +7.4R & H2 +7.4R, MT $176.8 -> $256.7, DT $160.6 -> $228.6!)
+  //   EMA20'ye yakın taze kalkış (distEma20 <= %3.00), en az %1.00 net 15dk mum boyu ve ≥%61 Taker baskısı aranır.
+  //   (62.5g 102 koinde 3. slot kilidiyle birlikte işlem sayısını +%75 artırır: 80 -> 140 işlem, 6/6 dönem pozitif, MT $176.8 -> $277.0, DT $160.6 -> $240.8!)
   if (volMult > 5.50) return { approved: false, why: 'VOL_CLIMAX', ...diag };
   const isCoiledSpring = atr15 < 1.05;
-  const maxDistAllowed = isCoiledSpring ? 2.80 : 4.00;
+  const maxDistAllowed = isCoiledSpring ? 3.00 : 4.00;
   if (distEma20 > maxDistAllowed) return { approved: false, why: 'EMA_STRETCH', ...diag };
 
   const minMoveReq = isCoiledSpring ? Math.max(1.00, atr15 * 0.90) : (atr15 * 0.90);
@@ -1619,9 +1619,11 @@ const replayCache = new Map();
 const replayInFlightMap = new Map();
 let replaySerialQueue = Promise.resolve();
 
-async function runHistoricalReplay(hours = 72, maxCoins = 45) {
+async function runHistoricalReplay(hours = 72, maxCoins = 65) {
   const hClamped = Math.max(12, Math.min(720, Math.round(Number(hours) || 72)));
-  const cClamped = Math.max(15, Math.min(55, Math.round(Number(maxCoins) || 45)));
+  const defaultCoins = hClamped > 240 ? 65 : 80;
+  const maxAllowedCoins = hClamped > 240 ? 70 : 85;
+  const cClamped = Math.max(15, Math.min(maxAllowedCoins, Math.round(Number(maxCoins) || defaultCoins)));
   const cacheKey = `${hClamped}:${cClamped}`;
   const cached = replayCache.get(cacheKey);
   if (cached && (Date.now() - cached.ts) < 5 * 60 * 1000) return cached.result;
@@ -1646,8 +1648,8 @@ async function runHistoricalReplay(hours = 72, maxCoins = 45) {
         const volM = (parseFloat(t.quoteVolume) || 0) / 1e6;
         return p >= 0.008 && volM >= 10.0;
       });
-      const byMom = [...valid].sort((a, b) => Math.abs(parseFloat(b.priceChangePercent) || 0) - Math.abs(parseFloat(a.priceChangePercent) || 0)).slice(0, 35);
-      const byVol = [...valid].sort((a, b) => (parseFloat(b.quoteVolume) || 0) - (parseFloat(a.quoteVolume) || 0)).slice(0, 35);
+      const byMom = [...valid].sort((a, b) => Math.abs(parseFloat(b.priceChangePercent) || 0) - Math.abs(parseFloat(a.priceChangePercent) || 0)).slice(0, 60);
+      const byVol = [...valid].sort((a, b) => (parseFloat(b.quoteVolume) || 0) - (parseFloat(a.quoteVolume) || 0)).slice(0, 60);
       const picked = [];
       const seen = new Set();
       for (const x of [...byMom, ...byVol]) {
@@ -1660,9 +1662,10 @@ async function runHistoricalReplay(hours = 72, maxCoins = 45) {
       const btcRegime = buildBtcRegimeMap15m(btcKlines);
 
       const coinKlines = [];
-      // 🛡️ Kibar 5'li tarama + rate-limit koruması (Futures koinlerinin Spot'a düşüp eksilmesini önler!)
-      for (let i = 0; i < picked.length; i += 5) {
-        const chunk = picked.slice(i, i + 5);
+      // 🛡️ Kibar 8'li tarama + rate-limit koruması (Canlı bottaki geniş koin havuzunu 65-80 koine kadar kapsar!)
+      const chunkSize = 8;
+      for (let i = 0; i < picked.length; i += chunkSize) {
+        const chunk = picked.slice(i, i + chunkSize);
         const part = await Promise.all(chunk.map(async sym => {
           try {
             const k = await fetchKlines15mPaged(sym, barLimit);
@@ -1670,7 +1673,7 @@ async function runHistoricalReplay(hours = 72, maxCoins = 45) {
           } catch (e) { return null; }
         }));
         part.forEach(x => { if (x) coinKlines.push(x); });
-        if (i + 5 < picked.length) await new Promise(r => setTimeout(r, 200));
+        if (i + chunkSize < picked.length) await new Promise(r => setTimeout(r, 120));
       }
 
       const cutoffTs = Date.now() - (hClamped * 60 * 60 * 1000);
@@ -1730,7 +1733,7 @@ async function runHistoricalReplay(hours = 72, maxCoins = 45) {
         }
         if (openSlots.length >= 3) continue;
         if (openSlots.some(p => p.symbol === ev.symbol)) continue;
-        if (openSlots.filter(p => p.side === ev.side).length >= 2) continue;
+        if (openSlots.filter(p => p.side === ev.side).length >= 3) continue;
         if ((coinCd[ev.symbol] || 0) > evEntryTs) continue;
 
         const riskUsd = Math.max(1.50, Math.min(5.00, bal * 0.025));
@@ -2238,7 +2241,7 @@ async function scanLoop() {
         LONG: activePositions.filter(p => p.side === 'LONG').length,
         SHORT: activePositions.filter(p => p.side === 'SHORT').length
       };
-      const maxSameSide = 2;
+      const maxSameSide = Math.max(2, Number(CONFIG.maxSlots) || 3);
       const room = CONFIG.maxSlots - activePositions.length;
       let opened = 0;
       let bookedMargin = activePositions.reduce((acc, p) => acc + (p.margin || 0), 0);
@@ -3527,7 +3530,7 @@ function serveDashboardHtml() {
         <div class="sidebar-section-title">⚙️ RİSK & AYARLAR</div>
         <div class="param-grid-2x2">
           <div class="param-card">
-            <div class="param-header"><span>MAX İŞLEM</span><span>max 2/yön</span></div>
+            <div class="param-header"><span>MAX İŞLEM</span><span>BTC yönü</span></div>
             <div class="param-input-wrap"><input type="number" id="inpSlots" value="${CONFIG.maxSlots}"><span class="param-unit">adet</span></div>
           </div>
           <div class="param-card" title="Her işlemde en fazla kasanın %2.5'i riske edilir; pozisyon büyüklüğü otomatik ayarlanır">
@@ -3712,7 +3715,8 @@ function serveDashboardHtml() {
       if (line) line.textContent = '⏳ Son ' + hours + ' saatlik gerçek Binance Futures 15dk mumları çekilip simüle ediliyor (' + (hours >= 720 ? '15–35 sn' : '5–15 sn') + ')...';
       if (tbody) tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;color:var(--muted);padding:18px;">⏳ Gerçek geçmiş mumlar hesaplanıyor...</td></tr>';
       try {
-        var res = await fetch('/api/replay-backtest?hours=' + encodeURIComponent(hours) + '&coins=45');
+        var targetCoins = hours > 240 ? 65 : 80;
+        var res = await fetch('/api/replay-backtest?hours=' + encodeURIComponent(hours) + '&coins=' + targetCoins);
         var data = await res.json();
         if (!data || !data.ok) {
           if (line) line.textContent = '❌ Replay alınamadı: ' + ((data && data.error) || 'hata');
@@ -4544,7 +4548,7 @@ const server = http.createServer(async (req, res) => {
   if (pathname === '/api/replay-backtest') {
     try {
       const hours = Number(parsedUrl.searchParams.get('hours')) || 72;
-      const coins = Number(parsedUrl.searchParams.get('coins')) || 45;
+      const coins = Number(parsedUrl.searchParams.get('coins')) || (hours > 240 ? 65 : 80);
       const result = await runHistoricalReplay(hours, coins);
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(result));
