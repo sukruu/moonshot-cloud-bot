@@ -24,18 +24,19 @@ try {
   evaluatePreTradeClearance = judgeMod.evaluatePreTradeClearance;
 } catch (e) {}
 
-// --- EKRAN 1 BİREBİR AYARLARI (MARSCOIN V3 — 15DK BALİNA MOTORU + 3.5R RUNNER) ---
+// --- EKRAN 1 BİREBİR AYARLARI (MARSCOIN V4 — 15DK BALİNA + LİMİTSİZ BİLEŞİK + 3.5R/5.0R RUNNER) ---
 let CONFIG = {
   initialBalance: 100.0,     // Bakiye 100 Dolar
-  marginPerTrade: 20.0,      // Baz teminat (Sabit %2.5 ≈ $2.50 risk ile ATR15m stopa göre otomatik ölçeklenir)
-  riskPerTradeUsd: 2.50,     // Sabit dolar riski (%2.5 kasa: SL %1.0-%2.8 arası ne olursa olsun max ~$2.50 kayıp!)
-  leverage: 10,              // 10x kaldıraç (Geniş 15dk ATR stoplarında 3 slota tam uyumlu nominal ölçekleme)
-  maxSlots: 3,               // Max 3 pozisyon (aynı yönde en fazla 2, çift yön LONG + SHORT aktif)
+  marginPerTrade: 20.0,      // Referans teminat (Risk %'sine ve ATR15m stopa göre limitsiz bileşik ölçeklenir)
+  riskPct: 7.5,              // Kasa bazlı bileşik işlem riski (%1.0 - %10.0 arası sol panelden ayarlanabilir, tavan yok!)
+  riskPerTradeUsd: 7.50,     // Referans dolar riski
+  leverage: 15,              // 15x kaldıraç (Likidasyon ~%6.0 uzaklıkta; maks SL %2.80'in 2 katından fazla güvenlik tamponu)
+  maxSlots: 3,               // Max 3 pozisyon (aktif BTC yönünde tüm 3 slot açık)
   slPct: 1.50,               // Baz stop (15dk ATR x 1.50 ile %1.00 - %2.80 arası otomatik esner)
-  bePct: 1.50,               // 1.0R kâr görünce (+%1.0*SL) stop +%0.15'e çekilir ($0 risk, erken boğma yok!)
-  tp1Pct: 2.10,              // 1.4R kâr görünce geniş iz süren Runner stopu (mfe - 0.85*SL) devreye girer
+  bePct: 1.50,               // LONG 1.0R / SHORT 0.75R kâr görünce stop +%0.15'e çekilir ($0 risk!)
+  tp1Pct: 1.80,              // LONG 1.2R (0.70R aralık) / SHORT 0.90R (0.45R aralık) iz süren Runner devreye girer
   tp2Pct: 3.50,              // Referans kademe
-  moonPct: 5.25,             // 🚀 3.5R Moonshot hedefi (+%3.5*SL -> ~$8.50+ büyük balina kârı!)
+  moonPct: 5.25,             // 🚀 LONG 5.0R / SHORT 3.5R Moonshot hedefi!
   tp1ClosePct: 0.0,          // %100 tam pozisyonla Runner sürülür (erken kâr bölme yok!)
   tp2ClosePct: 0.0,
   maxTradeMin: 480,          // 15dk trendlerin olgunlaşması için 8 saat (32 x 15dk mum)
@@ -79,8 +80,8 @@ function applyCircuitBreaker() {
   const initial = Number(CONFIG.initialBalance) || 100;
   const peak = Math.max(getPeakBalance(), initial, balance);
   const dd = peak > 0 ? (peak - balance) / peak : 0;
-  const severe = balance < 45 || dd >= 0.45;
-  const profitGuard = !severe && (balance < 70 || dd >= 0.28);
+  const severe = balance < Math.max(30, initial * 0.35) || dd >= 0.45;
+  const profitGuard = !severe && dd >= 0.30;
   if (severe) {
     const nextMargin = Math.min(Number(userRisk.marginPerTrade) || 30, 10);
     const changed = !circuitOn || CONFIG.maxSlots !== 1 || CONFIG.marginPerTrade !== nextMargin;
@@ -89,7 +90,7 @@ function applyCircuitBreaker() {
     CONFIG.marginPerTrade = nextMargin;
     DYNAMIC.mode = 'DEFENSIVE_SNIPER';
     if (changed) {
-      addLog(`🛑 Devre kesici: kasa $${balance.toFixed(2)}, zirveden %${(dd * 100).toFixed(1)}. Slot 1, teminat $${nextMargin}.`, 'RISK');
+      addLog(`🛑 Devre kesici: kasa $${balance.toFixed(2)}, zirveden %${(dd * 100).toFixed(1)}. Slot 1, risk yarıya düşürüldü.`, 'RISK');
     }
     return;
   }
@@ -319,10 +320,11 @@ function sanitizeSettings(s) {
   const out = {};
   const num = (v) => { const n = parseFloat(v); return (isFinite(n) ? n : null); };
   const inRange = (n, lo, hi) => (n !== null && n >= lo && n <= hi);
-  const slots = num(s.slots), margin = num(s.margin), lev = num(s.lev);
+  const slots = num(s.slots), margin = num(s.margin), lev = num(s.lev), riskPct = num(s.riskPct);
   const sl = num(s.sl), be = num(s.be), moon = num(s.moon), tp1 = num(s.tp1), tp2 = num(s.tp2);
   if (inRange(slots, 1, 4)) out.maxSlots = Math.round(slots);
   if (inRange(margin, 6, 40)) out.marginPerTrade = margin;
+  if (inRange(riskPct, 1.0, 10.0)) out.riskPct = Number(riskPct.toFixed(1));
   if (lev !== null) out.leverage = Math.min(40, Math.max(5, Math.round(lev)));
   if (inRange(sl, 0.20, 3.5)) out.slPct = sl;
   if (inRange(be, 0.15, 3.5)) out.bePct = be;
@@ -337,6 +339,7 @@ function saveSettings() {
     fs.writeFileSync(SETTINGS_FILE, JSON.stringify({
       maxSlots: CONFIG.maxSlots,
       marginPerTrade: CONFIG.marginPerTrade,
+      riskPct: CONFIG.riskPct,
       leverage: CONFIG.leverage,
       slPct: CONFIG.slPct,
       bePct: CONFIG.bePct,
@@ -354,7 +357,7 @@ function loadSettings() {
     if (!fs.existsSync(SETTINGS_FILE)) return;
     const saved = JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8'));
     const clean = sanitizeSettings({
-      slots: saved.maxSlots, margin: saved.marginPerTrade, lev: saved.leverage,
+      slots: saved.maxSlots, margin: saved.marginPerTrade, riskPct: saved.riskPct, lev: saved.leverage,
       sl: saved.slPct, be: saved.bePct, moon: saved.moonPct, tp1: saved.tp1Pct, tp2: saved.tp2Pct
     });
     // Eski 3dk scalp varsayılanlarından (SL 0.45/0.80/0.90) yeni 15dk Balina Motoruna (3.5R Runner) otomatik geçiş
@@ -363,11 +366,12 @@ function loadSettings() {
       (clean.slPct === 0.90 && clean.tp1Pct === 0.75 && clean.moonPct === 2.80) ||
       (clean.slPct === 0.80 && (clean.tp1Pct === 0.48 || clean.tp1Pct === 0.90 || clean.tp1Pct === 1.20 || clean.tp1Pct === 1.60));
     if (isOldLegacy) {
-      clean.leverage = 10;
+      clean.leverage = 15;
+      clean.riskPct = 7.5;
       clean.marginPerTrade = 20;
       clean.slPct = 1.50;
       clean.bePct = 1.50;
-      clean.tp1Pct = 2.10;
+      clean.tp1Pct = 1.80;
       clean.tp2Pct = 3.50;
       clean.moonPct = 5.25;
     }
@@ -383,6 +387,7 @@ function getSettingsPayload() {
     slots: userRisk.maxSlots, 
     margin: CONFIG.marginPerTrade,
     userMargin: userRisk.marginPerTrade, 
+    riskPct: CONFIG.riskPct,
     lev: CONFIG.leverage,
     sl: CONFIG.slPct, 
     be: CONFIG.bePct, 
@@ -1480,13 +1485,13 @@ function simulateWhaleTrade15m(k, entryIdx, sig, riskUsd, forceSide = null) {
     mfe = Math.max(mfe, favMove);
     mae = Math.max(mae, -advMove);
 
-    // Asimetrik kripto fiziği (102 saf kripto 10.4g önyargısız testte H1+H2 kanıtlı):
-    // LONG : 1.0R BE -> 1.4R Trail (0.85R) -> 3.0R+ Sıkı Moonshot Trail (0.60R) -> 5.0R Moonshot (MMT/ICNT/BARD gibi +%8-%12 rallileri kesmeden taşır!)
-    // SHORT: 0.75R BE -> 0.90R Erken Trail (0.45R) -> 2.5R Moonshot (V-dönüşüyle +$0.09 BE'ye dönen kârları +$1.20-$1.80 olarak kilitler!)
+    // Asimetrik kripto fiziği (62.5g 102 saf kripto H1+H2 kanıtlı — V4):
+    // LONG : 1.0R BE -> 1.2R Trail (0.70R) -> 3.0R+ Sıkı Moonshot Trail (0.60R) -> 5.0R Moonshot
+    // SHORT: 0.75R BE -> 0.90R Erken Trail (0.45R) -> 2.0R+ Kademeli Trail (0.50R) -> 3.5R Şelale Moonshot
     const beMult = isLong ? 1.00 : 0.75;
-    const trailStartMult = isLong ? 1.40 : 0.90;
-    const trailGapMult = isLong ? 0.85 : 0.45;
-    const moonMult = isLong ? 5.00 : 2.50;
+    const trailStartMult = isLong ? 1.20 : 0.90;
+    const trailGapMult = isLong ? 0.70 : 0.45;
+    const moonMult = isLong ? 5.00 : 3.50;
     const tpGoal = slPct * moonMult;
     if (favMove >= tpGoal) {
       const grossPnl = nominal * (tpGoal / 100);
@@ -1507,6 +1512,10 @@ function simulateWhaleTrade15m(k, entryIdx, sig, riskUsd, forceSide = null) {
 
     if (isLong && mfe >= slPct * 3.00) {
       tighten(mfe - (slPct * 0.60));
+      trailing = true;
+      beLocked = true;
+    } else if (!isLong && mfe >= slPct * 2.00) {
+      tighten(mfe - (slPct * 0.50));
       trailing = true;
       beLocked = true;
     } else if (mfe >= slPct * trailStartMult) {
@@ -1624,7 +1633,10 @@ async function runHistoricalReplay(hours = 72, maxCoins = 65) {
   const defaultCoins = hClamped > 240 ? 65 : 80;
   const maxAllowedCoins = hClamped > 240 ? 70 : 85;
   const cClamped = Math.max(15, Math.min(maxAllowedCoins, Math.round(Number(maxCoins) || defaultCoins)));
-  const cacheKey = `${hClamped}:${cClamped}`;
+  const replayRiskPct = Math.max(1.0, Math.min(10.0, Number(CONFIG.riskPct) || 7.5));
+  const replayLev = Math.max(5, Math.min(40, Number(CONFIG.leverage) || 15));
+  const replaySlots = Math.max(1, Math.min(4, Number(userRisk.maxSlots) || Number(CONFIG.maxSlots) || 3));
+  const cacheKey = `${hClamped}:${cClamped}:${replayRiskPct}:${replayLev}:${replaySlots}`;
   const cached = replayCache.get(cacheKey);
   if (cached && (Date.now() - cached.ts) < 5 * 60 * 1000) return cached.result;
   if (replayInFlightMap.has(cacheKey)) return replayInFlightMap.get(cacheKey);
@@ -1710,6 +1722,7 @@ async function runHistoricalReplay(hours = 72, maxCoins = 65) {
 
       const settleSlot = (p) => {
         bal += p.netPnl;
+        if (bal < 1) bal = 1;
         if (bal > peak) peak = bal;
         const dd = peak > 0 ? ((peak - bal) / peak) * 100 : 0;
         if (dd > maxDD) maxDD = dd;
@@ -1731,12 +1744,21 @@ async function runHistoricalReplay(hours = 72, maxCoins = 65) {
           if (openSlots[j].exitTs <= evEntryTs) { settleSlot(openSlots[j]); openSlots.splice(j, 1); }
           else j++;
         }
-        if (openSlots.length >= 3) continue;
+        if (openSlots.length >= replaySlots) continue;
         if (openSlots.some(p => p.symbol === ev.symbol)) continue;
-        if (openSlots.filter(p => p.side === ev.side).length >= 3) continue;
+        if (openSlots.filter(p => p.side === ev.side).length >= replaySlots) continue;
         if ((coinCd[ev.symbol] || 0) > evEntryTs) continue;
 
-        const riskUsd = Math.max(1.50, Math.min(5.00, bal * 0.025));
+        const slPctEst = Number(Math.max(1.00, Math.min(2.80, ev.atr15 * 1.50)).toFixed(2));
+        const rawRiskUsd = Math.max(1.50, bal * (replayRiskPct / 100));
+        const reqNominal = rawRiskUsd / ((slPctEst + 0.09) / 100);
+        const reqMargin = reqNominal / replayLev;
+        const bookedMargin = openSlots.reduce((acc, p) => acc + (p.margin || 0), 0);
+        const freeMargin = Math.max(0, bal - bookedMargin);
+        const maxSlotMargin = Math.max(15.0, bal * (0.96 / replaySlots));
+        const actualMargin = Math.min(reqMargin, freeMargin, maxSlotMargin);
+        if (actualMargin < 6.0) continue;
+        const riskUsd = rawRiskUsd * (actualMargin / reqMargin);
         const res = simulateWhaleTrade15m(ev.k, ev.idx, ev, riskUsd);
         if (!res) continue;
 
@@ -1769,7 +1791,7 @@ async function runHistoricalReplay(hours = 72, maxCoins = 65) {
           oppPnl: oppRes ? oppRes.netPnl : 0,
           balanceAfter: Number(bal.toFixed(2))
         };
-        openSlots.push({ symbol: ev.symbol, side: ev.side, exitTs: res.exitTs, netPnl: res.netPnl, ref: rec });
+        openSlots.push({ symbol: ev.symbol, side: ev.side, margin: actualMargin, exitTs: res.exitTs, netPnl: res.netPnl, ref: rec });
         coinCd[ev.symbol] = Math.max(coinCd[ev.symbol] || 0, res.exitTs + (30 * 60 * 1000));
         trades.push(rec);
       }
@@ -1789,6 +1811,9 @@ async function runHistoricalReplay(hours = 72, maxCoins = 65) {
         summary: {
           hours: hClamped,
           coinsScanned: coinKlines.length,
+          riskPct: replayRiskPct,
+          leverage: replayLev,
+          maxSlots: replaySlots,
           initialBalance: 100.0,
           finalBalance: Number(bal.toFixed(2)),
           netPnl: Number((bal - 100.0).toFixed(2)),
@@ -1848,11 +1873,12 @@ async function scanLoop() {
       }
       return;
     }
-    // 🛑 ACİL DURUM SERMAYE TABANI (HARD CIRCUIT BREAKER)
-    if (todayNetPnl() <= -15) {
+    // 🛑 ACİL DURUM GÜNLÜK KAYIP TABANI (ORANSAL: KASANIN %25'İ, MİN $25)
+    const maxDailyLossUsd = Math.max(25, Number((balance * 0.25).toFixed(2)));
+    if (todayNetPnl() <= -maxDailyLossUsd) {
       if (Date.now() - lastScanHeartbeat > 120000) {
         lastScanHeartbeat = Date.now();
-        addLog('⏸️ Günlük zarar limiti (-$15). Yeni işlem yok.', 'RISK');
+        addLog(`⏸️ Günlük zarar limiti (-$${maxDailyLossUsd.toFixed(0)} / -%25). Yeni işlem yok.`, 'RISK');
       }
       return;
     }
@@ -2088,17 +2114,19 @@ async function scanLoop() {
 
         if (activePositions.length >= CONFIG.maxSlots) continue;
 
-        // 🛡️ 15DK ATR STOP (%1.00 - %2.80) + SABİT %2.5 (~$2.50) RİSK ÖLÇEKLEMESİ:
+        // 🚀 15DK ATR STOP (%1.00 - %2.80) + LİMİTSİZ BİLEŞİK RİSK ÖLÇEKLEMESİ (CONFIG.riskPct, Tavan Yok!):
         // Not: Serbest teminat ve maxSameSide kesintisi sıralama SONRASINDA uygulanır ki en güçlü balina adayı elenmesin!
         const tradeSlPct = Number(Math.max(1.00, Math.min(2.80, sig.atr15 * 1.50)).toFixed(2));
-        const baseRiskUsd = Number(CONFIG.riskPerTradeUsd) || 2.50;
-        const equityRiskUsd = Math.max(1.50, Math.min(5.00, Number((balance * 0.025).toFixed(2))));
-        const targetRiskUsd = circuitOn ? Math.min(1.50, equityRiskUsd) : Math.min(baseRiskUsd * 2.0, Math.max(1.50, equityRiskUsd));
+        const cfgRiskPct = Math.max(1.0, Math.min(10.0, Number(CONFIG.riskPct) || 7.5));
+        const equityRiskUsd = Math.max(1.50, Number((balance * (cfgRiskPct / 100)).toFixed(2)));
+        const targetRiskUsd = circuitOn ? Math.max(1.50, Number((equityRiskUsd * 0.50).toFixed(2))) : equityRiskUsd;
         const effectiveStopCostPct = tradeSlPct + 0.09;
         const targetNominal = targetRiskUsd / (effectiveStopCostPct / 100);
-        const levNow = Math.max(5, Number(CONFIG.leverage) || 10);
-        const maxAllowedMargin = Math.min(35.0, Math.max(15.0, balance * 0.34));
+        const levNow = Math.max(5, Math.min(40, Number(CONFIG.leverage) || 15));
+        const slotCount = Math.max(1, Number(CONFIG.maxSlots) || 3);
+        const maxAllowedMargin = Math.max(15.0, balance * (0.96 / slotCount));
         const tradeMargin = Number(Math.max(6.0, Math.min(maxAllowedMargin, targetNominal / levNow)).toFixed(2));
+        const effectiveRiskUsd = Number((tradeMargin * levNow * (effectiveStopCostPct / 100)).toFixed(2));
 
         let fillPx = side === "LONG" ? curP * 1.0002 : curP * 0.9998;
         let spreadBps = null;
@@ -2139,13 +2167,13 @@ async function scanLoop() {
 
         const isLongSide = side === 'LONG';
         const tradeBePct = Number((tradeSlPct * (isLongSide ? 1.00 : 0.75)).toFixed(2));
-        const tradeTp1Pct = Number((tradeSlPct * (isLongSide ? 1.40 : 0.90)).toFixed(2));
-        const tradeTp2Pct = Number((tradeSlPct * (isLongSide ? 3.00 : 1.70)).toFixed(2));
-        const tradeMoonPct = Number((tradeSlPct * (isLongSide ? 5.00 : 2.50)).toFixed(2));
+        const tradeTp1Pct = Number((tradeSlPct * (isLongSide ? 1.20 : 0.90)).toFixed(2));
+        const tradeTp2Pct = Number((tradeSlPct * (isLongSide ? 3.00 : 2.00)).toFixed(2));
+        const tradeMoonPct = Number((tradeSlPct * (isLongSide ? 5.00 : 3.50)).toFixed(2));
 
         const dirEmoji = side === 'LONG' ? '🐋🚀 BALİNA LONG' : '🐋🩸 BALİNA SHORT';
         const flowText = side === 'LONG' ? `Alıcı %${sig.taker.toFixed(0)}` : `Satıcı %${(100 - sig.taker).toFixed(0)}`;
-        const radarTag = `[${dirEmoji} | 15dk ${sig.move >= 0 ? '+' : ''}%${sig.move.toFixed(2)} | Hacim ${sig.volMult.toFixed(1)}x | 4s ${sig.chg4h >= 0 ? '+' : ''}%${sig.chg4h.toFixed(1)} | ${flowText}] [SL: %${tradeSlPct.toFixed(2)} | ATR15m: %${sig.atr15.toFixed(2)} | Risk: ~$${targetRiskUsd.toFixed(2)}]`;
+        const radarTag = `[${dirEmoji} | 15dk ${sig.move >= 0 ? '+' : ''}%${sig.move.toFixed(2)} | Hacim ${sig.volMult.toFixed(1)}x | 4s ${sig.chg4h >= 0 ? '+' : ''}%${sig.chg4h.toFixed(1)} | ${flowText}] [SL: %${tradeSlPct.toFixed(2)} | ATR15m: %${sig.atr15.toFixed(2)} | Risk: ~$${effectiveRiskUsd.toFixed(2)}]`;
 
         const entryScore = sig.score;
 
@@ -2353,9 +2381,9 @@ async function fastRiskLoop() {
 
       let exitReason = null;
 
-      // 🐋 MARSCOIN V3 — ASİMETRİK 15DK BALİNA RUNNER ÇIKIŞ MOTORU (Replay Backtest ile 1-e-1 Aynı!)
-      // LONG : 1.00R BE -> 1.40R+ Geniş Trail (0.85R) -> 3.50R Moonshot (ralli basamaklarını taşır)
-      // SHORT: 0.80R BE -> 1.10R+ Sıkı Trail  (0.50R) -> 2.50R Moonshot (V-dönüşü öncesi kârı kilitler)
+      // 🐋 MARSCOIN V4 — ASİMETRİK 15DK BALİNA RUNNER ÇIKIŞ MOTORU (Replay Backtest ile 1-e-1 Aynı!)
+      // LONG : 1.00R BE -> 1.20R+ Trail (0.70R) -> 3.00R+ Sıkı Trail (0.60R) -> 5.00R Moonshot
+      // SHORT: 0.75R BE -> 0.90R+ Trail (0.45R) -> 2.00R+ Kademeli Trail (0.50R) -> 3.50R Şelale Moonshot
       const slBase = Math.max(0.75, Number(pos.slPct) || Number(CONFIG.slPct) || 1.50);
       const lockSpot = (pct) => isLong ? pos.entryPrice * (1 + pct / 100) : pos.entryPrice * (1 - pct / 100);
       const tightenStop = (pct) => {
@@ -2369,13 +2397,15 @@ async function fastRiskLoop() {
       };
 
       const beMult = isLong ? 1.00 : 0.75;
-      const trailStartMult = isLong ? 1.40 : 0.90;
-      const trailGapMult = isLong ? 0.85 : 0.45;
-      const moonMult = isLong ? 5.00 : 2.50;
+      const trailStartMult = isLong ? 1.20 : 0.90;
+      const trailGapMult = isLong ? 0.70 : 0.45;
+      const moonMult = isLong ? 5.00 : 3.50;
 
       const beGoal = slBase * beMult;
       const trailStart = slBase * trailStartMult;
-      const trailGap = (isLong && mfe >= slBase * 3.00) ? (slBase * 0.60) : (slBase * trailGapMult);
+      const trailGap = (isLong && mfe >= slBase * 3.00)
+        ? (slBase * 0.60)
+        : ((!isLong && mfe >= slBase * 2.00) ? (slBase * 0.50) : (slBase * trailGapMult));
       const moonGoal = slBase * moonMult;
       const initMargin = pos.initialMargin || pos.margin || 20;
       const makerRate = Number(CONFIG.makerRate) || 0.0002;
@@ -3511,7 +3541,7 @@ function serveDashboardHtml() {
         <div class="perf-grid-4">
           <div class="perf-mini-card">
             <span class="perf-mini-label">Toplam İşlem</span>
-            <span class="perf-mini-val" id="stTotalTrades">${stats.totalTrades}</span>
+            <span class="perf-mini-val" id="stTotalTrades">${stats.totalTrades}${stats.activeCount > 0 ? ` (+${stats.activeCount} Açık)` : ''}</span>
           </div>
           <div class="perf-mini-card">
             <span class="perf-mini-label">Kazanma %</span>
@@ -3533,9 +3563,9 @@ function serveDashboardHtml() {
             <div class="param-header"><span>MAX İŞLEM</span><span>BTC yönü</span></div>
             <div class="param-input-wrap"><input type="number" id="inpSlots" value="${CONFIG.maxSlots}"><span class="param-unit">adet</span></div>
           </div>
-          <div class="param-card" title="Her işlemde en fazla kasanın %2.5'i riske edilir; pozisyon büyüklüğü otomatik ayarlanır">
-            <div class="param-header"><span>İŞLEM RİSKİ</span><span>otomatik</span></div>
-            <div class="param-static-val"><span>%2.5</span><span class="param-unit" id="stRiskUsd">~$${(parseFloat(stats.balance || 100) * 0.025).toFixed(2)}</span></div>
+          <div class="param-card" title="Limitsiz bileşik kasa riski (%1–%10): Bakiye büyüdükçe işlem boyutu otomatik katlanır">
+            <div class="param-header"><span>İŞLEM RİSKİ</span><span id="stRiskUsd">~$${(parseFloat(stats.balance || 100) * ((Number(CONFIG.riskPct) || 7.5) / 100)).toFixed(2)}</span></div>
+            <div class="param-input-wrap"><input type="number" id="inpRiskPct" step="0.5" min="1" max="10" value="${CONFIG.riskPct}"><span class="param-unit">%</span></div>
           </div>
           <div class="param-card">
             <div class="param-header"><span>KALDIRAÇ</span><span>sınır</span></div>
@@ -3549,9 +3579,9 @@ function serveDashboardHtml() {
 
         <div class="sidebar-section-title">🎯 ÇIKIŞ & KORUMA PLANI</div>
         <div class="sidebar-plan-card">
-          <div class="sidebar-plan-row">🟢 <b>LONG:</b> Kâr gelince stop başabaşa çekilir, iz sürenle <b>5 kata kadar</b> taşınır.</div>
-          <div class="sidebar-plan-row">🔴 <b>SHORT:</b> Erken kâr kilidi açılır, ani tepkide kârı korur (<b>2.5 kat hedef</b>).</div>
-          <div class="sidebar-plan-row">🛡️ <b>Koruma:</b> Aynı koinde 2 zarar ➔ <b>4s mola</b> · Maks. süre <b>8 saat</b>.</div>
+          <div class="sidebar-plan-row">🟢 <b>LONG:</b> 1R'de başabaş, 1.2R'de iz süren açılır, <b>5 kata kadar</b> taşınır.</div>
+          <div class="sidebar-plan-row">🔴 <b>SHORT:</b> Erken kâr kilidi açılır, 2R'de sıkılaşır, <b>3.5 kata kadar</b> şelale taşır.</div>
+          <div class="sidebar-plan-row">🚀 <b>Bileşik:</b> Tavan yok · Aynı koinde 2 zarar ➔ <b>4s mola</b> · Maks. <b>8 saat</b>.</div>
         </div>
 
         <div class="action-buttons-grid">
@@ -3728,7 +3758,7 @@ function serveDashboardHtml() {
         var lClr = (s.longNet || 0) >= 0 ? 'var(--green)' : 'var(--red)';
         var sClr = (s.shortNet || 0) >= 0 ? 'var(--green)' : 'var(--red)';
         var oClr = (s.oppositeNet || 0) >= 0 ? 'var(--green)' : 'var(--red)';
-        if (line) line.textContent = '✅ Tamamlandı (' + (data.generatedAt || '') + ') | ' + s.coinsScanned + ' Saf Kripto Futures · Son ' + s.hours + ' Saat · $100 Başlangıç Kasası · 3 Slot · %2.5 Risk · Tam Komisyon + Kayma Dahil';
+        if (line) line.textContent = '✅ Tamamlandı (' + (data.generatedAt || '') + ') | ' + s.coinsScanned + ' Saf Kripto Futures · Son ' + s.hours + ' Saat · $100 Başlangıç · ' + (s.maxSlots || 3) + ' Slot · %' + (s.riskPct || 7.5) + ' Bileşik Risk (' + (s.leverage || 15) + 'x) · Komisyon + Kayma Dahil';
         if (grid) {
           var card = function (lbl, val, sub, clr) {
             return '<div style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;"><div style="font-size:10px;color:var(--muted);font-weight:700;">' + lbl + '</div><div style="font-size:16px;font-weight:900;color:' + (clr || 'var(--text)') + ';margin-top:2px;">' + val + '</div><div style="font-size:10px;color:var(--muted);margin-top:2px;">' + sub + '</div></div>';
@@ -3921,12 +3951,14 @@ function serveDashboardHtml() {
         document.getElementById("stBalance").innerText = '$' + data.stats.balance;
         const riskUsdEl = document.getElementById("stRiskUsd");
         if (riskUsdEl) {
-          riskUsdEl.innerText = '~$' + (parseFloat(data.stats.balance || 100) * 0.025).toFixed(2);
+          const rPctNow = (data.settings && data.settings.riskPct) ? parseFloat(data.settings.riskPct) : 7.5;
+          riskUsdEl.innerText = '~$' + (parseFloat(data.stats.balance || 100) * (rPctNow / 100)).toFixed(2);
         }
         const pnlEl = document.getElementById("stPnl");
         pnlEl.innerText = (parseFloat(data.stats.totalPnl) >= 0 ? '+' : '') + '$' + data.stats.totalPnl + ' (%' + data.stats.totalRoi + ')';
         pnlEl.style.color = parseFloat(data.stats.totalPnl) >= 0 ? 'var(--green)' : 'var(--red)';
-        document.getElementById("stTotalTrades").innerText = data.stats.totalTrades;
+        const actCnt = Number(data.stats.activeCount) || 0;
+        document.getElementById("stTotalTrades").innerText = data.stats.totalTrades + (actCnt > 0 ? (' (+' + actCnt + ' Açık)') : '');
         document.getElementById("stWinRate").innerText = '%' + data.stats.winRate;
         document.getElementById("stWinsLosses").innerText = data.stats.wins + 'K / ' + data.stats.losses + 'Z';
         document.getElementById("stMega").innerText = data.stats.megaWins + ' Adet';
@@ -4176,7 +4208,7 @@ function serveDashboardHtml() {
 
     // Parametreleri Dinamik Güncelleme (sunucuya + tarayıcı hafızasına kaydeder)
     const LS_SET = 'moon_settings';
-    const SET_IDS = { slots: 'inpSlots', lev: 'inpLev' };
+    const SET_IDS = { slots: 'inpSlots', riskPct: 'inpRiskPct', lev: 'inpLev' };
     let settingsSynced = false;
 
     function readSettingsFromInputs() {
@@ -4213,7 +4245,9 @@ function serveDashboardHtml() {
         el.addEventListener('change', async () => {
           const o = readSettingsFromInputs();
           try { localStorage.setItem(LS_SET, JSON.stringify(o)); } catch (e) {}
+          replayCache = null;
           await pushSettings(o);
+          updateDashboard();
         });
       }
     });
@@ -4608,18 +4642,26 @@ const server = http.createServer(async (req, res) => {
         res.end(JSON.stringify({ ok: false, error: "Sunucu sıfırlandı. Eski zombi geçmiş kesin olarak engellendi." }));
         return;
       }
-      if (body && Array.isArray(body.history) && body.history.length > 0) {
+      if (body && ((Array.isArray(body.history) && body.history.length > 0) || (Array.isArray(body.positions) && body.positions.length > 0))) {
         const existingIds = new Set(history.map(h => h.id));
         let addedCount = 0;
-        body.history.forEach(t => {
-          if (!existingIds.has(t.id)) {
-            history.push(t);
-            existingIds.add(t.id);
-            addedCount++;
-          }
-        });
+        if (Array.isArray(body.history)) {
+          body.history.forEach(t => {
+            if (!existingIds.has(t.id)) {
+              history.push(t);
+              existingIds.add(t.id);
+              addedCount++;
+            }
+          });
+        }
         history.sort((a, b) => (b.id || 0) - (a.id || 0));
         if (history.length > 500) history = history.slice(0, 500);
+
+        let restoredPositions = 0;
+        if (Array.isArray(body.positions) && body.positions.length > 0 && activePositions.length === 0) {
+          activePositions = body.positions.slice(0, CONFIG.maxSlots);
+          restoredPositions = activePositions.length;
+        }
 
         const totalPnl = history.reduce((acc, h) => acc + (h.pnl || 0), 0);
         const activeTpPnl = Array.isArray(activePositions) ? activePositions.reduce((acc, p) => acc + (p.tp1Pnl || 0) + (p.tp2Pnl || 0), 0) : 0;
@@ -4632,9 +4674,9 @@ const server = http.createServer(async (req, res) => {
           fs.writeFileSync(HISTORY_FILE, JSON.stringify(history.slice(0, 500), null, 2), 'utf8');
         } catch(e) {}
 
-        addLog(`💾 Tarayıcı Hafızasından (LocalStorage) Bakiye ($${balance.toFixed(2)}) ve ${history.length} Adet İşlem Başarıyla Kurtarıldı! (+${addedCount} yeni)`, 'RESTORE');
+        addLog(`💾 Bakiye ($${balance.toFixed(2)}), ${history.length} İşlem ve ${restoredPositions} Açık Pozisyon Kurtarıldı! (+${addedCount} yeni)`, 'RESTORE');
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ ok: true, restored: history.length, balance, added: addedCount }));
+        res.end(JSON.stringify({ ok: true, restored: history.length, restoredPositions, balance, added: addedCount }));
         return;
       }
       res.writeHead(400, { 'Content-Type': 'application/json' });
@@ -4766,6 +4808,7 @@ const server = http.createServer(async (req, res) => {
     const clean = sanitizeSettings({
       slots: parsedUrl.searchParams.get('slots'),
       margin: parsedUrl.searchParams.get('margin'),
+      riskPct: parsedUrl.searchParams.get('riskPct'),
       lev: parsedUrl.searchParams.get('lev'),
       sl: parsedUrl.searchParams.get('sl'),
       be: parsedUrl.searchParams.get('be'),
@@ -4777,7 +4820,8 @@ const server = http.createServer(async (req, res) => {
     rememberUserRisk();
     saveSettings();
     applyCircuitBreaker();
-    addLog(`⚙️ Ayarlar kaydedildi: Slot ${CONFIG.maxSlots} | Teminat $${CONFIG.marginPerTrade} | ${CONFIG.leverage}x | SL %${CONFIG.slPct} | BE %${CONFIG.bePct} | TP1 %${CONFIG.tp1Pct} | TP2 %${CONFIG.tp2Pct} | Moon %${CONFIG.moonPct}`, 'INFO');
+    replayCache.clear();
+    addLog(`⚙️ Ayarlar kaydedildi: Slot ${CONFIG.maxSlots} | Risk %${CONFIG.riskPct} (Limitsiz Bileşik) | ${CONFIG.leverage}x | SL %${CONFIG.slPct}`, 'INFO');
 
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ ok: true, config: CONFIG }));
