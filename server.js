@@ -2255,12 +2255,17 @@ function buildGroupBreakdown(trades, keyFn, labelMap) {
   for (const t of trades) {
     const k = keyFn(t);
     if (!map.has(k)) {
-      map.set(k, { key: k, label: (labelMap && labelMap[k]) || k, count: 0, wins: 0, botNet: 0, allLongNet: 0, allLongWins: 0, allShortNet: 0, allShortWins: 0, mfeSum: 0, maeSum: 0 });
+      map.set(k, { key: k, label: (labelMap && labelMap[k]) || k, count: 0, wins: 0, botNet: 0, botOnlyCount: 0, botOnlyWins: 0, botOnlyNet: 0, allLongNet: 0, allLongWins: 0, allShortNet: 0, allShortWins: 0, mfeSum: 0, maeSum: 0 });
     }
     const g = map.get(k);
     g.count++;
     if (t.netPnl > 0.05) g.wins++;
     g.botNet += t.netPnl;
+    if (t.botApproved) {
+      g.botOnlyCount++;
+      if (t.netPnl > 0.05) g.botOnlyWins++;
+      g.botOnlyNet += t.netPnl;
+    }
     g.allLongNet += t.longNet;
     if (t.longNet > 0.05) g.allLongWins++;
     g.allShortNet += t.shortNet;
@@ -2275,6 +2280,10 @@ function buildGroupBreakdown(trades, keyFn, labelMap) {
     wins: g.wins,
     wr: g.count ? Number(((g.wins / g.count) * 100).toFixed(1)) : 0,
     botNet: Number(g.botNet.toFixed(2)),
+    botOnlyCount: g.botOnlyCount,
+    botOnlyWins: g.botOnlyWins,
+    botOnlyWr: g.botOnlyCount ? Number(((g.botOnlyWins / g.botOnlyCount) * 100).toFixed(1)) : 0,
+    botOnlyNet: Number(g.botOnlyNet.toFixed(2)),
     allLongNet: Number(g.allLongNet.toFixed(2)),
     allLongWr: g.count ? Number(((g.allLongWins / g.count) * 100).toFixed(1)) : 0,
     allShortNet: Number(g.allShortNet.toFixed(2)),
@@ -2595,9 +2604,11 @@ async function runHistoricalReplay(hours = 72, maxCoins = 120, opts = {}) {
         const cs = coinStatMap.get(rec.symbol);
         if (!cs) continue;
         cs.totalSetups++;
-        if (rec.botApproved) cs.botSignals++;
-        cs.botNet += rec.netPnl;
-        if (rec.netPnl > 0.05) cs.botWins++;
+        if (rec.botApproved) {
+          cs.botSignals++;
+          cs.botNet += rec.netPnl;
+          if (rec.netPnl > 0.05) cs.botWins++;
+        }
         cs.allLongNet += rec.longNet;
         if (rec.longNet > 0.05) cs.allLongWins++;
         cs.allShortNet += rec.shortNet;
@@ -2613,7 +2624,7 @@ async function runHistoricalReplay(hours = 72, maxCoins = 120, opts = {}) {
         return {
           ...cs,
           botNet,
-          botWr: cs.totalSetups ? Number(((cs.botWins / cs.totalSetups) * 100).toFixed(1)) : 0,
+          botWr: cs.botSignals ? Number(((cs.botWins / cs.botSignals) * 100).toFixed(1)) : 0,
           allLongNet,
           allLongWr: cs.totalSetups ? Number(((cs.allLongWins / cs.totalSetups) * 100).toFixed(1)) : 0,
           allShortNet,
@@ -2634,6 +2645,14 @@ async function runHistoricalReplay(hours = 72, maxCoins = 120, opts = {}) {
       const longs = trades.filter(x => x.side === 'LONG');
       const shorts = trades.filter(x => x.side === 'SHORT');
       const botOnlyTrades = trades.filter(x => x.botApproved);
+      const botOnlyWinsArr = botOnlyTrades.filter(x => x.netPnl > 0.05);
+      const botOnlyLossesArr = botOnlyTrades.filter(x => x.netPnl < -0.05);
+      const botGrossWins = sum(botOnlyWinsArr, x => x.netPnl);
+      const botGrossLosses = Math.abs(sum(botOnlyLossesArr, x => x.netPnl));
+      const skippedTrades = trades.filter(x => !x.botApproved);
+      const skippedWins = skippedTrades.filter(x => x.netPnl > 0.05).length;
+      const skippedLosses = skippedTrades.filter(x => x.netPnl < -0.05).length;
+      const skippedNet = Number(sum(skippedTrades, x => x.netPnl).toFixed(2));
       const grossWins = sum(wins, x => x.netPnl);
       const grossLosses = Math.abs(sum(losses, x => x.netPnl));
       const allLongNet = Number(sum(trades, x => x.longNet).toFixed(2));
@@ -2641,7 +2660,10 @@ async function runHistoricalReplay(hours = 72, maxCoins = 120, opts = {}) {
       const allLongWins = trades.filter(x => x.longNet > 0.05).length;
       const allShortWins = trades.filter(x => x.shortNet > 0.05).length;
       const botOnlyNet = Number(sum(botOnlyTrades, x => x.netPnl).toFixed(2));
-      const botOnlyWins = botOnlyTrades.filter(x => x.netPnl > 0.05).length;
+      const botOnlyWins = botOnlyWinsArr.length;
+      const botOnlyFees = Number(sum(botOnlyTrades, x => x.feeUsd).toFixed(2));
+      const botOnlyOppNet = Number(sum(botOnlyTrades, x => x.oppPnl).toFixed(2));
+      const botOnlyPf = botGrossLosses > 0 ? Number((botGrossWins / botGrossLosses).toFixed(2)) : (botGrossWins > 0 ? 99 : 0);
 
       const engineBreakdown = buildGroupBreakdown(trades, t => t.tf, {
         '15m': '🐋 15dk Balina',
@@ -2684,8 +2706,18 @@ async function runHistoricalReplay(hours = 72, maxCoins = 120, opts = {}) {
           maxDrawdownPct: Number(maxDD.toFixed(1)),
           totalTrades: trades.length,
           botApprovedTrades: botOnlyTrades.length,
+          botApprovedWins: botOnlyWins,
+          botApprovedLosses: botOnlyLossesArr.length,
           botApprovedNet: botOnlyNet,
           botApprovedWr: botOnlyTrades.length ? Number(((botOnlyWins / botOnlyTrades.length) * 100).toFixed(1)) : 0,
+          botApprovedPf: botOnlyPf,
+          botApprovedFees: botOnlyFees,
+          botApprovedOppNet: botOnlyOppNet,
+          skippedCount: skippedTrades.length,
+          skippedWins,
+          skippedLosses,
+          skippedWr: skippedTrades.length ? Number(((skippedWins / skippedTrades.length) * 100).toFixed(1)) : 0,
+          skippedNet,
           wins: wins.length,
           losses: losses.length,
           winRate: trades.length ? Number(((wins.length / trades.length) * 100).toFixed(1)) : 0,
@@ -2788,10 +2820,10 @@ function buildReplayCoinsCsv(result) {
   return '\uFEFF' + lines.join('\r\n');
 }
 
-function startReplayJob(hours = 48, scope = 'all', mode = 'market', forceRefresh = false) {
-  const hClamped = Math.max(12, Math.min(720, Math.round(Number(hours) || 48)));
-  const sNorm = scope === 'liquid' ? 'liquid' : 'all';
-  const mNorm = (mode === 'portfolio' || mode === 'all_signals' || mode === 'market') ? mode : 'market';
+function startReplayJob(hours = 168, scope = 'liquid', mode = 'portfolio', forceRefresh = false) {
+  const hClamped = Math.max(12, Math.min(720, Math.round(Number(hours) || 168)));
+  const sNorm = scope === 'all' ? 'all' : 'liquid';
+  const mNorm = (mode === 'portfolio' || mode === 'all_signals' || mode === 'market') ? mode : 'portfolio';
   const jobKey = `${hClamped}:${sNorm}:${mNorm}:${CONFIG.riskPct}:${CONFIG.leverage}:${userRisk.maxSlots || CONFIG.maxSlots}`;
 
   // Aynı iş zaten çalışıyorsa ona bağlan
@@ -4770,26 +4802,26 @@ function serveDashboardHtml() {
       <div class="panel" style="border:1px solid rgba(56,189,248,0.35);">
         <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:10px;">
           <div>
-            <h2 style="margin:0; color:#38bdf8;">⏪ TÜM BİNANCE GEÇMİŞ REPLAY & EXCEL AKTARICI (LONG vs SHORT)</h2>
-            <div style="font-size:12px; color:var(--muted); margin-top:4px;">Binance Futures'taki <b>tüm saf kripto koinlerin (~400 koin)</b> gerçek 15dk grafiklerini tarar; her kurulumda <b>LONG girseydik</b> ve <b>SHORT girseydik</b> komisyon+kayma dahil net kâr/zararı karşılaştırıp <b>Excel (CSV)</b>'e aktarır.</div>
+            <h2 style="margin:0; color:#38bdf8;">⏪ GEÇMİŞ REPLAY & EXCEL AKTARICI (CANLI PORTFÖY · LONG vs SHORT)</h2>
+            <div style="font-size:12px; color:var(--muted); margin-top:4px;">Varsayılan olarak canlı botun <b>4 slotlu bileşik portföy</b> performansını (<b>≥$5M likit koinler</b>) tarar; istersen <b>Tüm Binance (~488 koin)</b> üzerinde <b>Bot Girenler vs Pas Geçilenler · LONG vs SHORT</b> karşılaştırmasını yapıp <b>Excel (CSV)</b>'e aktarır.</div>
           </div>
           <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
             <select id="selReplayHours" style="background:var(--panel2); color:var(--text); border:1px solid var(--border); border-radius:6px; padding:6px 8px; font-weight:800; font-size:11.5px;">
-              <option value="24">Son 24 Saat (~15 sn)</option>
-              <option value="48" selected>Son 48 Saat (~18 sn)</option>
-              <option value="72">Son 3 Gün (72s · ~1.5 dk)</option>
-              <option value="168">Son 7 Gün (168s · ~1.5 dk)</option>
-              <option value="240">Son 10 Gün (240s · ~3 dk)</option>
+              <option value="24">Son 24 Saat (~12 sn)</option>
+              <option value="48">Son 48 Saat (~15 sn)</option>
+              <option value="72">Son 3 Gün (72s)</option>
+              <option value="168" selected>Son 7 Gün (168s · ~15 sn Likit)</option>
+              <option value="240">Son 10 Gün (240s)</option>
               <option value="720">Son 30 Gün (720s)</option>
             </select>
             <select id="selReplayScope" style="background:var(--panel2); color:var(--text); border:1px solid var(--border); border-radius:6px; padding:6px 8px; font-weight:800; font-size:11.5px;">
-              <option value="all" selected>🌐 Tüm Binance (~400 Koin)</option>
-              <option value="liquid">💧 Canlı Likit (≥$5M · ~150 Koin)</option>
+              <option value="liquid" selected>💧 Canlı Likit (≥$5M · ~150 Koin)</option>
+              <option value="all">🌐 Tüm Binance (~488 Koin)</option>
             </select>
             <select id="selReplayMode" style="background:var(--panel2); color:var(--text); border:1px solid var(--border); border-radius:6px; padding:6px 8px; font-weight:800; font-size:11.5px;">
-              <option value="market" selected>🌐 Tüm Piyasa · L vs S Analizi</option>
+              <option value="portfolio" selected>📊 Canlı Bot Portföyü (4 Slot)</option>
               <option value="all_signals">🔬 Sadece Bot Sinyalleri (Slotsuz)</option>
-              <option value="portfolio">📊 Canlı Bot Portföyü (4 Slot)</option>
+              <option value="market">🌐 Tüm Piyasa · L vs S Analizi</option>
             </select>
             <button class="theme-toggle-btn" id="btnRunReplay" onclick="loadReplay(true)" style="background:rgba(56,189,248,0.18);border-color:rgba(56,189,248,0.5);">⏪ Tara & Simüle Et</button>
             <button class="theme-toggle-btn" id="btnCancelReplay" onclick="cancelReplay()" style="display:none;background:rgba(239,68,68,0.18);border-color:rgba(239,68,68,0.5);color:var(--red);">⏹️ Durdur</button>
@@ -4896,12 +4928,22 @@ function serveDashboardHtml() {
       if (bc) { bc.style.background = replaySubTab === 'coins' ? 'rgba(168,85,247,0.22)' : ''; bc.style.borderColor = replaySubTab === 'coins' ? 'rgba(168,85,247,0.65)' : ''; }
       renderReplayTables();
     }
-    function renderBreakdownBox(title, rows) {
+    function renderBreakdownBox(title, rows, opts) {
       if (!rows || !rows.length) return '';
+      var botOnly = !!(opts && opts.botOnly);
+      var netLbl = (opts && opts.netLabel) || (botOnly ? 'Bot Giren $' : 'Bot $');
+      var cntLbl = botOnly ? 'Bot/Tümü' : 'Adet';
       var body = rows.map(function (r) {
-        return '<tr><td style="font-weight:700;font-size:10.5px;">' + escapeHtml(r.label) + '</td><td style="text-align:center;font-size:10.5px;">' + r.count + '</td><td style="color:' + usdClr(r.botNet) + ';font-weight:800;font-size:10.5px;">' + fmtUsdSign(r.botNet) + '</td><td style="color:' + usdClr(r.allLongNet) + ';font-weight:800;font-size:10.5px;">' + fmtUsdSign(r.allLongNet) + '</td><td style="color:' + usdClr(r.allShortNet) + ';font-weight:800;font-size:10.5px;">' + fmtUsdSign(r.allShortNet) + '</td></tr>';
+        var cntHtml = botOnly
+          ? ('<b>' + (r.botOnlyCount || 0) + '</b><span style="color:var(--muted);">/' + r.count + '</span>')
+          : String(r.count);
+        var val = botOnly ? (r.botOnlyNet || 0) : (r.botNet || 0);
+        var valHtml = (botOnly && !(r.botOnlyCount > 0))
+          ? '<span style="color:var(--muted);">$0.00</span>'
+          : ('<span style="color:' + usdClr(val) + ';font-weight:800;">' + fmtUsdSign(val) + '</span>');
+        return '<tr><td style="font-weight:700;font-size:10.5px;">' + escapeHtml(r.label) + '</td><td style="text-align:center;font-size:10.5px;">' + cntHtml + '</td><td style="font-size:10.5px;">' + valHtml + '</td><td style="color:' + usdClr(r.allLongNet) + ';font-weight:800;font-size:10.5px;">' + fmtUsdSign(r.allLongNet) + '</td><td style="color:' + usdClr(r.allShortNet) + ';font-weight:800;font-size:10.5px;">' + fmtUsdSign(r.allShortNet) + '</td></tr>';
       }).join('');
-      return '<div style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:7px 9px;"><div style="font-size:10.5px;font-weight:800;color:#38bdf8;margin-bottom:5px;">' + title + '</div><table style="width:100%;font-size:10.5px;"><thead><tr><th style="padding:3px 4px;">Grup</th><th style="padding:3px 4px;text-align:center;">Adet</th><th style="padding:3px 4px;">Bot $</th><th style="padding:3px 4px;">LONG $</th><th style="padding:3px 4px;">SHORT $</th></tr></thead><tbody>' + body + '</tbody></table></div>';
+      return '<div style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:7px 9px;"><div style="font-size:10.5px;font-weight:800;color:#38bdf8;margin-bottom:5px;">' + title + '</div><table style="width:100%;font-size:10.5px;"><thead><tr><th style="padding:3px 4px;">Grup</th><th style="padding:3px 4px;text-align:center;">' + cntLbl + '</th><th style="padding:3px 4px;">' + netLbl + '</th><th style="padding:3px 4px;">LONG $</th><th style="padding:3px 4px;">SHORT $</th></tr></thead><tbody>' + body + '</tbody></table></div>';
     }
     function renderReplayTables() {
       if (!replayCache) return;
@@ -5004,25 +5046,49 @@ function serveDashboardHtml() {
       if (bc) bc.textContent = '🌐 Tüm Koinler Özeti (' + ((data.coinSummary || []).length) + ' Koin)';
 
       if (grid) {
-        var card = function (lbl, val, sub, clr) {
-          return '<div style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;"><div style="font-size:10px;color:var(--muted);font-weight:700;">' + lbl + '</div><div style="font-size:16px;font-weight:900;color:' + (clr || 'var(--text)') + ';margin-top:2px;">' + val + '</div><div style="font-size:10px;color:var(--muted);margin-top:2px;">' + sub + '</div></div>';
+        var card = function (lbl, val, sub, clr, hiBorder) {
+          var bdr = hiBorder ? ('border:1px solid ' + hiBorder + ';') : 'border:1px solid var(--border);';
+          return '<div style="background:var(--panel2);' + bdr + 'border-radius:8px;padding:8px 10px;"><div style="font-size:10px;color:var(--muted);font-weight:700;">' + lbl + '</div><div style="font-size:16px;font-weight:900;color:' + (clr || 'var(--text)') + ';margin-top:2px;">' + val + '</div><div style="font-size:10px;color:var(--muted);margin-top:2px;">' + sub + '</div></div>';
         };
-        var c1 = s.mode === 'portfolio'
-          ? card('BİTİŞ BAKİYESİ ($100 ->)', '$' + Number(s.finalBalance || 100).toFixed(2), 'Net: ' + fmtUsdSign(s.netPnl) + ' (%' + (s.roiPct >= 0 ? '+' : '') + Number(s.roiPct || 0).toFixed(1) + ')', usdClr(s.netPnl))
-          : card('🤖 MEVCUT BOT SİNYALLERİ', fmtUsdSign(s.botApprovedNet), (s.botApprovedTrades || 0) + ' bot işlemi · %' + Number(s.botApprovedWr || 0).toFixed(1) + ' WR', usdClr(s.botApprovedNet));
-        grid.innerHTML =
-          c1 +
-          card('TOPLAM KURULUM & WR', (s.totalTrades || 0) + ' Kurulum', s.wins + 'W / ' + s.losses + 'L (%' + s.winRate + ' WR) · PF: ' + s.profitFactor, 'var(--text)') +
-          card('🟢 HEP LONG GİRİLSE', fmtUsdSign(s.allLongNet), 'Tüm kurulumlarda LONG · %' + Number(s.allLongWr || 0).toFixed(1) + ' WR', usdClr(s.allLongNet)) +
-          card('🔴 HEP SHORT GİRİLSE', fmtUsdSign(s.allShortNet), 'Tüm kurulumlarda SHORT · %' + Number(s.allShortWr || 0).toFixed(1) + ' WR', usdClr(s.allShortNet)) +
-          card('🧭 YÖN AVANTAJI', fmtUsdSign(s.netPnl), 'Ters Yön: ' + fmtUsdSign(s.oppositeNet) + ' · Fark: ' + fmtUsdSign((s.netPnl || 0) - (s.oppositeNet || 0)), usdClr(s.netPnl)) +
-          card('TARANAN KOİN & KOMİSYON', (s.coinsScanned || 0) + ' / ' + (s.coinsTotal || s.coinsScanned) + ' Koin', 'MaxDD: -%' + Number(s.maxDrawdownPct || 0).toFixed(1) + ' · Komisyon: $' + Number(s.totalFees || 0).toFixed(2), 'var(--muted)');
+        if (s.mode === 'market') {
+          var skipSub = (s.skippedCount || 0) + ' elenen kurulum · %' + Number(s.skippedWr || 0).toFixed(1) + ' WR' + ((s.skippedNet || 0) < 0 ? ' · 🛡️ Bot korudu' : '');
+          grid.innerHTML =
+            card('🤖 BİZİM BOT (GİRDİKLERİ)', fmtUsdSign(s.botApprovedNet), (s.botApprovedTrades || 0) + ' bot işlemi · ' + (s.botApprovedWins || 0) + 'W/' + (s.botApprovedLosses || 0) + 'L (%' + Number(s.botApprovedWr || 0).toFixed(1) + ' WR) · PF: ' + Number(s.botApprovedPf || 0).toFixed(2), usdClr(s.botApprovedNet), 'rgba(34,197,94,0.45)') +
+            card('⏭️ BOTUN PAS GEÇTİKLERİ', fmtUsdSign(s.skippedNet), skipSub, usdClr(s.skippedNet)) +
+            card('🧭 BOT YÖN AVANTAJI', fmtUsdSign(s.botApprovedNet), 'Bot Ters Yön: ' + fmtUsdSign(s.botApprovedOppNet) + ' · Fark: ' + fmtUsdSign((s.botApprovedNet || 0) - (s.botApprovedOppNet || 0)), usdClr(s.botApprovedNet)) +
+            card('🟢 PİYASA HEP LONG', fmtUsdSign(s.allLongNet), (s.totalTrades || 0) + ' kurulumda LONG · %' + Number(s.allLongWr || 0).toFixed(1) + ' WR', usdClr(s.allLongNet)) +
+            card('🔴 PİYASA HEP SHORT', fmtUsdSign(s.allShortNet), (s.totalTrades || 0) + ' kurulumda SHORT · %' + Number(s.allShortWr || 0).toFixed(1) + ' WR', usdClr(s.allShortNet)) +
+            card('📊 TARANAN KOİN & KURULUM', (s.coinsScanned || 0) + ' / ' + (s.coinsTotal || s.coinsScanned) + ' Koin', (s.botApprovedTrades || 0) + ' bot + ' + (s.skippedCount || 0) + ' pas · Bot Kom.: $' + Number(s.botApprovedFees || 0).toFixed(2), 'var(--muted)');
+        } else if (s.mode === 'portfolio') {
+          grid.innerHTML =
+            card('💰 BİTİŞ BAKİYESİ ($100 ➔)', '$' + Number(s.finalBalance || 100).toFixed(2), 'Net: ' + fmtUsdSign(s.netPnl) + ' (%' + (s.roiPct >= 0 ? '+' : '') + Number(s.roiPct || 0).toFixed(1) + ') · Zirve: $' + Number(s.peakBalance || 100).toFixed(2), usdClr(s.netPnl), 'rgba(56,189,248,0.45)') +
+            card('🤖 BOT İŞLEM & WIN RATE', (s.totalTrades || 0) + ' İşlem', s.wins + 'W / ' + s.losses + 'L (%' + s.winRate + ' WR) · PF: ' + s.profitFactor, 'var(--text)') +
+            card('🟢 HEP LONG GİRİLSE', fmtUsdSign(s.allLongNet), 'Aynı işlemlerde LONG · %' + Number(s.allLongWr || 0).toFixed(1) + ' WR', usdClr(s.allLongNet)) +
+            card('🔴 HEP SHORT GİRİLSE', fmtUsdSign(s.allShortNet), 'Aynı işlemlerde SHORT · %' + Number(s.allShortWr || 0).toFixed(1) + ' WR', usdClr(s.allShortNet)) +
+            card('🧭 BOT YÖN AVANTAJI', fmtUsdSign(s.netPnl), 'Ters Yön: ' + fmtUsdSign(s.oppositeNet) + ' · Fark: ' + fmtUsdSign((s.netPnl || 0) - (s.oppositeNet || 0)), usdClr(s.netPnl)) +
+            card('📊 TARANAN KOİN & RİSK', (s.coinsScanned || 0) + ' / ' + (s.coinsTotal || s.coinsScanned) + ' Koin', 'MaxDD: -%' + Number(s.maxDrawdownPct || 0).toFixed(1) + ' · Komisyon: $' + Number(s.totalFees || 0).toFixed(2), 'var(--muted)');
+        } else {
+          grid.innerHTML =
+            card('🤖 BOT SİNYALLERİ ($10 RİSK)', fmtUsdSign(s.botApprovedNet), (s.botApprovedTrades || 0) + ' işlem · %' + Number(s.botApprovedWr || 0).toFixed(1) + ' WR · PF: ' + Number(s.botApprovedPf || 0).toFixed(2), usdClr(s.botApprovedNet), 'rgba(34,197,94,0.45)') +
+            card('📈 KAZANAN / KAYBEDEN', s.wins + 'W / ' + s.losses + 'L', '%' + s.winRate + ' WR · PF: ' + s.profitFactor + ' · Kom.: $' + Number(s.totalFees || 0).toFixed(2), 'var(--text)') +
+            card('🟢 HEP LONG GİRİLSE', fmtUsdSign(s.allLongNet), 'Bot sinyallerinde LONG · %' + Number(s.allLongWr || 0).toFixed(1) + ' WR', usdClr(s.allLongNet)) +
+            card('🔴 HEP SHORT GİRİLSE', fmtUsdSign(s.allShortNet), 'Bot sinyallerinde SHORT · %' + Number(s.allShortWr || 0).toFixed(1) + ' WR', usdClr(s.allShortNet)) +
+            card('🧭 BOT YÖN AVANTAJI', fmtUsdSign(s.botApprovedNet), 'Ters Yön: ' + fmtUsdSign(s.botApprovedOppNet) + ' · Fark: ' + fmtUsdSign((s.botApprovedNet || 0) - (s.botApprovedOppNet || 0)), usdClr(s.botApprovedNet)) +
+            card('📊 TARANAN KOİN', (s.coinsScanned || 0) + ' / ' + (s.coinsTotal || s.coinsScanned) + ' Koin', 'Slotsuz $10 Sabit Risk · MaxDD: -%' + Number(s.maxDrawdownPct || 0).toFixed(1), 'var(--muted)');
+        }
       }
       if (bGrid) {
-        bGrid.innerHTML =
-          renderBreakdownBox('⚙️ Motor Bazlı (Bot vs LONG vs SHORT)', s.engineBreakdown) +
-          renderBreakdownBox('💧 Koin Likidite Bazlı', s.tierBreakdown) +
-          renderBreakdownBox('🧭 BTC Rejimi Bazlı', s.regimeBreakdown);
+        if (s.mode === 'market') {
+          bGrid.innerHTML =
+            renderBreakdownBox('⚙️ Motor Bazlı (Bot vs Pas · L/S)', s.engineBreakdown, { netLabel: 'Net $' }) +
+            renderBreakdownBox('💧 Koin Likidite Bazlı (Sadece Bot Girenler)', s.tierBreakdown, { botOnly: true }) +
+            renderBreakdownBox('🧭 BTC Rejimi Bazlı (Sadece Bot Girenler)', s.regimeBreakdown, { botOnly: true });
+        } else {
+          bGrid.innerHTML =
+            renderBreakdownBox('⚙️ Motor Bazlı (Bot vs LONG vs SHORT)', s.engineBreakdown) +
+            renderBreakdownBox('💧 Koin Likidite Bazlı', s.tierBreakdown) +
+            renderBreakdownBox('🧭 BTC Rejimi Bazlı', s.regimeBreakdown);
+        }
       }
       renderReplayTables();
     }
@@ -5091,15 +5157,15 @@ function serveDashboardHtml() {
       var tbody = document.getElementById('tbodyReplayTrades');
       var btn = document.getElementById('btnRunReplay');
       var cBtn = document.getElementById('btnCancelReplay');
-      var hours = document.getElementById('selReplayHours') ? Number(document.getElementById('selReplayHours').value) : 48;
-      var scope = document.getElementById('selReplayScope') ? document.getElementById('selReplayScope').value : 'all';
-      var mode = document.getElementById('selReplayMode') ? document.getElementById('selReplayMode').value : 'market';
+      var hours = document.getElementById('selReplayHours') ? Number(document.getElementById('selReplayHours').value) : 168;
+      var scope = document.getElementById('selReplayScope') ? document.getElementById('selReplayScope').value : 'liquid';
+      var mode = document.getElementById('selReplayMode') ? document.getElementById('selReplayMode').value : 'portfolio';
 
       if (btn) btn.disabled = true;
       if (cBtn) cBtn.style.display = '';
       if (pWrap) pWrap.style.display = 'block';
       if (pBar) pBar.style.width = '3%';
-      if (line) line.textContent = '⏳ Tarama başlatılıyor (' + (scope === 'all' ? 'Tüm Binance ~400 Koin' : 'Likit ~100 Koin') + ' · Son ' + hours + ' Saat)...';
+      if (line) line.textContent = '⏳ Tarama başlatılıyor (' + (scope === 'all' ? 'Tüm Binance ~488 Koin' : 'Canlı Likit ≥$5M · ~150 Koin') + ' · Son ' + hours + ' Saat)...';
       if (tbody) tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;color:var(--muted);padding:18px;">⏳ Binance Futures grafikleri arka planda taranıyor (zaman aşımı yok)...</td></tr>';
 
       try {
@@ -5918,9 +5984,9 @@ const server = http.createServer(async (req, res) => {
 
   if (pathname === '/api/replay-start') {
     try {
-      const hours = Number(parsedUrl.searchParams.get('hours')) || 48;
-      const scope = parsedUrl.searchParams.get('scope') || 'all';
-      const mode = parsedUrl.searchParams.get('mode') || 'market';
+      const hours = Number(parsedUrl.searchParams.get('hours')) || 168;
+      const scope = parsedUrl.searchParams.get('scope') || 'liquid';
+      const mode = parsedUrl.searchParams.get('mode') || 'portfolio';
       const force = parsedUrl.searchParams.get('force') === '1';
       const job = startReplayJob(hours, scope, mode, force);
       res.writeHead(200, { 'Content-Type': 'application/json' });
