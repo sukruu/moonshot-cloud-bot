@@ -217,8 +217,23 @@ class JudicialAuditCourt {
     const taker = takerRaw;
     const chg24 = chg24raw;
     const chg15 = chg15raw;
+    const strat = String(candidateInfo.strategy || 'WHALE_15M');
 
-    if (side === 'LONG') {
+    if (strat === 'BB_MR') {
+      if (taker > 47.5) {
+        judicialScore -= 35;
+        accusations.push(`BB Dönüş satıcı yetersiz (alıcı %${taker.toFixed(1)})`);
+      }
+      if (chg15 >= 0) {
+        judicialScore -= 35;
+        accusations.push(`BB Dönüş kırmızı teyit yok (%${chg15.toFixed(2)})`);
+      }
+    } else if (strat === 'HDIST') {
+      if (taker > 42.5) {
+        judicialScore -= 35;
+        accusations.push(`Gizli Dağıtım satıcı yetersiz (alıcı %${taker.toFixed(1)})`);
+      }
+    } else if (side === 'LONG') {
       if (taker < 54.0) {
         judicialScore -= 35;
         accusations.push(`Alıcı yetersiz (%${taker.toFixed(1)})`);
