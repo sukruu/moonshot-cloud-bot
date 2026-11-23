@@ -80,28 +80,32 @@ function applyCircuitBreaker() {
   const initial = Number(CONFIG.initialBalance) || 100;
   const peak = Math.max(getPeakBalance(), initial, balance);
   const dd = peak > 0 ? (peak - balance) / peak : 0;
-  const severe = balance < Math.max(30, initial * 0.35) || dd >= 0.45;
-  const profitGuard = !severe && dd >= 0.30;
+  // 🛡️ V7.1 Kalibrasyonu: %6 bileşik riskte %30–%38 doğal dalgalanma olur; erken slot kısma
+  // 62.5g testinde kârı $10,669'dan $7,204'e düşürüp DD'yi %34.5'ten %42.1'e çıkardığı için
+  // devre kesici yalnızca gerçek kriz eşiklerinde (%48 ve %60) devreye girer!
+  const severe = balance < Math.max(30, initial * 0.35) || dd >= 0.60;
+  const profitGuard = !severe && dd >= 0.48;
   if (severe) {
-    const nextMargin = Math.min(Number(userRisk.marginPerTrade) || 30, 10);
-    const changed = !circuitOn || CONFIG.maxSlots !== 1 || CONFIG.marginPerTrade !== nextMargin;
+    const nextMargin = Math.min(Number(userRisk.marginPerTrade) || 20, 12);
+    const nextSlots = Math.min(userRisk.maxSlots || 4, 2);
+    const changed = !circuitOn || CONFIG.maxSlots !== nextSlots || CONFIG.marginPerTrade !== nextMargin;
     circuitOn = true;
-    CONFIG.maxSlots = 1;
+    CONFIG.maxSlots = nextSlots;
     CONFIG.marginPerTrade = nextMargin;
     DYNAMIC.mode = 'DEFENSIVE_SNIPER';
     if (changed) {
-      addLog(`🛑 Devre kesici: kasa $${balance.toFixed(2)}, zirveden %${(dd * 100).toFixed(1)}. Slot 1, risk yarıya düşürüldü.`, 'RISK');
+      addLog(`🛑 Devre kesici: kasa $${balance.toFixed(2)}, zirveden %${(dd * 100).toFixed(1)}. Slot ${nextSlots}, risk yarıya düşürüldü.`, 'RISK');
     }
     return;
   }
   const dynamicMargin = getDynamicMargin();
   circuitOn = false;
   if (profitGuard) {
-    CONFIG.maxSlots = 2;
+    CONFIG.maxSlots = Math.min(userRisk.maxSlots || 4, 3);
     CONFIG.marginPerTrade = dynamicMargin;
     DYNAMIC.mode = 'MARSCOIN_15M_WHALE';
   } else {
-    CONFIG.maxSlots = userRisk.maxSlots || 3;
+    CONFIG.maxSlots = userRisk.maxSlots || 4;
     CONFIG.marginPerTrade = dynamicMargin;
     DYNAMIC.mode = 'MARSCOIN_15M_WHALE';
   }
@@ -1701,7 +1705,6 @@ function evaluateHiddenDistrib15m(k, idx, btc15m = 0) {
   let sumV = 0;
   for (let m = idx - 20; m < idx; m++) sumV += parseFloat(k[m][5]) || 0;
   const volMult = sumV > 0 ? (parseFloat(k[idx][5]) || 0) / (sumV / 20) : 1;
-  if (volMult < 1.00) return null; // Ortalamanın altındaki (<1.0x) hacimsiz cılız kırmızı mumları ele (48s + 30g + 62.5g PF 1.68, DD %34.5!)
   if (volMult < 1.60) return null;
 
   let trSum = 0;
@@ -3381,7 +3384,7 @@ async function scanLoop() {
           mfe: 0
         });
         if (randomOpen.length > 20) randomOpen.shift();
-        const moonR = pick.side === 'LONG' ? '5.0R' : '2.5R';
+        const moonR = pick.position.exitMode === 'SNAP_RUNNER' ? 'BB' : (pick.side === 'LONG' ? '5.0R' : '3.5R');
         addLog(
           `🐋 POZİSYON AÇILDI: [${pick.side}] ${pick.sym} @ $${pick.curP.toFixed(4)} | ${pick.radarTag} | Teminat: $${pick.tradeMargin.toFixed(1)} (${pick.position.leverage}x) | SL: -%${pick.tradeSlPct.toFixed(2)} | BE: +%${pick.position.bePct.toFixed(2)} | Trail: +%${pick.tradeTp1Pct.toFixed(2)} | Moon(${moonR}): +%${pick.tradeMoonPct.toFixed(2)}`,
           'TRADE'
@@ -3890,7 +3893,10 @@ function formatSignalCompact(rTag) {
 
   let label = '';
   let badgeClass = 'badge-sig-neutral';
-  if (rTag.includes('BALİNA BOĞA')) {
+  if (rTag.includes('BB DÖNÜŞ')) {
+    label = '🧲 BB DÖNÜŞ';
+    badgeClass = 'badge-sig-bear';
+  } else if (rTag.includes('BALİNA BOĞA')) {
     label = '🐋 BALİNA BOĞA';
     badgeClass = 'badge-sig-bull';
   } else if (rTag.includes('BALİNA AYI')) {
@@ -3928,6 +3934,9 @@ function formatExitReasonCompact(reason) {
   } else if (reason.includes('Başabaş') || reason.includes('$0.00 Risk')) {
     short = '🛡️ Başabaş';
     badgeClass = 'badge-exit-be';
+  } else if (reason.includes('BB DÖNÜŞ HEDEFİ') || reason.includes('kâr alındı')) {
+    short = '🎯 BB Hedef TP';
+    badgeClass = 'badge-exit-tp';
   } else if (reason.includes('MOONSHOT ALINDI') || reason.includes('VUR-KAÇ HEDEFİ')) {
     short = '🎯 Moonshot TP';
     badgeClass = 'badge-exit-tp';
@@ -4644,7 +4653,7 @@ function serveDashboardHtml() {
             <div class="param-input-wrap"><input type="number" id="inpSlots" value="${CONFIG.maxSlots}"><span class="param-unit">adet</span></div>
           </div>
           <div class="param-card" title="Limitsiz bileşik kasa riski (%1–%10): Bakiye büyüdükçe işlem boyutu otomatik katlanır">
-            <div class="param-header"><span>İŞLEM RİSKİ</span><span id="stRiskUsd">~$${(parseFloat(stats.balance || 100) * ((Number(CONFIG.riskPct) || 7.5) / 100)).toFixed(2)}</span></div>
+            <div class="param-header"><span>İŞLEM RİSKİ</span><span id="stRiskUsd">~$${(parseFloat(stats.balance || 100) * ((Number(CONFIG.riskPct) || 6.0) / 100)).toFixed(2)}</span></div>
             <div class="param-input-wrap"><input type="number" id="inpRiskPct" step="0.5" min="1" max="10" value="${CONFIG.riskPct}"><span class="param-unit">%</span></div>
           </div>
           <div class="param-card">
@@ -5168,7 +5177,10 @@ function serveDashboardHtml() {
 
       let label = '';
       let badgeClass = 'badge-sig-neutral';
-      if (rTag.includes('BALİNA BOĞA')) {
+      if (rTag.includes('BB DÖNÜŞ')) {
+        label = '🧲 BB DÖNÜŞ';
+        badgeClass = 'badge-sig-bear';
+      } else if (rTag.includes('BALİNA BOĞA')) {
         label = '🐋 BALİNA BOĞA';
         badgeClass = 'badge-sig-bull';
       } else if (rTag.includes('BALİNA AYI')) {
@@ -5206,7 +5218,10 @@ function serveDashboardHtml() {
       } else if (reason.includes('Başabaş') || reason.includes('$0.00 Risk')) {
         short = '🛡️ Başabaş';
         badgeClass = 'badge-exit-be';
-      } else if (reason.includes('MOONSHOT ALINDI') || reason.includes('VUR-KAÇ HEDEFİ')) {
+      } else if (reason.includes('BB DÖNÜŞ HEDEFİ') || reason.includes('kâr alındı')) {
+    short = '🎯 BB Hedef TP';
+    badgeClass = 'badge-exit-tp';
+  } else if (reason.includes('MOONSHOT ALINDI') || reason.includes('VUR-KAÇ HEDEFİ')) {
         short = '🎯 Moonshot TP';
         badgeClass = 'badge-exit-tp';
       } else if (reason.includes('Lazer Vur-Kaç') || reason.includes('Lazer Kâr Kilidi') || reason.includes('Kâr Kilidi')) {
@@ -5273,7 +5288,7 @@ function serveDashboardHtml() {
         document.getElementById("stBalance").innerText = '$' + data.stats.balance;
         const riskUsdEl = document.getElementById("stRiskUsd");
         if (riskUsdEl) {
-          const rPctNow = (data.settings && data.settings.riskPct) ? parseFloat(data.settings.riskPct) : 7.5;
+          const rPctNow = (data.settings && data.settings.riskPct) ? parseFloat(data.settings.riskPct) : 6.0;
           riskUsdEl.innerText = '~$' + (parseFloat(data.stats.balance || 100) * (rPctNow / 100)).toFixed(2);
         }
         const pnlEl = document.getElementById("stPnl");
@@ -5408,7 +5423,7 @@ function serveDashboardHtml() {
                   <div class="pos-card-header">
                     <div style="display:flex;align-items:center;gap:6px;">
                       <span class="pos-card-sym">\${p.symbol}</span>
-                      <span class="\${isLong ? 'badge-side-long' : 'badge-side-short'}">\${isLong ? '▲ LONG ' : '▼ SHORT '}\${p.leverage || 40}x</span>
+                      <span class="\${isLong ? 'badge-side-long' : 'badge-side-short'}">\${isLong ? '▲ LONG ' : '▼ SHORT '}\${p.leverage || 15}x</span>
                       <span class="badge-strat" style="font-size:8.5px;padding:1px 5px;font-weight:800;">\${p.convictionLabel ? p.convictionLabel + ' ($' + p.margin + ')' : '$' + (p.margin || 15)}</span>
                     </div>
                     <span class="\${isWin ? 'badge-pnl-pos' : 'badge-pnl-neg'}" style="font-size:13px;font-weight:900;">\${roiStr} (\${pnlStr})</span>
