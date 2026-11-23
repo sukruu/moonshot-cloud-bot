@@ -2352,12 +2352,12 @@ async function runHistoricalReplay(hours = 72, maxCoins = 120, opts = {}) {
       const barLimit = Math.min(2950, Math.max(300, Math.ceil(hClamped * 4) + 240));
       const wtPerCoin = estimateWeightPerCoin(barLimit);
       const totalWeightEst = picked.length * wtPerCoin;
-      const fastBurst = totalWeightEst <= 1050;
+      const fastBurst = totalWeightEst <= 1200;
       const chunkSize = fastBurst ? 12 : (wtPerCoin >= 20 ? 4 : (wtPerCoin >= 10 ? 6 : 8));
-      const minChunkMs = fastBurst ? 280 : Math.ceil(((chunkSize * wtPerCoin) / 22) * 1000);
+      const minChunkMs = fastBurst ? 260 : Math.ceil(((chunkSize * wtPerCoin) / 22) * 1000);
 
       if (onProgress) {
-        const initEta = Math.ceil((picked.length / chunkSize) * (Math.max(minChunkMs, 550) / 1000));
+        const initEta = Math.ceil((picked.length / chunkSize) * (Math.max(minChunkMs, 480) / 1000));
         onProgress({ doneCoins: 0, totalCoins: picked.length, loadedCoins: 0, eventsFound: 0, etaSec: initEta, statusText: `BTC referans grafiği çekiliyor (${picked.length} koin sırada)...` });
       }
 
@@ -2376,11 +2376,11 @@ async function runHistoricalReplay(hours = 72, maxCoins = 120, opts = {}) {
         const chunkT0 = Date.now();
         const chunk = picked.slice(i, i + chunkSize);
 
-        // Rate-limit koruması: herhangi bir fapi aynası 429 yediyse kısa nefes ver
-        const anyMirrorCooling = BINANCE_FAPI_MIRRORS.some(m => (fapiMirrorDownUntil.get(m) || 0) > Date.now());
-        if (anyMirrorCooling) {
-          if (onProgress) onProgress({ doneCoins, totalCoins: picked.length, loadedCoins, eventsFound: events.length, etaSec: 30, statusText: '⚠️ Binance hız limiti koruması aktif (4 sn bekleniyor)...' });
-          await new Promise(r => setTimeout(r, 4000));
+        // Rate-limit koruması: YALNIZCA tüm fapi aynaları (429/418) beklemedeyse kısa nefes ver (ABD 451'i tek aynada görmezden gel!)
+        const allMirrorsCooling = BINANCE_FAPI_MIRRORS.length > 0 && BINANCE_FAPI_MIRRORS.every(m => (fapiMirrorDownUntil.get(m) || 0) > Date.now());
+        if (allMirrorsCooling) {
+          if (onProgress) onProgress({ doneCoins, totalCoins: picked.length, loadedCoins, eventsFound: events.length, etaSec: 30, statusText: '⚠️ Binance hız limiti koruması aktif (5 sn bekleniyor)...' });
+          await new Promise(r => setTimeout(r, 5000));
         }
 
         const part = await Promise.all(chunk.map(async sym => {
