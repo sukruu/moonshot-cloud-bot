@@ -116,7 +116,7 @@ function engineSnapshot() {
     userSlots: userRisk.maxSlots,
     userMargin: userRisk.marginPerTrade,
     gates: {
-      entry: '3lü Motor · Balina + BB + Dağıtım',
+      entry: '3lü Motor · 15dk+1S Balina + BB',
       book: 'defter fiyatı',
       judge: 'açık',
       flow: '15dk & 4s Saf Kripto Futures balina akışı',
@@ -1591,7 +1591,7 @@ function evaluateWhaleSpike1h(k1h, idx) {
   return { approved: false, why: 'TREND_OR_TAKER', ...diag };
 }
 
-// 🧲 3. MOTOR — BB Z-SCORE AŞIRI ALIM DÖNÜŞÜ (BTC BOĞA VE TESTERE'DE AKTİF! 62.5g: 561 işlem, H1 +21.6R %65 WR & H2 +25.3R %65 WR!)
+// 🧲 3. MOTOR — BB Z-SCORE AŞIRI ALIM DÖNÜŞÜ (BTC BOĞA VE TESTERE'DE AKTİF! Sıkı filtre: RSI≥75, EMA20≥+%2.2, Satıcı≥%55 — 62.5g: 403 işlem 6.4/gün, DD %32.2, MT $3,794!)
 function evaluateBbSnapback15m(k, idx, btcReg, btc15m = 0) {
   if (!Array.isArray(k) || idx < 55 || idx >= k.length) return null;
   if (btcReg === 'BEAR' || btc15m > 0.25) return null;
@@ -1602,7 +1602,7 @@ function evaluateBbSnapback15m(k, idx, btcReg, btc15m = 0) {
   const q = parseFloat(k[idx][7]) || 0;
   const tb = parseFloat(k[idx][10]) || 0;
   const taker = q > 0 ? (tb / q) * 100 : 50;
-  if (taker > 47.0) return null;
+  if (taker > 45.0) return null;
 
   let ema20 = parseFloat(k[0][4]) || 0;
   let ema50 = ema20;
@@ -1617,10 +1617,10 @@ function evaluateBbSnapback15m(k, idx, btcReg, btc15m = 0) {
     else { avgG = (avgG * 13 + g) / 14; avgL = (avgL * 13 + ls) / 14; }
     if (m === idx - 1) rsiPrev = avgL === 0 ? 100 : 100 - (100 / (1 + avgG / avgL));
   }
-  if (rsiPrev < 72.0) return null;
+  if (rsiPrev < 75.0) return null;
 
   const distPct = ema20 > 0 ? ((c - ema20) / ema20) * 100 : 0;
-  if (distPct < 1.60) return null;
+  if (distPct < 2.20) return null;
 
   // Önceki mumun (idx - 1) 20 barlık Bollinger Z-Skoru
   let mean = 0;
@@ -1889,8 +1889,8 @@ let liveBtcRegime = { ts: 0, regime: 'UNKNOWN', label: '⏳ BTC Rejimi hesaplan�
 
 function formatBtcRegimeLabel(regime) {
   if (regime === 'BULL') return '🟢 BTC BOĞA (Balina L + BB S)';
-  if (regime === 'BEAR') return '🔴 BTC AYI (Balina S + Dağıtım)';
-  if (regime === 'CHOP') return '🟡 BTC TESTERE (BB + Dağıtım Aktif)';
+  if (regime === 'BEAR') return '🔴 BTC AYI (Balina 15dk+1S)';
+  if (regime === 'CHOP') return '🟡 BTC TESTERE (BB Dönüş Aktif)';
   return '⏳ BTC Rejimi hesaplanıyor';
 }
 
@@ -2057,17 +2057,8 @@ async function runHistoricalReplay(hours = 72, maxCoins = 120) {
               continue;
             }
           }
-          // 2. Öncelik: Gizli Balina Dağıtımı (Yeşil mum + ≥%58 agresif satıcı, tüm BTC rejimlerinde!)
-          if (takerFast <= 42 && btc15m <= 0.30) {
-            const sigHd = evaluateHiddenDistrib15m(k, i, btc15m);
-            if (sigHd && sigHd.approved) {
-              seenEventKey.add(`${cd.symbol}:${ts}`);
-              events.push({ ...sigHd, symbol: cd.symbol, idx: i, k });
-              continue;
-            }
-          }
-          // 3. Öncelik: BB Z-Score Aşırı Alım Dönüşü (BTC BOĞA + TESTERE'de 7/24 aktif!)
-          if (btcReg !== 'BEAR' && takerFast <= 47 && btc15m <= 0.25) {
+          // 2. Öncelik: BB Z-Score Aşırı Alım Dönüşü (RSI≥75, EMA20≥+%2.2, Satıcı≥%55 — BTC BOĞA + TESTERE'de 7/24 aktif!)
+          if (btcReg !== 'BEAR' && takerFast <= 45 && btc15m <= 0.25) {
             const sigBb = evaluateBbSnapback15m(k, i, btcReg, btc15m);
             if (sigBb && sigBb.approved) {
               seenEventKey.add(`${cd.symbol}:${ts}`);
@@ -2461,12 +2452,7 @@ async function scanLoop() {
             }
           }
         }
-        // 3. Öncelik: Gizli Balina Dağıtımı (Tüm BTC rejimlerinde aktif!)
-        if (!sig) {
-          const sigHd = evaluateHiddenDistrib15m(k15m, closedIdx, btc15mNow);
-          if (sigHd && sigHd.approved) sig = sigHd;
-        }
-        // 4. Öncelik: BB Z-Score Aşırı Alım Dönüşü (BTC BOĞA + TESTERE'de 7/24 aktif!)
+        // 3. Öncelik: BB Z-Score Aşırı Alım Dönüşü (RSI≥75, EMA20≥+%2.2, Satıcı≥%55 — BTC BOĞA + TESTERE'de 7/24 aktif!)
         if (!sig) {
           const sigBb = evaluateBbSnapback15m(k15m, closedIdx, btcRegNow, btc15mNow);
           if (sigBb && sigBb.approved) sig = sigBb;
@@ -4028,8 +4014,8 @@ function serveDashboardHtml() {
         <div class="sidebar-section-title">🎯 3'LÜ MOTOR & KORUMA</div>
         <div class="sidebar-plan-card">
           <div class="sidebar-plan-row">🐋 <b>Balina (15dk+1S):</b> Trend yönünde tam risk (<b>L 5R / S 3.5R</b> Runner).</div>
-          <div class="sidebar-plan-row">🧲 <b>BB Dönüş & Dağıtım:</b> BTC Testere'de bile 7/24 aktif (max 2 slot, yarım risk).</div>
-          <div class="sidebar-plan-row">🚀 <b>Bileşik:</b> Tavan yok · Aynı koinde 2 zarar ➔ <b>4s mola</b> · Günde <b>~10 işlem</b>.</div>
+          <div class="sidebar-plan-row">🧲 <b>BB Dönüş (RSI≥75):</b> BTC Testere'de bile 7/24 aktif (max 2 slot, yarım risk).</div>
+          <div class="sidebar-plan-row">🚀 <b>Bileşik:</b> Tavan yok · Aynı koinde 2 zarar ➔ <b>4s mola</b> · Günde <b>~6–7 işlem</b>.</div>
         </div>
 
         <div class="action-buttons-grid">
