@@ -220,7 +220,7 @@ class JudicialAuditCourt {
     const strat = String(candidateInfo.strategy || 'WHALE_15M');
 
     if (strat === 'BB_MR') {
-      if (taker > 45.5) {
+      if (taker > 47.5) {
         judicialScore -= 35;
         accusations.push(`BB Dönüş satıcı yetersiz (alıcı %${taker.toFixed(1)})`);
       }
