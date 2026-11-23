@@ -147,13 +147,14 @@ const DEFAULT_VIP_TARGETS = {
 
 let VIP_TARGETS = { ...DEFAULT_VIP_TARGETS };
 
-const BANNED_SYMBOLS = new Set([
-  'BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT',
+const MAJOR_CRYPTO_SYMBOLS = new Set(['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT']);
+const NON_CRYPTO_OR_STABLE_EXACT = new Set([
   'USDCUSDT', 'FDUSDUSDT', 'TUSDUSDT', 'EURUSDT',
   'BFUSDUSDT', 'USD1USDT', 'RLUSDUSDT', 'RWUSDUSDT', 'USDEUSDT', 'USDPUSDT',
   'AMPUSDT', 'XAUTUSDT', 'PAXGUSDT', 'XAUUSDT', 'XAGUSDT', 'XPTUSDT', 'XPDUSDT',
   'CLUSDT', 'BZUSDT', 'NATGASUSDT', 'COPPERUSDT', 'DEFIUSDT', 'BTCDOMUSDT', 'ALLUSDT'
 ]);
+const BANNED_SYMBOLS = new Set([...MAJOR_CRYPTO_SYMBOLS, ...NON_CRYPTO_OR_STABLE_EXACT]);
 
 const KNOWN_CRYPTO_B = new Set(['ARBUSDT', 'CKBUSDT', 'TRBUSDT', 'PHBUSDT', 'AMBUSDT', 'BBUSDT', 'BELUSDT', 'BLZUSDT', 'BOMEUSDT']);
 const SYMBOL_REGEX_GLOBAL = /^[A-Z0-9]{2,14}USDT$/;
@@ -183,13 +184,18 @@ async function refreshExchangeInfoFilter() {
   } catch (e) {}
 }
 
-function isTradableCryptoSymbol(sym) {
-  if (!sym || !SYMBOL_REGEX_GLOBAL.test(sym) || sym.startsWith("USDC") || BANNED_SYMBOLS.has(sym)) return false;
+function isPureCryptoFuturesSymbol(sym) {
+  if (!sym || !SYMBOL_REGEX_GLOBAL.test(sym) || sym.startsWith("USDC") || NON_CRYPTO_OR_STABLE_EXACT.has(sym)) return false;
   if (nonCryptoFuturesSymbols.has(sym)) return false;
   if (/(UP|DOWN|BULL|BEAR)USDT$/.test(sym)) return false;
-  // Spot yedekte gelen ABD hisse senedi / ETF tokenlarını (INTCBUSDT, SOXLBUSDT, AMDBUSDT, CRCLBUSDT, SNDKBUSDT, TQQQBUSDT vb.) engelle
+  // Spot yedekte gelen ABD hisse senedi / ETF tokenlarını engelle
   if (sym.endsWith("BUSDT") && !KNOWN_CRYPTO_B.has(sym)) return false;
   return true;
+}
+
+function isTradableCryptoSymbol(sym) {
+  if (MAJOR_CRYPTO_SYMBOLS.has(sym)) return false;
+  return isPureCryptoFuturesSymbol(sym);
 }
 
 // --- DURUM DEĞİŞKENLERİ ---
@@ -1761,6 +1767,23 @@ function simulateWhaleTrade15m(k, entryIdx, sig, riskUsd, forceSide = null) {
     if ((isLong && ns > stopPrice) || (!isLong && ns < stopPrice)) stopPrice = ns;
   };
 
+  const invRisk = riskUsd > 0 ? (1 / riskUsd) : 1;
+  const packSim = (exitPx, barTs, b, maeFinal, grossPnl, feeUsd, reason) => ({
+    side, entryPx, exitPx, slPct, nominal,
+    entryTs: sig.candleTs + (15 * 60 * 1000),
+    exitTs: barTs + (15 * 60 * 1000),
+    durationMin: b * 15,
+    mfe: Number(mfe.toFixed(2)),
+    mae: Number(maeFinal.toFixed(2)),
+    grossPnl: Number(grossPnl.toFixed(2)),
+    feeUsd: Number(feeUsd.toFixed(2)),
+    netPnl: Number((grossPnl - feeUsd).toFixed(2)),
+    grossPer1R: grossPnl * invRisk,
+    feePer1R: feeUsd * invRisk,
+    netPer1R: (grossPnl - feeUsd) * invRisk,
+    reason
+  });
+
   for (let b = 1; b <= maxBars && (entryIdx + b) < k.length; b++) {
     const bar = k[entryIdx + b];
     const h = parseFloat(bar[2]) || entryPx;
@@ -1776,18 +1799,10 @@ function simulateWhaleTrade15m(k, entryIdx, sig, riskUsd, forceSide = null) {
       const fm = isLong ? ((fill - entryPx) / entryPx) * 100 : ((entryPx - fill) / entryPx) * 100;
       const grossPnl = nominal * (fm / 100);
       const feeUsd = nominal * (maker + taker);
-      return {
-        side, entryPx, exitPx: fill, slPct, nominal,
-        entryTs: sig.candleTs + (15 * 60 * 1000),
-        exitTs: Number(bar[0]) + (15 * 60 * 1000),
-        durationMin: b * 15,
-        mfe: Number(mfe.toFixed(2)),
-        mae: Number(Math.max(mae, -advMove).toFixed(2)),
-        grossPnl: Number(grossPnl.toFixed(2)),
-        feeUsd: Number(feeUsd.toFixed(2)),
-        netPnl: Number((grossPnl - feeUsd).toFixed(2)),
-        reason: trailing ? '🔒 Runner İz Süren Kâr' : (beLocked ? '🛡️ Başabaş ($0 Risk)' : `🛑 Stop Loss (-%${slPct.toFixed(2)})`)
-      };
+      return packSim(
+        fill, Number(bar[0]), b, Math.max(mae, -advMove), grossPnl, feeUsd,
+        trailing ? '🔒 Runner İz Süren Kâr' : (beLocked ? '🛡️ Başabaş ($0 Risk)' : `🛑 Stop Loss (-%${slPct.toFixed(2)})`)
+      );
     }
 
     mfe = Math.max(mfe, favMove);
@@ -1798,18 +1813,7 @@ function simulateWhaleTrade15m(k, entryIdx, sig, riskUsd, forceSide = null) {
       if (favMove >= tpGoal) {
         const grossPnl = nominal * (tpGoal / 100);
         const feeUsd = nominal * (maker + maker);
-        return {
-          side, entryPx, exitPx: lockSpot(tpGoal), slPct, nominal,
-          entryTs: sig.candleTs + (15 * 60 * 1000),
-          exitTs: Number(bar[0]) + (15 * 60 * 1000),
-          durationMin: b * 15,
-          mfe: Number(mfe.toFixed(2)),
-          mae: Number(mae.toFixed(2)),
-          grossPnl: Number(grossPnl.toFixed(2)),
-          feeUsd: Number(feeUsd.toFixed(2)),
-          netPnl: Number((grossPnl - feeUsd).toFixed(2)),
-          reason: `🎯 BB Dönüş Hedefi (+%${tpGoal.toFixed(2)})`
-        };
+        return packSim(lockSpot(tpGoal), Number(bar[0]), b, mae, grossPnl, feeUsd, `🎯 BB Dönüş Hedefi (+%${tpGoal.toFixed(2)})`);
       }
       if (mfe >= slPct * 0.85) {
         tighten(mfe - (slPct * 0.40));
@@ -1828,18 +1832,7 @@ function simulateWhaleTrade15m(k, entryIdx, sig, riskUsd, forceSide = null) {
       if (favMove >= tpGoal) {
         const grossPnl = nominal * (tpGoal / 100);
         const feeUsd = nominal * (maker + maker);
-        return {
-          side, entryPx, exitPx: lockSpot(tpGoal), slPct, nominal,
-          entryTs: sig.candleTs + (15 * 60 * 1000),
-          exitTs: Number(bar[0]) + (15 * 60 * 1000),
-          durationMin: b * 15,
-          mfe: Number(mfe.toFixed(2)),
-          mae: Number(mae.toFixed(2)),
-          grossPnl: Number(grossPnl.toFixed(2)),
-          feeUsd: Number(feeUsd.toFixed(2)),
-          netPnl: Number((grossPnl - feeUsd).toFixed(2)),
-          reason: `🎯 ${moonMult.toFixed(1)}R Moonshot (+%${tpGoal.toFixed(2)})`
-        };
+        return packSim(lockSpot(tpGoal), Number(bar[0]), b, mae, grossPnl, feeUsd, `🎯 ${moonMult.toFixed(1)}R Moonshot (+%${tpGoal.toFixed(2)})`);
       }
 
       if (isLong && mfe >= slPct * 3.00) {
@@ -1864,18 +1857,7 @@ function simulateWhaleTrade15m(k, entryIdx, sig, riskUsd, forceSide = null) {
       const grossPnl = nominal * (closeMove / 100);
       const feeUsd = nominal * (maker + taker);
       const hrsLbl = Math.round((maxBars * 15) / 60);
-      return {
-        side, entryPx, exitPx: c, slPct, nominal,
-        entryTs: sig.candleTs + (15 * 60 * 1000),
-        exitTs: Number(bar[0]) + (15 * 60 * 1000),
-        durationMin: b * 15,
-        mfe: Number(mfe.toFixed(2)),
-        mae: Number(mae.toFixed(2)),
-        grossPnl: Number(grossPnl.toFixed(2)),
-        feeUsd: Number(feeUsd.toFixed(2)),
-        netPnl: Number((grossPnl - feeUsd).toFixed(2)),
-        reason: (entryIdx + b) === k.length - 1 ? '⏳ Açık (Son Mum)' : `⏱️ ${hrsLbl}s Süre Doldu`
-      };
+      return packSim(c, Number(bar[0]), b, mae, grossPnl, feeUsd, (entryIdx + b) === k.length - 1 ? '⏳ Açık (Son Mum)' : `⏱️ ${hrsLbl}s Süre Doldu`);
     }
   }
   return null;
@@ -1922,13 +1904,15 @@ function buildBtcRegimeMap15m(btcKlines) {
   return { byTs, byMove, latest };
 }
 
-async function fetchKlines15mPaged(sym, totalBars) {
+async function fetchKlines15mPaged(sym, totalBars, bypassCache = true) {
   const want = Math.max(80, Math.min(3000, Math.round(totalBars)));
+  const fetcher = bypassCache ? fetchBinanceRaw : fetchBinance;
   if (want <= 1500) {
-    let k = await fetchBinance(`/fapi/v1/klines?symbol=${sym}&interval=15m&limit=${want}`);
+    const pathUrl = `/fapi/v1/klines?symbol=${sym}&interval=15m&limit=${want}`;
+    let k = await fetcher(pathUrl);
     if (!Array.isArray(k) || k.length < 75) {
-      await new Promise(r => setTimeout(r, 350));
-      k = await fetchBinance(`/fapi/v1/klines?symbol=${sym}&interval=15m&limit=${want}`);
+      await new Promise(r => setTimeout(r, 400));
+      k = await fetcher(pathUrl);
     }
     return Array.isArray(k) ? k : null;
   }
@@ -1940,8 +1924,8 @@ async function fetchKlines15mPaged(sym, totalBars) {
     const pathUrl = `/fapi/v1/klines?symbol=${sym}&interval=15m&limit=${reqLimit}` + (endTime ? `&endTime=${endTime}` : '');
     let k = null;
     for (let att = 0; att < 3; att++) {
-      if (att > 0) await new Promise(r => setTimeout(r, 400 * att));
-      k = await fetchBinance(pathUrl);
+      if (att > 0) await new Promise(r => setTimeout(r, 450 * att));
+      k = await fetcher(pathUrl);
       if (Array.isArray(k) && k.length >= 20) break;
     }
     if (!Array.isArray(k) || k.length === 0) break;
@@ -1962,22 +1946,352 @@ async function fetchKlines15mPaged(sym, totalBars) {
   return merged.length >= 75 ? merged : null;
 }
 
+function classifyCoinTier(sym, price, vol24M) {
+  if (MAJOR_CRYPTO_SYMBOLS.has(sym)) return 'MAJOR';
+  if (price >= 0.008 && vol24M >= 10.0) return 'LIKIT_10M+';
+  if (vol24M >= 2.0) return 'ORTA_2M_10M';
+  return 'DUSUK_<2M';
+}
+
+function analyzeCoinForReplay(sym, k, meta, btcRegime, cutoffTs, mode) {
+  const n = k.length;
+  const oArr = new Float64Array(n);
+  const hArr = new Float64Array(n);
+  const lArr = new Float64Array(n);
+  const cArr = new Float64Array(n);
+  const vArr = new Float64Array(n);
+  const qArr = new Float64Array(n);
+  const tbArr = new Float64Array(n);
+  const tsArr = new Float64Array(n);
+  const ema20Arr = new Float64Array(n);
+  const ema50Arr = new Float64Array(n);
+  const rsiArr = new Float64Array(n);
+  const atr15Arr = new Float64Array(n);
+  const avgVol20Arr = new Float64Array(n);
+
+  let ema20 = 0, ema50 = 0, avgG = 0, avgL = 0;
+  let volWin = 0, trWin = 0;
+  const trArr = new Float64Array(n);
+
+  let startPrice = 0, endPrice = 0, winHigh = 0, winLow = Infinity, atrSum = 0, atrCnt = 0;
+
+  for (let i = 0; i < n; i++) {
+    const row = k[i];
+    const ts = Number(row[0]) || 0;
+    const o = parseFloat(row[1]) || 0;
+    const h = parseFloat(row[2]) || o;
+    const l = parseFloat(row[3]) || o;
+    const c = parseFloat(row[4]) || o;
+    const v = parseFloat(row[5]) || 0;
+    const q = parseFloat(row[7]) || 0;
+    const tb = parseFloat(row[10]) || 0;
+    tsArr[i] = ts; oArr[i] = o; hArr[i] = h; lArr[i] = l; cArr[i] = c; vArr[i] = v; qArr[i] = q; tbArr[i] = tb;
+
+    if (i === 0) {
+      ema20 = c; ema50 = c; rsiArr[0] = 50;
+    } else {
+      ema20 = c * (2 / 21) + ema20 * (19 / 21);
+      ema50 = c * (2 / 51) + ema50 * (49 / 51);
+      const d = c - cArr[i - 1];
+      const g = d > 0 ? d : 0;
+      const ls = d < 0 ? -d : 0;
+      if (i <= 14) { avgG += g / 14; avgL += ls / 14; }
+      else { avgG = (avgG * 13 + g) / 14; avgL = (avgL * 13 + ls) / 14; }
+      rsiArr[i] = avgL === 0 ? 100 : (100 - (100 / (1 + (avgG / avgL))));
+      const pc = cArr[i - 1];
+      trArr[i] = pc > 0 ? (Math.max(h - l, Math.abs(h - pc), Math.abs(l - pc)) / pc) * 100 : 0;
+    }
+    ema20Arr[i] = ema20;
+    ema50Arr[i] = ema50;
+
+    if (i >= 1) trWin += trArr[i - 1];
+    if (i > 14) trWin -= trArr[i - 15];
+    atr15Arr[i] = i >= 14 ? (trWin / 14) : 0;
+
+    if (i >= 1) volWin += vArr[i - 1];
+    if (i > 20) volWin -= vArr[i - 21];
+    avgVol20Arr[i] = i >= 20 ? (volWin / 20) : 0;
+
+    if (ts >= cutoffTs && c > 0) {
+      if (startPrice === 0) startPrice = o > 0 ? o : c;
+      endPrice = c;
+      if (h > winHigh) winHigh = h;
+      if (l > 0 && l < winLow) winLow = l;
+      if (atr15Arr[i] > 0) { atrSum += atr15Arr[i]; atrCnt++; }
+    }
+  }
+
+  const periodChgPct = startPrice > 0 ? ((endPrice - startPrice) / startPrice) * 100 : 0;
+  const maxUpPct = startPrice > 0 && winHigh > 0 ? ((winHigh - startPrice) / startPrice) * 100 : 0;
+  const maxDownPct = startPrice > 0 && winLow < Infinity ? ((winLow - startPrice) / startPrice) * 100 : 0;
+  const avgAtr15 = atrCnt > 0 ? (atrSum / atrCnt) : 0;
+
+  const coinStat = {
+    symbol: sym,
+    tier: meta.tier,
+    vol24M: Number(meta.vol24M.toFixed(2)),
+    chg24h: Number(meta.chg24h.toFixed(2)),
+    startPrice: Number(startPrice.toFixed(6)),
+    endPrice: Number(endPrice.toFixed(6)),
+    periodChgPct: Number(periodChgPct.toFixed(2)),
+    maxUpPct: Number(maxUpPct.toFixed(2)),
+    maxDownPct: Number(maxDownPct.toFixed(2)),
+    avgAtr15: Number(avgAtr15.toFixed(2)),
+    totalSetups: 0,
+    botSignals: 0,
+    botNet: 0,
+    botWins: 0,
+    botWr: 0,
+    allLongNet: 0,
+    allLongWins: 0,
+    allLongWr: 0,
+    allShortNet: 0,
+    allShortWins: 0,
+    allShortWr: 0,
+    bestSide: 'NOTR'
+  };
+
+  const calcBbzAt = (idx) => {
+    if (idx < 20) return 0;
+    let mean = 0;
+    for (let m = idx - 19; m <= idx; m++) mean += cArr[m];
+    mean /= 20;
+    let v2 = 0;
+    for (let m = idx - 19; m <= idx; m++) { const df = cArr[m] - mean; v2 += df * df; }
+    const sd = Math.sqrt(v2 / 20);
+    return sd > 0 ? (cArr[idx] - mean) / sd : 0;
+  };
+
+  const emitEvent = (sig, idx, btcReg, btc15m, botApproved, skipReason) => {
+    const simLong = simulateWhaleTrade15m(k, idx, sig, 1.0, 'LONG');
+    const simShort = simulateWhaleTrade15m(k, idx, sig, 1.0, 'SHORT');
+    if (!simLong || !simShort) return null;
+    const c = cArr[idx] || sig.closePx || 0;
+    const e20 = ema20Arr[idx] || sig.ema20 || c;
+    const e50 = ema50Arr[idx] || sig.ema50 || c;
+    const ema20DistSigned = e20 > 0 ? ((c - e20) / e20) * 100 : 0;
+    const emaTrend = (c > e20 && e20 > e50) ? 'YUKARI' : ((c < e20 && e20 < e50) ? 'ASAGI' : 'YATAY');
+    const bbz = sig.bbzPrev != null ? Number(sig.bbzPrev) : Number(calcBbzAt(idx).toFixed(2));
+    return {
+      symbol: sym,
+      tier: meta.tier,
+      vol24M: coinStat.vol24M,
+      timeframe: sig.timeframe || '15m',
+      engine: sig.engine || 'WHALE_15M',
+      isAux: !!sig.isAux,
+      riskMult: sig.riskMult || 1.0,
+      side: sig.side,
+      score: Number(sig.score) || 0,
+      candleTs: Number(sig.candleTs) || tsArr[idx],
+      botApproved: !!botApproved,
+      skipReason: skipReason || '-',
+      btcReg: btcReg || 'CHOP',
+      btc15m: Number((btc15m || 0).toFixed(2)),
+      move15m: Number((sig.move || 0).toFixed(2)),
+      volMult: Number((sig.volMult || 1).toFixed(2)),
+      takerRaw: Number((sig.taker != null ? sig.taker : 50).toFixed(1)),
+      rsi15: Number((sig.rsi15 != null ? sig.rsi15 : rsiArr[idx]).toFixed(1)),
+      ema20Dist: Number(ema20DistSigned.toFixed(2)),
+      emaTrend,
+      bbz,
+      chg1h: Number((sig.chg1h || 0).toFixed(2)),
+      chg4h: Number((sig.chg4h || 0).toFixed(2)),
+      atr15: Number((sig.atr15 || atr15Arr[idx] || 1).toFixed(2)),
+      slPct: Number(simLong.slPct || 1.5),
+      simLong,
+      simShort
+    };
+  };
+
+  const events = [];
+  const seenEventKey = new Set();
+  let lastMarketIdx = -100;
+
+  for (let i = 60; i < n - 1; i++) {
+    const ts = tsArr[i];
+    if (ts < cutoffTs) continue;
+    const btcReg = btcRegime.byTs.get(ts) || 'CHOP';
+    const btc15m = btcRegime.byMove ? (btcRegime.byMove.get(ts) || 0) : 0;
+    const q = qArr[i], tb = tbArr[i];
+    const takerFast = q > 0 ? (tb / q) * 100 : 50;
+    const volMultFast = avgVol20Arr[i] > 0 ? (vArr[i] / avgVol20Arr[i]) : 1;
+
+    // 1. Öncelik: 15dk Balina Kırılımı (BTC BULL/BEAR hizalı)
+    if ((btcReg === 'BULL' || btcReg === 'BEAR') && (takerFast <= 40 || takerFast >= 60) && volMultFast >= 2.45) {
+      const sig = evaluateWhaleSpike15m(k, i);
+      if (sig && sig.approved && ((sig.side === 'LONG' && btcReg === 'BULL') || (sig.side === 'SHORT' && btcReg === 'BEAR'))) {
+        seenEventKey.add(ts);
+        const ev = emitEvent(sig, i, btcReg, btc15m, true, '-');
+        if (ev) events.push(ev);
+        continue;
+      }
+    }
+
+    // 2. Öncelik: BB Z-Score Aşırı Alım Dönüşü (BTC BOĞA + TESTERE'de 7/24 aktif)
+    if (btcReg !== 'BEAR' && takerFast <= 47 && btc15m <= 0.25 && cArr[i] < oArr[i] && rsiArr[i - 1] >= 71.5) {
+      const sigBb = evaluateBbSnapback15m(k, i, btcReg, btc15m);
+      if (sigBb && sigBb.approved) {
+        seenEventKey.add(ts);
+        const ev = emitEvent(sigBb, i, btcReg, btc15m, true, '-');
+        if (ev) events.push(ev);
+        continue;
+      }
+    }
+
+    // 3. Geniş Piyasa Analizi Modu: Mevcut botun pas geçtiği güçlü hareket ve aşırı RSI kurulumlarını da L vs S test et!
+    if (mode === 'market' && (i - lastMarketIdx) >= 8) {
+      const o = oArr[i], c = cArr[i];
+      if (o <= 0 || c <= 0) continue;
+      const move = ((c - o) / o) * 100;
+      const atr15 = atr15Arr[i];
+      const rsiPrev = rsiArr[i - 1];
+      const distSigned = ema20Arr[i] > 0 ? ((c - ema20Arr[i]) / ema20Arr[i]) * 100 : 0;
+      const isImpulse = volMultFast >= 2.20 && atr15 >= 0.65 && atr15 <= 6.50 && Math.abs(move) >= Math.max(0.95, atr15 * 0.90);
+      const isRsiRev = atr15 >= 0.70 && atr15 <= 5.50 && ((rsiPrev >= 74 && c < o && distSigned >= 1.20) || (rsiPrev <= 26 && c > o && distSigned <= -1.20));
+      if (isImpulse || isRsiRev) {
+        lastMarketIdx = i;
+        const candSide = isImpulse ? (move >= 0 ? 'LONG' : 'SHORT') : (rsiPrev >= 74 ? 'SHORT' : 'LONG');
+        const open1h = oArr[i - 4] || o;
+        const open4h = oArr[i - 16] || o;
+        const chg1h = open1h > 0 ? ((c - open1h) / open1h) * 100 : 0;
+        const chg4h = open4h > 0 ? ((c - open4h) / open4h) * 100 : 0;
+
+        // Mevcut botun neden pas geçtiğini teşhis et
+        let skipReason = 'FILTRE_DISI';
+        if (meta.tier === 'MAJOR') skipReason = 'MAJOR_YASAKLI';
+        else if (meta.tier !== 'LIKIT_10M+') skipReason = 'KOIN_HACIM_<10M';
+        else if (isImpulse) {
+          if (btcReg === 'CHOP') skipReason = 'BTC_CHOP';
+          else if ((candSide === 'LONG' && btcReg !== 'BULL') || (candSide === 'SHORT' && btcReg !== 'BEAR')) skipReason = 'BTC_TERS';
+          else if (atr15 < 0.90 || atr15 > 3.50) skipReason = 'ATR_DISI';
+          else if (volMultFast < 2.50) skipReason = 'HACIM_<2.5x';
+          else if (volMultFast > 5.50) skipReason = 'HACIM_CLIMAX';
+          else if ((candSide === 'LONG' && takerFast < 60) || (candSide === 'SHORT' && takerFast > 40)) skipReason = 'TAKER_ZAYIF';
+          else if (Math.abs(chg4h) < 2.0 || Math.abs(chg4h) > 6.0) skipReason = '4S_LIMIT_DISI';
+          else skipReason = 'EMA_VEYA_FITIL';
+        } else {
+          if (candSide === 'LONG') skipReason = 'DIP_LONG_KAPALI';
+          else if (btcReg === 'BEAR') skipReason = 'BTC_BEAR';
+          else if (takerFast > 47) skipReason = 'SATICI_ZAYIF';
+          else skipReason = 'BBZ_VEYA_EMA';
+        }
+
+        const slPctEst = Number(Math.max(1.00, Math.min(2.80, atr15 * 1.50)).toFixed(2));
+        const synthSig = {
+          engine: isImpulse ? 'MARKET_IMPULSE' : 'MARKET_RSI',
+          timeframe: isImpulse ? 'PIYASA' : 'RSI_D',
+          isAux: false,
+          riskMult: 1.0,
+          exitMode: 'RUNNER',
+          maxBars15: 32,
+          side: candSide,
+          score: 50 + (volMultFast * 8) + (Math.abs(move) * 6),
+          slPctOverride: slPctEst,
+          atr15, volMult: volMultFast, taker: takerFast, move,
+          chg1h, chg4h, ema20: ema20Arr[i], ema50: ema50Arr[i],
+          rsi15: isRsiRev ? rsiPrev : rsiArr[i],
+          closePx: c, candleTs: ts
+        };
+        const ev = emitEvent(synthSig, i, btcReg, btc15m, false, skipReason);
+        if (ev) events.push(ev);
+      }
+    }
+  }
+
+  // ⏱️ 1 SAATLİK BALİNA KIRILIMI (BTC 15dk BULL/BEAR rejimiyle hizalı)
+  const k1h = aggregate15mTo1h(k);
+  for (let j = 55; j < k1h.length; j++) {
+    const lastTs15 = k1h[j].lastTs15;
+    const idx15 = k1h[j].lastIdx15;
+    if (lastTs15 < cutoffTs || idx15 >= n - 1) continue;
+    if (seenEventKey.has(lastTs15)) continue;
+    const btcReg = btcRegime.byTs.get(lastTs15);
+    if (btcRegime.byTs.size > 0 && (!btcReg || btcReg === 'CHOP')) continue;
+    const takerFast1h = k1h[j].q > 0 ? (k1h[j].tb / k1h[j].q) * 100 : 50;
+    if (takerFast1h > 40 && takerFast1h < 60) continue;
+    const sig1h = evaluateWhaleSpike1h(k1h, j);
+    if (sig1h && sig1h.approved) {
+      if (btcReg && ((sig1h.side === 'LONG' && btcReg !== 'BULL') || (sig1h.side === 'SHORT' && btcReg !== 'BEAR'))) continue;
+      seenEventKey.add(lastTs15);
+      const btc15m = btcRegime.byMove ? (btcRegime.byMove.get(lastTs15) || 0) : 0;
+      const ev = emitEvent({ ...sig1h, timeframe: '1H' }, idx15, btcReg || 'CHOP', btc15m, true, '-');
+      if (ev) events.push(ev);
+    }
+  }
+
+  return { coinStat, events };
+}
+
 const replayCache = new Map();
 const replayInFlightMap = new Map();
+const replayJobs = new Map();
+let replayJobSeq = 1;
 let replaySerialQueue = Promise.resolve();
 
-async function runHistoricalReplay(hours = 72, maxCoins = 120) {
+function estimateWeightPerCoin(barLimit) {
+  if (barLimit < 500) return 2;
+  if (barLimit <= 1000) return 5;
+  if (barLimit <= 1500) return 10;
+  return 20;
+}
+
+function buildGroupBreakdown(trades, keyFn, labelMap) {
+  const map = new Map();
+  for (const t of trades) {
+    const k = keyFn(t);
+    if (!map.has(k)) {
+      map.set(k, { key: k, label: (labelMap && labelMap[k]) || k, count: 0, wins: 0, botNet: 0, allLongNet: 0, allLongWins: 0, allShortNet: 0, allShortWins: 0, mfeSum: 0, maeSum: 0 });
+    }
+    const g = map.get(k);
+    g.count++;
+    if (t.netPnl > 0.05) g.wins++;
+    g.botNet += t.netPnl;
+    g.allLongNet += t.longNet;
+    if (t.longNet > 0.05) g.allLongWins++;
+    g.allShortNet += t.shortNet;
+    if (t.shortNet > 0.05) g.allShortWins++;
+    g.mfeSum += (t.mfe || 0);
+    g.maeSum += (t.mae || 0);
+  }
+  return [...map.values()].map(g => ({
+    key: g.key,
+    label: g.label,
+    count: g.count,
+    wins: g.wins,
+    wr: g.count ? Number(((g.wins / g.count) * 100).toFixed(1)) : 0,
+    botNet: Number(g.botNet.toFixed(2)),
+    allLongNet: Number(g.allLongNet.toFixed(2)),
+    allLongWr: g.count ? Number(((g.allLongWins / g.count) * 100).toFixed(1)) : 0,
+    allShortNet: Number(g.allShortNet.toFixed(2)),
+    allShortWr: g.count ? Number(((g.allShortWins / g.count) * 100).toFixed(1)) : 0,
+    avgMfe: g.count ? Number((g.mfeSum / g.count).toFixed(2)) : 0,
+    avgMae: g.count ? Number((g.maeSum / g.count).toFixed(2)) : 0
+  })).sort((a, b) => b.count - a.count);
+}
+
+async function runHistoricalReplay(hours = 72, maxCoins = 120, opts = {}) {
   const hClamped = Math.max(12, Math.min(720, Math.round(Number(hours) || 72)));
-  const defaultCoins = hClamped > 240 ? 65 : 120;
-  const maxAllowedCoins = hClamped > 240 ? 75 : 135;
-  const cClamped = Math.max(15, Math.min(maxAllowedCoins, Math.round(Number(maxCoins) || defaultCoins)));
-  const replayRiskPct = Math.max(1.0, Math.min(10.0, Number(CONFIG.riskPct) || 7.5));
+  const scope = (opts.scope === 'all' || opts.scope === 'liquid') ? opts.scope : (Number(maxCoins) >= 200 ? 'all' : 'liquid');
+  const mode = (opts.mode === 'market' || opts.mode === 'all_signals' || opts.mode === 'portfolio') ? opts.mode : 'portfolio';
+  const cClamped = scope === 'all'
+    ? 600
+    : Math.max(15, Math.min(180, Math.round(Number(maxCoins) || (hClamped > 240 ? 65 : 120))));
+  const replayRiskPct = Math.max(1.0, Math.min(10.0, Number(CONFIG.riskPct) || 6.0));
   const replayLev = Math.max(5, Math.min(40, Number(CONFIG.leverage) || 15));
-  const replaySlots = Math.max(1, Math.min(4, Number(userRisk.maxSlots) || Number(CONFIG.maxSlots) || 3));
-  const cacheKey = `${hClamped}:${cClamped}:${replayRiskPct}:${replayLev}:${replaySlots}`;
-  const cached = replayCache.get(cacheKey);
-  if (cached && (Date.now() - cached.ts) < 5 * 60 * 1000) return cached.result;
-  if (replayInFlightMap.has(cacheKey)) return replayInFlightMap.get(cacheKey);
+  const replaySlots = Math.max(1, Math.min(4, Number(userRisk.maxSlots) || Number(CONFIG.maxSlots) || 4));
+  const fixedRiskUsd = 10.0;
+  const cacheKey = `${hClamped}:${scope}:${mode}:${cClamped}:${replayRiskPct}:${replayLev}:${replaySlots}`;
+  const onProgress = typeof opts.onProgress === 'function' ? opts.onProgress : null;
+  const isCancelled = typeof opts.isCancelled === 'function' ? opts.isCancelled : (() => false);
+
+  if (!opts.forceRefresh) {
+    const cached = replayCache.get(cacheKey);
+    if (cached && (Date.now() - cached.ts) < 8 * 60 * 1000) {
+      if (onProgress) onProgress({ doneCoins: cached.result.summary.coinsScanned, totalCoins: cached.result.summary.coinsTotal || cached.result.summary.coinsScanned, loadedCoins: cached.result.summary.coinsScanned, eventsFound: cached.result.summary.totalTrades, etaSec: 0, statusText: 'Önbellekten anında yüklendi!' });
+      return cached.result;
+    }
+    if (replayInFlightMap.has(cacheKey) && !onProgress) return replayInFlightMap.get(cacheKey);
+  }
 
   const prevJob = replaySerialQueue;
   let releaseQueue;
@@ -1986,213 +2300,366 @@ async function runHistoricalReplay(hours = 72, maxCoins = 120) {
   const p = (async () => {
     try {
       await prevJob.catch(() => {});
-      const cachedAfterWait = replayCache.get(cacheKey);
-      if (cachedAfterWait && (Date.now() - cachedAfterWait.ts) < 5 * 60 * 1000) return cachedAfterWait.result;
+      if (isCancelled()) return { ok: false, cancelled: true, error: 'Tarama kullanıcı tarafından iptal edildi.' };
+      if (!opts.forceRefresh) {
+        const cachedAfterWait = replayCache.get(cacheKey);
+        if (cachedAfterWait && (Date.now() - cachedAfterWait.ts) < 8 * 60 * 1000) return cachedAfterWait.result;
+      }
+
+      if (onProgress) onProgress({ doneCoins: 0, totalCoins: 0, loadedCoins: 0, eventsFound: 0, etaSec: 0, statusText: 'Binance Futures tüm koin listesi çekiliyor...' });
       await refreshExchangeInfoFilter();
       const tickers = await fetchBinance('/fapi/v1/ticker/24hr');
       if (!Array.isArray(tickers)) return { ok: false, error: 'Binance Futures verisi alınamadı.' };
 
       const valid = tickers.filter(t => {
-        if (!isTradableCryptoSymbol(t.symbol)) return false;
-        const p = parseFloat(t.lastPrice) || 0;
+        const price = parseFloat(t.lastPrice) || 0;
         const volM = (parseFloat(t.quoteVolume) || 0) / 1e6;
-        return p >= 0.008 && volM >= 10.0;
+        if (price <= 0 || volM <= 0) return false;
+        if (scope === 'all') return isPureCryptoFuturesSymbol(t.symbol);
+        return isTradableCryptoSymbol(t.symbol) && price >= 0.008 && volM >= 10.0;
       });
-      const validSet = new Set(valid.map(x => x.symbol));
-      const byMom = [...valid].sort((a, b) => Math.abs(parseFloat(b.priceChangePercent) || 0) - Math.abs(parseFloat(a.priceChangePercent) || 0));
+
+      const metaBySym = new Map();
+      for (const t of valid) {
+        const price = parseFloat(t.lastPrice) || 0;
+        const volM = (parseFloat(t.quoteVolume) || 0) / 1e6;
+        const chg24h = parseFloat(t.priceChangePercent) || 0;
+        metaBySym.set(t.symbol, {
+          price,
+          vol24M: volM,
+          chg24h,
+          tier: classifyCoinTier(t.symbol, price, volM)
+        });
+      }
+
       const byVol = [...valid].sort((a, b) => (parseFloat(b.quoteVolume) || 0) - (parseFloat(a.quoteVolume) || 0));
+      const byMom = [...valid].sort((a, b) => Math.abs(parseFloat(b.priceChangePercent) || 0) - Math.abs(parseFloat(a.priceChangePercent) || 0));
       const picked = [];
       const seen = new Set();
-      // Canlıda açık olan veya yeni kapanan koinler Replay listesinde DAİMA yer alsın (Canlı = Replay birebir!)
-      for (const p of [...activePositions, ...history.slice(0, 5)]) {
-        if (p && p.symbol && validSet.has(p.symbol) && !seen.has(p.symbol)) {
-          seen.add(p.symbol);
-          picked.push(p.symbol);
+      // Canlıda açık olan veya yeni kapanan koinler DAİMA listenin en başında!
+      for (const pos of [...activePositions, ...history.slice(0, 5)]) {
+        if (pos && pos.symbol && metaBySym.has(pos.symbol) && !seen.has(pos.symbol)) {
+          seen.add(pos.symbol);
+          picked.push(pos.symbol);
         }
       }
-      for (const x of [...byMom.slice(0, 65), ...byVol]) {
+      const ordered = scope === 'all' ? byVol : [...byMom.slice(0, 65), ...byVol];
+      for (const x of ordered) {
         if (!seen.has(x.symbol)) { seen.add(x.symbol); picked.push(x.symbol); }
         if (picked.length >= cClamped) break;
       }
 
       const barLimit = Math.min(2950, Math.max(300, Math.ceil(hClamped * 4) + 240));
-      const btcKlines = await fetchKlines15mPaged('BTCUSDT', barLimit);
-      const btcRegime = buildBtcRegimeMap15m(btcKlines);
+      const wtPerCoin = estimateWeightPerCoin(barLimit);
+      const totalWeightEst = picked.length * wtPerCoin;
+      const fastBurst = totalWeightEst <= 1050;
+      const chunkSize = fastBurst ? 12 : (wtPerCoin >= 20 ? 4 : (wtPerCoin >= 10 ? 6 : 8));
+      const minChunkMs = fastBurst ? 280 : Math.ceil(((chunkSize * wtPerCoin) / 22) * 1000);
 
-      const coinKlines = [];
-      // 🛡️ 10'lu (kısa vade) / 8'li (30g) tarama: <=240s testlerde canlıdaki TÜM ≥$10M likit koinleri (%100) tarar!
-      const chunkSize = hClamped > 240 ? 8 : 10;
+      if (onProgress) {
+        const initEta = Math.ceil((picked.length / chunkSize) * (Math.max(minChunkMs, 550) / 1000));
+        onProgress({ doneCoins: 0, totalCoins: picked.length, loadedCoins: 0, eventsFound: 0, etaSec: initEta, statusText: `BTC referans grafiği çekiliyor (${picked.length} koin sırada)...` });
+      }
+
+      const btcKlines = await fetchKlines15mPaged('BTCUSDT', barLimit, true);
+      const btcRegime = buildBtcRegimeMap15m(btcKlines);
+      const cutoffTs = Date.now() - (hClamped * 60 * 60 * 1000);
+
+      const coinStatMap = new Map();
+      const events = [];
+      let loadedCoins = 0;
+      let doneCoins = 0;
+      const loopStartMs = Date.now();
+
       for (let i = 0; i < picked.length; i += chunkSize) {
+        if (isCancelled()) return { ok: false, cancelled: true, error: 'Tarama kullanıcı tarafından iptal edildi.' };
+        const chunkT0 = Date.now();
         const chunk = picked.slice(i, i + chunkSize);
+
+        // Rate-limit koruması: herhangi bir fapi aynası 429 yediyse kısa nefes ver
+        const anyMirrorCooling = BINANCE_FAPI_MIRRORS.some(m => (fapiMirrorDownUntil.get(m) || 0) > Date.now());
+        if (anyMirrorCooling) {
+          if (onProgress) onProgress({ doneCoins, totalCoins: picked.length, loadedCoins, eventsFound: events.length, etaSec: 30, statusText: '⚠️ Binance hız limiti koruması aktif (4 sn bekleniyor)...' });
+          await new Promise(r => setTimeout(r, 4000));
+        }
+
         const part = await Promise.all(chunk.map(async sym => {
           try {
-            const k = await fetchKlines15mPaged(sym, barLimit);
-            return (Array.isArray(k) && k.length >= 75) ? { symbol: sym, k } : null;
+            const k = (sym === 'BTCUSDT' && Array.isArray(btcKlines) && btcKlines.length >= 75)
+              ? btcKlines
+              : await fetchKlines15mPaged(sym, barLimit, true);
+            if (!Array.isArray(k) || k.length < 75) return null;
+            return analyzeCoinForReplay(sym, k, metaBySym.get(sym), btcRegime, cutoffTs, mode);
           } catch (e) { return null; }
         }));
-        part.forEach(x => { if (x) coinKlines.push(x); });
-        if (i + chunkSize < picked.length) await new Promise(r => setTimeout(r, hClamped > 240 ? 120 : 90));
-      }
 
-      const cutoffTs = Date.now() - (hClamped * 60 * 60 * 1000);
-      const events = [];
-      const seenEventKey = new Set();
-      for (const cd of coinKlines) {
-        const k = cd.k;
-        for (let i = 60; i < k.length - 1; i++) {
-          const ts = Number(k[i][0]) || 0;
-          if (ts < cutoffTs) continue;
-          const btcReg = btcRegime.byTs.get(ts) || 'CHOP';
-          const btc15m = btcRegime.byMove ? (btcRegime.byMove.get(ts) || 0) : 0;
-          const q = parseFloat(k[i][7]) || 0;
-          const tb = parseFloat(k[i][10]) || 0;
-          const takerFast = q > 0 ? (tb / q) * 100 : 50;
-
-          // 1. Öncelik: 15dk Balina Kırılımı (BTC BULL/BEAR hizalı)
-          if ((btcReg === 'BULL' || btcReg === 'BEAR') && (takerFast <= 40 || takerFast >= 60)) {
-            const sig = evaluateWhaleSpike15m(k, i);
-            if (sig && sig.approved && ((sig.side === 'LONG' && btcReg === 'BULL') || (sig.side === 'SHORT' && btcReg === 'BEAR'))) {
-              seenEventKey.add(`${cd.symbol}:${ts}`);
-              events.push({ ...sig, symbol: cd.symbol, idx: i, k });
-              continue;
-            }
-          }
-          // 2. Öncelik: BB Z-Score Aşırı Alım Dönüşü (RSI≥72, EMA20≥+%1.6, Satıcı≥%53 — BTC BOĞA + TESTERE'de 7/24 aktif!)
-          if (btcReg !== 'BEAR' && takerFast <= 47 && btc15m <= 0.25) {
-            const sigBb = evaluateBbSnapback15m(k, i, btcReg, btc15m);
-            if (sigBb && sigBb.approved) {
-              seenEventKey.add(`${cd.symbol}:${ts}`);
-              events.push({ ...sigBb, symbol: cd.symbol, idx: i, k });
-            }
-          }
+        for (const item of part) {
+          if (!item) continue;
+          loadedCoins++;
+          coinStatMap.set(item.coinStat.symbol, item.coinStat);
+          for (const ev of item.events) events.push(ev);
         }
-        // ⏱️ 1 SAATLİK BALİNA KIRILIMI (BTC 15dk BULL/BEAR rejimiyle hizalı)
-        const k1h = aggregate15mTo1h(k);
-        for (let j = 55; j < k1h.length; j++) {
-          const lastTs15 = k1h[j].lastTs15;
-          const idx15 = k1h[j].lastIdx15;
-          if (lastTs15 < cutoffTs || idx15 >= k.length - 1) continue;
-          if (seenEventKey.has(`${cd.symbol}:${lastTs15}`)) continue;
-          const btcReg = btcRegime.byTs.get(lastTs15);
-          if (btcRegime.byTs.size > 0 && (!btcReg || btcReg === 'CHOP')) continue;
-          const takerFast1h = k1h[j].q > 0 ? (k1h[j].tb / k1h[j].q) * 100 : 50;
-          if (takerFast1h > 40 && takerFast1h < 60) continue;
-          const sig1h = evaluateWhaleSpike1h(k1h, j);
-          if (sig1h && sig1h.approved) {
-            if (btcReg && ((sig1h.side === 'LONG' && btcReg !== 'BULL') || (sig1h.side === 'SHORT' && btcReg !== 'BEAR'))) continue;
-            seenEventKey.add(`${cd.symbol}:${lastTs15}`);
-            events.push({ ...sig1h, timeframe: '1H', symbol: cd.symbol, idx: idx15, k });
-          }
+        doneCoins = Math.min(picked.length, i + chunk.length);
+
+        const elapsedMs = Math.max(1, Date.now() - loopStartMs);
+        const msPerCoin = elapsedMs / Math.max(1, doneCoins);
+        const remCoins = Math.max(0, picked.length - doneCoins);
+        const etaSec = Math.ceil((remCoins * msPerCoin) / 1000);
+        if (onProgress) {
+          onProgress({
+            doneCoins,
+            totalCoins: picked.length,
+            loadedCoins,
+            eventsFound: events.length,
+            etaSec,
+            statusText: `⏳ ${doneCoins} / ${picked.length} koin tarandı (%${Math.round((doneCoins / Math.max(1, picked.length)) * 100)}) · ${events.length} kurulum · Kalan ~${etaSec} sn`
+          });
+        }
+
+        if (i + chunkSize < picked.length) {
+          const chunkElapsed = Date.now() - chunkT0;
+          const waitMs = Math.max(fastBurst ? 80 : 120, minChunkMs - chunkElapsed);
+          await new Promise(r => setTimeout(r, waitMs));
         }
       }
-      events.sort((a, b) => a.candleTs - b.candleTs || b.score - a.score);
 
+      // Uzun aralık + market modunda RAM koruması: tüm bot sinyallerini %100 koru, fazla market kurulumlarını en güçlü 15.000 ile sınırla
+      let workingEvents = events;
+      if (mode === 'market' && events.length > 15000) {
+        const botEvs = events.filter(e => e.botApproved);
+        const mktEvs = events.filter(e => !e.botApproved).sort((a, b) => b.score - a.score).slice(0, Math.max(2000, 15000 - botEvs.length));
+        workingEvents = [...botEvs, ...mktEvs];
+      }
+      workingEvents.sort((a, b) => a.candleTs - b.candleTs || b.score - a.score);
+
+      const trades = [];
       let bal = 100.0;
       let peak = 100.0;
       let maxDD = 0;
-      const openSlots = [];
-      const coinCd = {};
-      const lossStreak = {}; // 🛡️ Canlı closeTrade ile birebir: 2 ardışık zarar → 4 saat soğuma
-      const trades = [];
       let oppNetTotal = 0;
       let idSeq = 1;
 
-      const settleSlot = (p) => {
-        bal += p.netPnl;
-        if (bal < 1) bal = 1;
-        if (bal > peak) peak = bal;
-        const dd = peak > 0 ? ((peak - bal) / peak) * 100 : 0;
-        if (dd > maxDD) maxDD = dd;
-        p.ref.balanceAfter = Number(bal.toFixed(2));
-        if (p.netPnl <= -0.05) {
-          lossStreak[p.symbol] = (lossStreak[p.symbol] || 0) + 1;
-          const coolMin = lossStreak[p.symbol] >= 2 ? 240 : 30;
-          coinCd[p.symbol] = Math.max(coinCd[p.symbol] || 0, p.exitTs + coolMin * 60 * 1000);
-          if (lossStreak[p.symbol] >= 2) lossStreak[p.symbol] = 1; // canlıdaki gibi: soğuma sonrası 1 zarar daha → tekrar kalkan
-        } else if (p.netPnl > 0.05) {
-          lossStreak[p.symbol] = 0;
-        }
+      const buildTradeRecord = (ev, riskUsd, balanceSnapshot) => {
+        const isLong = ev.side === 'LONG';
+        const actSim = isLong ? ev.simLong : ev.simShort;
+        const oppSim = isLong ? ev.simShort : ev.simLong;
+        const grossPnl = Number((actSim.grossPer1R * riskUsd).toFixed(2));
+        const feeUsd = Number((actSim.feePer1R * riskUsd).toFixed(2));
+        const netPnl = Number((actSim.netPer1R * riskUsd).toFixed(2));
+        const oppPnl = Number((oppSim.netPer1R * riskUsd).toFixed(2));
+        const longNet = Number((ev.simLong.netPer1R * riskUsd).toFixed(2));
+        const shortNet = Number((ev.simShort.netPer1R * riskUsd).toFixed(2));
+        const bestSide = (longNet <= 0 && shortNet <= 0) ? 'IKISI_DE_ZARAR' : (longNet >= shortNet ? 'LONG' : 'SHORT');
+        const sideCorrect = (bestSide === ev.side) ? 'EVET' : 'HAYIR';
+        return {
+          id: idSeq++,
+          entryTime: trDateTime(actSim.entryTs),
+          exitTime: trDateTime(actSim.exitTs),
+          entryTs: actSim.entryTs,
+          exitTs: actSim.exitTs,
+          symbol: ev.symbol,
+          tier: ev.tier,
+          vol24M: ev.vol24M,
+          tf: ev.timeframe,
+          botApproved: ev.botApproved,
+          skipReason: ev.skipReason,
+          btcReg: ev.btcReg,
+          btc15m: ev.btc15m,
+          side: ev.side,
+          entryPrice: Number(actSim.entryPx.toFixed(6)),
+          exitPrice: Number(actSim.exitPx.toFixed(6)),
+          slPct: actSim.slPct,
+          move15m: ev.move15m,
+          volMult: ev.volMult,
+          taker: Number((isLong ? ev.takerRaw : (100 - ev.takerRaw)).toFixed(1)),
+          takerRaw: ev.takerRaw,
+          rsi15: ev.rsi15,
+          ema20Dist: ev.ema20Dist,
+          emaTrend: ev.emaTrend,
+          bbz: ev.bbz,
+          chg1h: ev.chg1h,
+          chg4h: ev.chg4h,
+          atr15: ev.atr15,
+          mfe: actSim.mfe,
+          mae: actSim.mae,
+          durationMin: actSim.durationMin,
+          reason: actSim.reason,
+          riskUsd: Number(riskUsd.toFixed(2)),
+          grossPnl,
+          feeUsd,
+          netPnl,
+          oppPnl,
+          longNet,
+          longMfe: ev.simLong.mfe,
+          longReason: ev.simLong.reason,
+          shortNet,
+          shortMfe: ev.simShort.mfe,
+          shortReason: ev.simShort.reason,
+          bestSide,
+          sideCorrect,
+          balanceAfter: Number(balanceSnapshot.toFixed(2))
+        };
       };
 
-      const maxAuxSlots = Math.max(1, Math.min(2, replaySlots - 1));
-      for (const ev of events) {
-        const evEntryTs = ev.candleTs + (15 * 60 * 1000);
-        openSlots.sort((a, b) => a.exitTs - b.exitTs);
-        for (let j = 0; j < openSlots.length; ) {
-          if (openSlots[j].exitTs <= evEntryTs) { settleSlot(openSlots[j]); openSlots.splice(j, 1); }
-          else j++;
-        }
-        if (openSlots.length >= replaySlots) continue;
-        if (openSlots.some(p => p.symbol === ev.symbol)) continue;
-        if (ev.isAux && openSlots.filter(p => p.isAux).length >= maxAuxSlots) continue;
-        if ((coinCd[ev.symbol] || 0) > evEntryTs) continue;
-
-        const slPctEst = Number((ev.slPctOverride || Math.max(1.00, Math.min(2.80, ev.atr15 * 1.50))).toFixed(2));
-        const rawRiskUsd = Math.max(1.50, bal * (replayRiskPct / 100) * (ev.riskMult || 1.0));
-        const reqNominal = rawRiskUsd / ((slPctEst + 0.09) / 100);
-        const reqMargin = reqNominal / replayLev;
-        const bookedMargin = openSlots.reduce((acc, p) => acc + (p.margin || 0), 0);
-        const freeMargin = Math.max(0, bal - bookedMargin);
-        const maxSlotMargin = Math.max(12.0, bal * (0.94 / replaySlots));
-        const actualMargin = Math.min(reqMargin, freeMargin, maxSlotMargin);
-        if (actualMargin < 6.0) continue;
-        const riskUsd = rawRiskUsd * (actualMargin / reqMargin);
-        const res = simulateWhaleTrade15m(ev.k, ev.idx, ev, riskUsd);
-        if (!res) continue;
-
-        const oppSide = ev.side === 'LONG' ? 'SHORT' : 'LONG';
-        const oppRes = simulateWhaleTrade15m(ev.k, ev.idx, ev, riskUsd, oppSide);
-        if (oppRes) oppNetTotal += oppRes.netPnl;
-
-        const rec = {
-          id: idSeq++,
-          entryTime: trDateTime(res.entryTs),
-          exitTime: trDateTime(res.exitTs),
-          entryTs: res.entryTs,
-          exitTs: res.exitTs,
-          symbol: ev.symbol,
-          tf: ev.timeframe || '15m',
-          side: ev.side,
-          entryPrice: Number(res.entryPx.toFixed(6)),
-          exitPrice: Number(res.exitPx.toFixed(6)),
-          slPct: res.slPct,
-          volMult: Number(ev.volMult.toFixed(2)),
-          taker: Number((ev.side === 'LONG' ? ev.taker : (100 - ev.taker)).toFixed(1)),
-          chg4h: Number(ev.chg4h.toFixed(2)),
-          atr15: Number(ev.atr15.toFixed(2)),
-          mfe: res.mfe,
-          mae: res.mae,
-          durationMin: res.durationMin,
-          reason: res.reason,
-          grossPnl: res.grossPnl,
-          feeUsd: res.feeUsd,
-          netPnl: res.netPnl,
-          oppPnl: oppRes ? oppRes.netPnl : 0,
-          balanceAfter: Number(bal.toFixed(2))
+      if (mode === 'portfolio') {
+        const openSlots = [];
+        const coinCd = {};
+        const lossStreak = {};
+        const settleSlot = (pSlot) => {
+          bal += pSlot.netPnl;
+          if (bal < 1) bal = 1;
+          if (bal > peak) peak = bal;
+          const dd = peak > 0 ? ((peak - bal) / peak) * 100 : 0;
+          if (dd > maxDD) maxDD = dd;
+          pSlot.ref.balanceAfter = Number(bal.toFixed(2));
+          if (pSlot.netPnl <= -0.05) {
+            lossStreak[pSlot.symbol] = (lossStreak[pSlot.symbol] || 0) + 1;
+            const coolMin = lossStreak[pSlot.symbol] >= 2 ? 240 : 30;
+            coinCd[pSlot.symbol] = Math.max(coinCd[pSlot.symbol] || 0, pSlot.exitTs + coolMin * 60 * 1000);
+            if (lossStreak[pSlot.symbol] >= 2) lossStreak[pSlot.symbol] = 1;
+          } else if (pSlot.netPnl > 0.05) {
+            lossStreak[pSlot.symbol] = 0;
+          }
         };
-        openSlots.push({ symbol: ev.symbol, side: ev.side, isAux: !!ev.isAux, margin: actualMargin, exitTs: res.exitTs, netPnl: res.netPnl, ref: rec });
-        coinCd[ev.symbol] = Math.max(coinCd[ev.symbol] || 0, res.exitTs + (30 * 60 * 1000));
-        trades.push(rec);
+
+        const maxAuxSlots = Math.max(1, Math.min(2, replaySlots - 1));
+        for (const ev of workingEvents) {
+          if (!ev.botApproved) continue;
+          const evEntryTs = ev.candleTs + (15 * 60 * 1000);
+          openSlots.sort((a, b) => a.exitTs - b.exitTs);
+          for (let j = 0; j < openSlots.length; ) {
+            if (openSlots[j].exitTs <= evEntryTs) { settleSlot(openSlots[j]); openSlots.splice(j, 1); }
+            else j++;
+          }
+          if (openSlots.length >= replaySlots) continue;
+          if (openSlots.some(pSlot => pSlot.symbol === ev.symbol)) continue;
+          if (ev.isAux && openSlots.filter(pSlot => pSlot.isAux).length >= maxAuxSlots) continue;
+          if ((coinCd[ev.symbol] || 0) > evEntryTs) continue;
+
+          const slPctEst = ev.slPct;
+          const rawRiskUsd = Math.max(1.50, bal * (replayRiskPct / 100) * (ev.riskMult || 1.0));
+          const reqNominal = rawRiskUsd / ((slPctEst + 0.09) / 100);
+          const reqMargin = reqNominal / replayLev;
+          const bookedMargin = openSlots.reduce((acc, pSlot) => acc + (pSlot.margin || 0), 0);
+          const freeMargin = Math.max(0, bal - bookedMargin);
+          const maxSlotMargin = Math.max(12.0, bal * (0.94 / replaySlots));
+          const actualMargin = Math.min(reqMargin, freeMargin, maxSlotMargin);
+          if (actualMargin < 6.0) continue;
+          const riskUsd = rawRiskUsd * (actualMargin / reqMargin);
+
+          const rec = buildTradeRecord(ev, riskUsd, bal);
+          oppNetTotal += rec.oppPnl;
+          openSlots.push({ symbol: ev.symbol, side: ev.side, isAux: !!ev.isAux, margin: actualMargin, exitTs: rec.exitTs, netPnl: rec.netPnl, ref: rec });
+          coinCd[ev.symbol] = Math.max(coinCd[ev.symbol] || 0, rec.exitTs + (30 * 60 * 1000));
+          trades.push(rec);
+        }
+        openSlots.sort((a, b) => a.exitTs - b.exitTs);
+        for (const pSlot of openSlots) settleSlot(pSlot);
+      } else {
+        // 'all_signals' veya 'market': Slot limiti YOK, standart $10 sabit risk ile HER KOİNİ objektif kıyasla!
+        let cumBal = 100.0;
+        let cumPeak = 100.0;
+        for (const ev of workingEvents) {
+          if (mode === 'all_signals' && !ev.botApproved) continue;
+          const riskUsd = fixedRiskUsd;
+          const rec = buildTradeRecord(ev, riskUsd, cumBal);
+          cumBal += rec.netPnl;
+          if (cumBal > cumPeak) cumPeak = cumBal;
+          const dd = cumPeak > 0 ? ((cumPeak - cumBal) / cumPeak) * 100 : 0;
+          if (dd > maxDD) maxDD = dd;
+          rec.balanceAfter = Number(cumBal.toFixed(2));
+          oppNetTotal += rec.oppPnl;
+          trades.push(rec);
+        }
+        bal = cumBal;
+        peak = cumPeak;
       }
-      openSlots.sort((a, b) => a.exitTs - b.exitTs);
-      for (const p of openSlots) settleSlot(p);
+
+      // Her taranan koin için (sinyal üretmeyenler dahil!) koin özet tablosunu doldur
+      for (const rec of trades) {
+        const cs = coinStatMap.get(rec.symbol);
+        if (!cs) continue;
+        cs.totalSetups++;
+        if (rec.botApproved) cs.botSignals++;
+        cs.botNet += rec.netPnl;
+        if (rec.netPnl > 0.05) cs.botWins++;
+        cs.allLongNet += rec.longNet;
+        if (rec.longNet > 0.05) cs.allLongWins++;
+        cs.allShortNet += rec.shortNet;
+        if (rec.shortNet > 0.05) cs.allShortWins++;
+      }
+      const coinSummary = [...coinStatMap.values()].map(cs => {
+        const botNet = Number(cs.botNet.toFixed(2));
+        const allLongNet = Number(cs.allLongNet.toFixed(2));
+        const allShortNet = Number(cs.allShortNet.toFixed(2));
+        const bestSide = cs.totalSetups === 0
+          ? (cs.periodChgPct >= 2 ? 'TREND_LONG' : (cs.periodChgPct <= -2 ? 'TREND_SHORT' : 'YATAY'))
+          : (allLongNet <= 0 && allShortNet <= 0 ? 'IKISI_DE_ZARAR' : (allLongNet >= allShortNet ? 'LONG' : 'SHORT'));
+        return {
+          ...cs,
+          botNet,
+          botWr: cs.totalSetups ? Number(((cs.botWins / cs.totalSetups) * 100).toFixed(1)) : 0,
+          allLongNet,
+          allLongWr: cs.totalSetups ? Number(((cs.allLongWins / cs.totalSetups) * 100).toFixed(1)) : 0,
+          allShortNet,
+          allShortWr: cs.totalSetups ? Number(((cs.allShortWins / cs.totalSetups) * 100).toFixed(1)) : 0,
+          bestSide
+        };
+      }).sort((a, b) => {
+        if ((b.totalSetups > 0) !== (a.totalSetups > 0)) return b.totalSetups > 0 ? 1 : -1;
+        const magB = Math.max(Math.abs(b.allLongNet), Math.abs(b.allShortNet), Math.abs(b.botNet));
+        const magA = Math.max(Math.abs(a.allLongNet), Math.abs(a.allShortNet), Math.abs(a.botNet));
+        if (magB !== magA) return magB - magA;
+        return b.vol24M - a.vol24M;
+      });
 
       const sum = (arr, fn) => arr.reduce((a, x) => a + fn(x), 0);
       const wins = trades.filter(x => x.netPnl > 0.05);
       const losses = trades.filter(x => x.netPnl < -0.05);
       const longs = trades.filter(x => x.side === 'LONG');
       const shorts = trades.filter(x => x.side === 'SHORT');
+      const botOnlyTrades = trades.filter(x => x.botApproved);
       const grossWins = sum(wins, x => x.netPnl);
       const grossLosses = Math.abs(sum(losses, x => x.netPnl));
+      const allLongNet = Number(sum(trades, x => x.longNet).toFixed(2));
+      const allShortNet = Number(sum(trades, x => x.shortNet).toFixed(2));
+      const allLongWins = trades.filter(x => x.longNet > 0.05).length;
+      const allShortWins = trades.filter(x => x.shortNet > 0.05).length;
+      const botOnlyNet = Number(sum(botOnlyTrades, x => x.netPnl).toFixed(2));
+      const botOnlyWins = botOnlyTrades.filter(x => x.netPnl > 0.05).length;
+
+      const engineBreakdown = buildGroupBreakdown(trades, t => t.tf, {
+        '15m': '🐋 15dk Balina',
+        '1H': '⏱️ 1S Balina',
+        'BB': '🧲 BB Dönüş',
+        'PIYASA': '⚡ Piyasa İvme (Pas)',
+        'RSI_D': '📉 Aşırı RSI (Pas)'
+      });
+      const tierBreakdown = buildGroupBreakdown(trades, t => t.tier, {
+        'LIKIT_10M+': '💧 Likit (≥$10M)',
+        'ORTA_2M_10M': '🪙 Orta ($2M-$10M)',
+        'DUSUK_<2M': '🔬 Küçük (<$2M)',
+        'MAJOR': '👑 Major (BTC/ETH/SOL/BNB)'
+      });
+      const regimeBreakdown = buildGroupBreakdown(trades, t => t.btcReg, {
+        'BULL': '🟢 BTC Boğa',
+        'BEAR': '🔴 BTC Ayı',
+        'CHOP': '🟡 BTC Testere'
+      });
+
       const result = {
         ok: true,
         generatedAt: trDateTime(),
         summary: {
           hours: hClamped,
-          coinsScanned: coinKlines.length,
+          scope,
+          mode,
+          coinsTotal: picked.length,
+          coinsScanned: loadedCoins,
           riskPct: replayRiskPct,
           leverage: replayLev,
           maxSlots: replaySlots,
+          fixedRiskUsd,
           initialBalance: 100.0,
           finalBalance: Number(bal.toFixed(2)),
           netPnl: Number((bal - 100.0).toFixed(2)),
@@ -2200,6 +2667,9 @@ async function runHistoricalReplay(hours = 72, maxCoins = 120) {
           peakBalance: Number(peak.toFixed(2)),
           maxDrawdownPct: Number(maxDD.toFixed(1)),
           totalTrades: trades.length,
+          botApprovedTrades: botOnlyTrades.length,
+          botApprovedNet: botOnlyNet,
+          botApprovedWr: botOnlyTrades.length ? Number(((botOnlyWins / botOnlyTrades.length) * 100).toFixed(1)) : 0,
           wins: wins.length,
           losses: losses.length,
           winRate: trades.length ? Number(((wins.length / trades.length) * 100).toFixed(1)) : 0,
@@ -2212,11 +2682,25 @@ async function runHistoricalReplay(hours = 72, maxCoins = 120) {
           shortCount: shorts.length,
           shortNet: Number(sum(shorts, x => x.netPnl).toFixed(2)),
           shortWr: shorts.length ? Number(((shorts.filter(x => x.netPnl > 0.05).length / shorts.length) * 100).toFixed(1)) : 0,
-          oppositeNet: Number(oppNetTotal.toFixed(2))
+          allLongNet,
+          allLongWr: trades.length ? Number(((allLongWins / trades.length) * 100).toFixed(1)) : 0,
+          allShortNet,
+          allShortWr: trades.length ? Number(((allShortWins / trades.length) * 100).toFixed(1)) : 0,
+          oppositeNet: Number(oppNetTotal.toFixed(2)),
+          engineBreakdown,
+          tierBreakdown,
+          regimeBreakdown
         },
+        coinSummary,
         trades: trades.slice().reverse()
       };
-      if (Array.isArray(btcKlines) && btcKlines.length >= Math.floor(barLimit * 0.85) && coinKlines.length >= Math.floor(picked.length * 0.65)) {
+
+      if (Array.isArray(btcKlines) && btcKlines.length >= Math.floor(barLimit * 0.80) && loadedCoins >= Math.floor(picked.length * 0.65)) {
+        // RAM koruması: önbellekte en fazla 2 sonuç tut
+        if (replayCache.size >= 2) {
+          const oldestKey = replayCache.keys().next().value;
+          if (oldestKey) replayCache.delete(oldestKey);
+        }
         replayCache.set(cacheKey, { ts: Date.now(), result });
       }
       return result;
@@ -2226,8 +2710,157 @@ async function runHistoricalReplay(hours = 72, maxCoins = 120) {
     }
   })();
 
-  replayInFlightMap.set(cacheKey, p);
+  if (!onProgress) replayInFlightMap.set(cacheKey, p);
   return p;
+}
+
+function csvSafeCell(val) {
+  return '"' + String(val == null ? '' : val).replace(/[\r\n;]+/g, ' ').replace(/"/g, '""') + '"';
+}
+
+function buildReplayTradesCsv(result) {
+  const header = [
+    'ID','Giris_Saati','Cikis_Saati','Koin','Koin_Kapsam','24s_Hacim_M',
+    'Motor','Bot_Durumu','Pas_Nedeni','BTC_Rejim','BTC_15m_Pct',
+    'Bot_Yonu','Giris_Fiyati','Cikis_Fiyati','Mum_15m_Pct','Hacim_Kati',
+    'Taker_Alis_Pct','RSI_15m','EMA20_Uzaklik_Pct','EMA_Trend','BBZ_Skor',
+    '1s_Pct','4s_Pct','ATR15m_Pct','SL_Pct','Risk_USD',
+    'Bot_MFE_Pct','Bot_MAE_Pct','Bot_Sure_Dk','Bot_Cikis_Nedeni',
+    'Bot_Brut_USD','Bot_Komisyon_USD','Bot_Net_USD',
+    'LONG_Net_USD','LONG_MFE_Pct','LONG_Cikis',
+    'SHORT_Net_USD','SHORT_MFE_Pct','SHORT_Cikis',
+    'En_Iyi_Yon','Yon_Dogru_Mu','Kasa_Sonrasi_USD'
+  ].join(';');
+  const lines = [header];
+  const rows = (result && Array.isArray(result.trades)) ? result.trades.slice().reverse() : [];
+  for (const t of rows) {
+    lines.push([
+      t.id, csvSafeCell(t.entryTime), csvSafeCell(t.exitTime), t.symbol, t.tier || '-', t.vol24M != null ? t.vol24M : 0,
+      t.tf || '15m', t.botApproved ? 'BOT_GIRER' : 'BOT_PAS_GECTI', csvSafeCell(t.skipReason || '-'), t.btcReg || 'CHOP', t.btc15m != null ? t.btc15m : 0,
+      t.side, t.entryPrice, t.exitPrice, t.move15m != null ? t.move15m : 0, t.volMult,
+      t.takerRaw != null ? t.takerRaw : t.taker, t.rsi15 != null ? t.rsi15 : 50, t.ema20Dist != null ? t.ema20Dist : 0, t.emaTrend || '-', t.bbz != null ? t.bbz : 0,
+      t.chg1h != null ? t.chg1h : 0, t.chg4h, t.atr15, t.slPct, t.riskUsd != null ? t.riskUsd : 10,
+      t.mfe, t.mae, t.durationMin, csvSafeCell(t.reason || ''),
+      t.grossPnl, t.feeUsd, t.netPnl,
+      t.longNet != null ? t.longNet : 0, t.longMfe != null ? t.longMfe : 0, csvSafeCell(t.longReason || ''),
+      t.shortNet != null ? t.shortNet : 0, t.shortMfe != null ? t.shortMfe : 0, csvSafeCell(t.shortReason || ''),
+      t.bestSide || '-', t.sideCorrect || '-', t.balanceAfter
+    ].join(';'));
+  }
+  return '\uFEFF' + lines.join('\r\n');
+}
+
+function buildReplayCoinsCsv(result) {
+  const header = [
+    'Sira','Koin','Koin_Kapsam','24s_Hacim_M','24s_Degisim_Pct',
+    'Donem_Bas_Fiyat','Donem_Son_Fiyat','Donem_Degisim_Pct',
+    'Max_Yukselis_Pct','Max_Dusus_Pct','Ort_ATR15m_Pct',
+    'Sinyal_Sayisi','Bot_Girer_Sayisi','Bot_Net_USD','Bot_WinRate_Pct',
+    'Hep_LONG_Net_USD','LONG_WinRate_Pct','Hep_SHORT_Net_USD','SHORT_WinRate_Pct','En_Karli_Yon'
+  ].join(';');
+  const lines = [header];
+  const rows = (result && Array.isArray(result.coinSummary)) ? result.coinSummary : [];
+  rows.forEach((c, idx) => {
+    lines.push([
+      idx + 1, c.symbol, c.tier || '-', c.vol24M, c.chg24h,
+      c.startPrice, c.endPrice, c.periodChgPct,
+      c.maxUpPct, c.maxDownPct, c.avgAtr15,
+      c.totalSetups, c.botSignals, c.botNet, c.botWr,
+      c.allLongNet, c.allLongWr, c.allShortNet, c.allShortWr, c.bestSide
+    ].join(';'));
+  });
+  return '\uFEFF' + lines.join('\r\n');
+}
+
+function startReplayJob(hours = 48, scope = 'all', mode = 'market', forceRefresh = false) {
+  const hClamped = Math.max(12, Math.min(720, Math.round(Number(hours) || 48)));
+  const sNorm = scope === 'liquid' ? 'liquid' : 'all';
+  const mNorm = (mode === 'portfolio' || mode === 'all_signals' || mode === 'market') ? mode : 'market';
+  const jobKey = `${hClamped}:${sNorm}:${mNorm}:${CONFIG.riskPct}:${CONFIG.leverage}:${userRisk.maxSlots || CONFIG.maxSlots}`;
+
+  // Aynı iş zaten çalışıyorsa ona bağlan
+  for (const j of replayJobs.values()) {
+    if (j.key === jobKey && j.status === 'running' && !j.cancelled) {
+      return j;
+    }
+    if (!forceRefresh && j.key === jobKey && j.status === 'done' && (Date.now() - j.finishedAt) < 8 * 60 * 1000) {
+      return j;
+    }
+  }
+
+  // RAM koruması: eski tamamlanmış işleri temizle (en fazla 2 iş tut)
+  if (replayJobs.size >= 3) {
+    for (const [jid, j] of replayJobs.entries()) {
+      if (j.status !== 'running') {
+        replayJobs.delete(jid);
+        if (replayJobs.size < 3) break;
+      }
+    }
+  }
+
+  const jobId = `rp_${Date.now()}_${replayJobSeq++}`;
+  const job = {
+    jobId,
+    key: jobKey,
+    hours: hClamped,
+    scope: sNorm,
+    mode: mNorm,
+    status: 'running',
+    cancelled: false,
+    startedAt: Date.now(),
+    finishedAt: 0,
+    doneCoins: 0,
+    totalCoins: 0,
+    loadedCoins: 0,
+    eventsFound: 0,
+    etaSec: 0,
+    statusText: 'Tarama başlatılıyor...',
+    error: null,
+    result: null
+  };
+  replayJobs.set(jobId, job);
+
+  runHistoricalReplay(hClamped, sNorm === 'all' ? 600 : (hClamped > 240 ? 65 : 120), {
+    scope: sNorm,
+    mode: mNorm,
+    forceRefresh,
+    isCancelled: () => job.cancelled,
+    onProgress: (p) => {
+      job.doneCoins = p.doneCoins || 0;
+      job.totalCoins = p.totalCoins || 0;
+      job.loadedCoins = p.loadedCoins || 0;
+      job.eventsFound = p.eventsFound || 0;
+      job.etaSec = p.etaSec || 0;
+      job.statusText = p.statusText || job.statusText;
+    }
+  }).then(res => {
+    job.finishedAt = Date.now();
+    if (job.cancelled || (res && res.cancelled)) {
+      job.status = 'cancelled';
+      job.error = 'Tarama iptal edildi.';
+      job.statusText = '⏹️ Tarama iptal edildi.';
+    } else if (res && res.ok) {
+      job.status = 'done';
+      job.result = res;
+      job.doneCoins = res.summary.coinsTotal || res.summary.coinsScanned;
+      job.totalCoins = res.summary.coinsTotal || res.summary.coinsScanned;
+      job.loadedCoins = res.summary.coinsScanned;
+      job.eventsFound = res.summary.totalTrades;
+      job.etaSec = 0;
+      job.statusText = '✅ Tarama tamamlandı!';
+    } else {
+      job.status = 'error';
+      job.error = (res && res.error) || 'Replay hatası.';
+      job.statusText = '❌ ' + job.error;
+    }
+  }).catch(err => {
+    job.finishedAt = Date.now();
+    job.status = 'error';
+    job.error = err.message || 'Bilinmeyen hata';
+    job.statusText = '❌ ' + job.error;
+  });
+
+  return job;
 }
 
 // 2. CANLI TARAMA (350+ KOİN BALİNA & MOONSHOT AVCISI)
@@ -4111,35 +4744,83 @@ function serveDashboardHtml() {
     </div>
 
     <div id="scanner15mView" style="display:none; width:100%; margin-top:8px;">
-      <!-- ⏪ GERÇEK GEÇMİŞ REPLAY BACKTEST (TEK SADE LİSTE — SIFIR HİLE, GERÇEK MUM & KOMİSYON) -->
+      <!-- ⏪ TÜM BİNANCE GEÇMİŞ REPLAY & LONG vs SHORT EXCEL AKTARICI -->
       <div class="panel" style="border:1px solid rgba(56,189,248,0.35);">
-        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:10px;">
           <div>
-            <h2 style="margin:0; color:#38bdf8;">⏪ GERÇEK GEÇMİŞ REPLAY & EXCEL AKTARICI</h2>
-            <div style="font-size:12px; color:var(--muted); margin-top:4px;">Birebir canlı <b>15dk Balina Motoru (2.5x–5.5x Hacim + Taker ≥%60 + EMA20/50 + BTC 15dk Rejim Kalkanı + LONG 5.0R / SHORT 0.90R İz Süren)</b> ile geçmiş Binance Futures mumlarını tarar.</div>
+            <h2 style="margin:0; color:#38bdf8;">⏪ TÜM BİNANCE GEÇMİŞ REPLAY & EXCEL AKTARICI (LONG vs SHORT)</h2>
+            <div style="font-size:12px; color:var(--muted); margin-top:4px;">Binance Futures'taki <b>tüm saf kripto koinlerin (~400 koin)</b> gerçek 15dk grafiklerini tarar; her kurulumda <b>LONG girseydik</b> ve <b>SHORT girseydik</b> komisyon+kayma dahil net kâr/zararı karşılaştırıp <b>Excel (CSV)</b>'e aktarır.</div>
           </div>
-          <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
-            <select id="selReplayHours" onchange="loadReplay()" style="background:var(--panel2); color:var(--text); border:1px solid var(--border); border-radius:6px; padding:6px 8px; font-weight:800;">
-              <option value="24">Son 24 Saat</option>
-              <option value="72" selected>Son 3 Gün (72s)</option>
-              <option value="168">Son 7 Gün (168s)</option>
-              <option value="240">Son 10 Gün (240s)</option>
-              <option value="720">Son 30 Gün (720s · Walk-Forward)</option>
+          <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
+            <select id="selReplayHours" style="background:var(--panel2); color:var(--text); border:1px solid var(--border); border-radius:6px; padding:6px 8px; font-weight:800; font-size:11.5px;">
+              <option value="24">Son 24 Saat (~15 sn)</option>
+              <option value="48" selected>Son 48 Saat (~18 sn)</option>
+              <option value="72">Son 3 Gün (72s · ~1.5 dk)</option>
+              <option value="168">Son 7 Gün (168s · ~1.5 dk)</option>
+              <option value="240">Son 10 Gün (240s · ~3 dk)</option>
+              <option value="720">Son 30 Gün (720s)</option>
             </select>
-            <button class="theme-toggle-btn" id="btnRunReplay" onclick="loadReplay()">⏪ Simüle Et</button>
-            <button class="theme-toggle-btn" onclick="exportReplayExcel()">📥 Excel / CSV</button>
+            <select id="selReplayScope" style="background:var(--panel2); color:var(--text); border:1px solid var(--border); border-radius:6px; padding:6px 8px; font-weight:800; font-size:11.5px;">
+              <option value="all" selected>🌐 Tüm Binance (~400 Koin)</option>
+              <option value="liquid">💧 Canlı Likit (≥$10M · ~100 Koin)</option>
+            </select>
+            <select id="selReplayMode" style="background:var(--panel2); color:var(--text); border:1px solid var(--border); border-radius:6px; padding:6px 8px; font-weight:800; font-size:11.5px;">
+              <option value="market" selected>🌐 Tüm Piyasa · L vs S Analizi</option>
+              <option value="all_signals">🔬 Sadece Bot Sinyalleri (Slotsuz)</option>
+              <option value="portfolio">📊 Canlı Bot Portföyü (4 Slot)</option>
+            </select>
+            <button class="theme-toggle-btn" id="btnRunReplay" onclick="loadReplay(true)" style="background:rgba(56,189,248,0.18);border-color:rgba(56,189,248,0.5);">⏪ Tara & Simüle Et</button>
+            <button class="theme-toggle-btn" id="btnCancelReplay" onclick="cancelReplay()" style="display:none;background:rgba(239,68,68,0.18);border-color:rgba(239,68,68,0.5);color:var(--red);">⏹️ Durdur</button>
+            <button class="theme-toggle-btn" id="btnExportTrades" onclick="exportReplayExcel('trades')" style="background:rgba(34,197,94,0.14);border-color:rgba(34,197,94,0.45);">📥 İşlemler Excel</button>
+            <button class="theme-toggle-btn" id="btnExportCoins" onclick="exportReplayExcel('coins')" style="background:rgba(168,85,247,0.14);border-color:rgba(168,85,247,0.45);">📋 Tüm Koinler Excel</button>
           </div>
         </div>
-        <div id="replayStatusLine" style="margin-top:8px; font-size:12px; color:var(--muted);">Simülasyon için "Simüle Et" butonuna basın veya yüklenmesini bekleyin...</div>
-        <div id="replaySummaryGrid" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:8px; margin-top:10px;"></div>
-        <div class="table-container" style="max-height:620px; overflow:auto; margin-top:12px;">
+
+        <div id="replayStatusLine" style="margin-top:8px; font-size:12px; color:var(--muted);">Tarama için "Tara & Simüle Et" butonuna basın veya otomatik yüklenmesini bekleyin...</div>
+        <div id="replayProgressWrap" style="display:none; width:100%; height:8px; background:var(--panel2); border:1px solid var(--border); border-radius:99px; overflow:hidden; margin-top:6px;">
+          <div id="replayProgressBar" style="width:0%; height:100%; background:linear-gradient(90deg,#38bdf8,#22c55e); transition:width 0.35s ease;"></div>
+        </div>
+
+        <div id="replaySummaryGrid" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(155px, 1fr)); gap:8px; margin-top:10px;"></div>
+        <div id="replayBreakdownGrid" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(260px, 1fr)); gap:8px; margin-top:10px;"></div>
+
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-top:12px;">
+          <div style="display:flex; gap:6px; flex-wrap:wrap;">
+            <button class="theme-toggle-btn" id="btnSubTrades" onclick="setReplaySubTab('trades')" style="background:rgba(56,189,248,0.2);border-color:rgba(56,189,248,0.6);">📋 İşlem & Sinyal Listesi</button>
+            <button class="theme-toggle-btn" id="btnSubCoins" onclick="setReplaySubTab('coins')">🌐 Tüm Koinler Özeti</button>
+          </div>
+          <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
+            <select id="selReplayQuickFilter" onchange="renderReplayTables()" style="background:var(--panel2); color:var(--text); border:1px solid var(--border); border-radius:6px; padding:5px 8px; font-size:11px; font-weight:700;">
+              <option value="all">Filtre: Tümü</option>
+              <option value="bot">🤖 Sadece Bot Girenler</option>
+              <option value="skip">⏭️ Sadece Pas Geçilenler</option>
+              <option value="long_win">🟢 LONG Kârlı</option>
+              <option value="short_win">🔴 SHORT Kârlı</option>
+              <option value="wrong_side">🔄 Ters Yön Daha Kârlı</option>
+            </select>
+            <input type="text" id="inpReplaySearch" oninput="renderReplayTables()" placeholder="Koin ara (SOL, PEPE...)" style="background:var(--panel2); color:var(--text); border:1px solid var(--border); border-radius:6px; padding:5px 9px; font-size:11.5px; width:165px;">
+          </div>
+        </div>
+
+        <div id="replayTradesTableWrap" class="table-container" style="max-height:580px; overflow:auto; margin-top:8px;">
           <table>
             <thead>
               <tr>
-                <th>#</th><th>Giriş Saati</th><th>Koin</th><th>Yön</th><th>Giriş ➔ Çıkış</th><th>Hacim</th><th>SL (%)</th><th>MFE (%)</th><th>Süre</th><th>Çıkış Nedeni</th><th>Net Kâr ($)</th><th>Kasa ($)</th>
+                <th>#</th><th>Giriş Saati</th><th>Koin / Motor</th><th>Durum / BTC</th><th>Yön</th><th>Giriş ➔ Çıkış</th><th>Hacim / RSI</th><th>Bot Net ($)</th><th>🟢 LONG ($)</th><th>🔴 SHORT ($)</th><th>En İyi Yön</th><th>Çıkış / Pas Nedeni</th>
               </tr>
             </thead>
-            <tbody id="tbodyReplayTrades"><tr><td colspan="12" style="text-align:center;color:var(--muted);padding:16px;">Geçmiş simülasyon bekleniyor...</td></tr></tbody>
+            <tbody id="tbodyReplayTrades"><tr><td colspan="12" style="text-align:center;color:var(--muted);padding:16px;">Geçmiş tarama bekleniyor...</td></tr></tbody>
+          </table>
+        </div>
+
+        <div id="replayCoinsTableWrap" class="table-container" style="display:none; max-height:580px; overflow:auto; margin-top:8px;">
+          <table>
+            <thead>
+              <tr>
+                <th>#</th><th>Koin</th><th>Kapsam</th><th>24s Hacim</th><th>Dönem %</th><th>Max Yükseliş / Düşüş</th><th>Ort ATR</th><th>Kurulum (Bot)</th><th>Bot Net ($)</th><th>🟢 Hep LONG ($)</th><th>🔴 Hep SHORT ($)</th><th>En Kârlı Yön</th>
+              </tr>
+            </thead>
+            <tbody id="tbodyReplayCoins"><tr><td colspan="12" style="text-align:center;color:var(--muted);padding:16px;">Koin özeti bekleniyor...</td></tr></tbody>
           </table>
         </div>
       </div>
@@ -4148,6 +4829,9 @@ function serveDashboardHtml() {
 
   <script>
     let replayCache = null;
+    let replayActiveJobId = null;
+    let replayPollTimer = null;
+    let replaySubTab = 'trades';
     function switchView(id) {
       var live = document.getElementById('liveView');
       var radar = document.getElementById('scanner15mView');
@@ -4157,8 +4841,8 @@ function serveDashboardHtml() {
       var tabRadar = document.getElementById('tabRadar');
       if (tabLive) tabLive.classList.toggle('active', id === 'liveView');
       if (tabRadar) tabRadar.classList.toggle('active', id === 'scanner15mView');
-      if (id === 'scanner15mView' && !replayCache) {
-        loadReplay();
+      if (id === 'scanner15mView' && !replayCache && !replayActiveJobId) {
+        loadReplay(false);
       }
     }
     function radarNum(p) {
@@ -4168,71 +4852,259 @@ function serveDashboardHtml() {
       if (n < 1) return n.toFixed(4);
       return n.toFixed(2);
     }
-    async function loadReplay() {
-      var line = document.getElementById('replayStatusLine');
-      var grid = document.getElementById('replaySummaryGrid');
+    function fmtUsdSign(v) {
+      var n = Number(v) || 0;
+      return (n >= 0 ? '+$' : '-$') + Math.abs(n).toFixed(2);
+    }
+    function usdClr(v) {
+      var n = Number(v) || 0;
+      return n > 0.01 ? 'var(--green)' : (n < -0.01 ? 'var(--red)' : 'var(--muted)');
+    }
+    function setReplaySubTab(tab) {
+      replaySubTab = tab === 'coins' ? 'coins' : 'trades';
+      var tw = document.getElementById('replayTradesTableWrap');
+      var cw = document.getElementById('replayCoinsTableWrap');
+      var bt = document.getElementById('btnSubTrades');
+      var bc = document.getElementById('btnSubCoins');
+      var qf = document.getElementById('selReplayQuickFilter');
+      if (tw) tw.style.display = replaySubTab === 'trades' ? 'block' : 'none';
+      if (cw) cw.style.display = replaySubTab === 'coins' ? 'block' : 'none';
+      if (qf) qf.style.display = replaySubTab === 'trades' ? '' : 'none';
+      if (bt) { bt.style.background = replaySubTab === 'trades' ? 'rgba(56,189,248,0.22)' : ''; bt.style.borderColor = replaySubTab === 'trades' ? 'rgba(56,189,248,0.65)' : ''; }
+      if (bc) { bc.style.background = replaySubTab === 'coins' ? 'rgba(168,85,247,0.22)' : ''; bc.style.borderColor = replaySubTab === 'coins' ? 'rgba(168,85,247,0.65)' : ''; }
+      renderReplayTables();
+    }
+    function renderBreakdownBox(title, rows) {
+      if (!rows || !rows.length) return '';
+      var body = rows.map(function (r) {
+        return '<tr><td style="font-weight:700;font-size:10.5px;">' + escapeHtml(r.label) + '</td><td style="text-align:center;font-size:10.5px;">' + r.count + '</td><td style="color:' + usdClr(r.botNet) + ';font-weight:800;font-size:10.5px;">' + fmtUsdSign(r.botNet) + '</td><td style="color:' + usdClr(r.allLongNet) + ';font-weight:800;font-size:10.5px;">' + fmtUsdSign(r.allLongNet) + '</td><td style="color:' + usdClr(r.allShortNet) + ';font-weight:800;font-size:10.5px;">' + fmtUsdSign(r.allShortNet) + '</td></tr>';
+      }).join('');
+      return '<div style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:7px 9px;"><div style="font-size:10.5px;font-weight:800;color:#38bdf8;margin-bottom:5px;">' + title + '</div><table style="width:100%;font-size:10.5px;"><thead><tr><th style="padding:3px 4px;">Grup</th><th style="padding:3px 4px;text-align:center;">Adet</th><th style="padding:3px 4px;">Bot $</th><th style="padding:3px 4px;">LONG $</th><th style="padding:3px 4px;">SHORT $</th></tr></thead><tbody>' + body + '</tbody></table></div>';
+    }
+    function renderReplayTables() {
+      if (!replayCache) return;
+      var q = (document.getElementById('inpReplaySearch') ? document.getElementById('inpReplaySearch').value : '').trim().toUpperCase();
+      var filt = document.getElementById('selReplayQuickFilter') ? document.getElementById('selReplayQuickFilter').value : 'all';
+
       var tbody = document.getElementById('tbodyReplayTrades');
-      var btn = document.getElementById('btnRunReplay');
-      var hEl = document.getElementById('selReplayHours');
-      var hours = hEl ? Number(hEl.value) : 72;
-      if (btn) btn.disabled = true;
-      if (line) line.textContent = '⏳ Son ' + hours + ' saatlik gerçek Binance Futures 15dk mumları çekilip simüle ediliyor (' + (hours >= 720 ? '15–35 sn' : '5–15 sn') + ')...';
-      if (tbody) tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;color:var(--muted);padding:18px;">⏳ Gerçek geçmiş mumlar hesaplanıyor...</td></tr>';
-      try {
-        var targetCoins = hours > 240 ? 65 : 120;
-        var res = await fetch('/api/replay-backtest?hours=' + encodeURIComponent(hours) + '&coins=' + targetCoins);
-        var data = await res.json();
-        if (!data || !data.ok) {
-          if (line) line.textContent = '❌ Replay alınamadı: ' + ((data && data.error) || 'hata');
-          return;
+      if (tbody && replaySubTab === 'trades') {
+        var rawList = replayCache.tradesPreview || [];
+        var filtered = rawList.filter(function (t) {
+          if (q && String(t.symbol || '').toUpperCase().indexOf(q) === -1) return false;
+          if (filt === 'bot' && !t.botApproved) return false;
+          if (filt === 'skip' && t.botApproved) return false;
+          if (filt === 'long_win' && (t.longNet || 0) <= 0.05) return false;
+          if (filt === 'short_win' && (t.shortNet || 0) <= 0.05) return false;
+          if (filt === 'wrong_side' && t.sideCorrect !== 'HAYIR') return false;
+          return true;
+        });
+        var shown = filtered.slice(0, 300);
+        var html = shown.map(function (t) {
+          var sCls = t.side === 'LONG' ? 'badge-side-long' : 'badge-side-short';
+          var tfTag = t.tf === '1H' ? ' <span style="font-size:9px;padding:1px 4px;border-radius:4px;background:rgba(124,58,237,0.16);color:var(--purple);font-weight:800;">1S</span>'
+            : (t.tf === 'BB' ? ' <span style="font-size:9px;padding:1px 4px;border-radius:4px;background:rgba(245,158,11,0.18);color:var(--amber);font-weight:800;">BB</span>'
+            : (t.tf === 'PIYASA' ? ' <span style="font-size:9px;padding:1px 4px;border-radius:4px;background:rgba(56,189,248,0.16);color:#38bdf8;font-weight:800;">PİYASA</span>'
+            : (t.tf === 'RSI_D' ? ' <span style="font-size:9px;padding:1px 4px;border-radius:4px;background:rgba(236,72,153,0.16);color:#ec4899;font-weight:800;">RSI</span>'
+            : ' <span style="font-size:9px;padding:1px 4px;border-radius:4px;background:rgba(34,197,94,0.16);color:var(--green);font-weight:800;">15dk</span>')));
+          var botBadge = t.botApproved
+            ? '<span style="font-size:9px;padding:1px 5px;border-radius:4px;background:rgba(34,197,94,0.16);color:var(--green);font-weight:800;">BOT GİRER</span>'
+            : '<span style="font-size:9px;padding:1px 5px;border-radius:4px;background:rgba(148,163,184,0.18);color:var(--muted);font-weight:700;">PAS</span>';
+          var bestBadge = t.bestSide === 'LONG'
+            ? '<span style="color:var(--green);font-weight:900;">🟢 LONG</span>'
+            : (t.bestSide === 'SHORT' ? '<span style="color:var(--red);font-weight:900;">🔴 SHORT</span>' : '<span style="color:var(--muted);font-size:10px;">İKİSİ DE ZARAR</span>');
+          var reasonCol = t.botApproved ? escapeHtml(t.reason || '') : (escapeHtml(t.reason || '') + '<div style="font-size:9.5px;color:var(--amber);">Pas: ' + escapeHtml(t.skipReason || '-') + '</div>');
+          return '<tr>' +
+            '<td>' + t.id + '</td>' +
+            '<td style="font-size:10px;color:var(--muted);">' + escapeHtml(t.entryTime || '') + '</td>' +
+            '<td style="font-weight:900;">' + escapeHtml(t.symbol || '') + tfTag + '<div style="font-size:9.5px;color:var(--muted);font-weight:600;">$' + Number(t.vol24M || 0).toFixed(1) + 'M</div></td>' +
+            '<td>' + botBadge + '<div style="font-size:9.5px;color:var(--muted);margin-top:2px;">BTC: ' + escapeHtml(t.btcReg || '-') + '</div></td>' +
+            '<td><span class="' + sCls + '">' + t.side + '</span></td>' +
+            '<td style="font-size:10.5px;">$' + radarNum(t.entryPrice) + ' ➔ $' + radarNum(t.exitPrice) + '<div style="font-size:9.5px;color:var(--muted);">SL %' + Number(t.slPct || 0).toFixed(2) + ' · ' + t.durationMin + 'dk</div></td>' +
+            '<td style="font-size:10.5px;font-weight:700;">' + Number(t.volMult || 0).toFixed(1) + 'x<div style="font-size:9.5px;color:var(--muted);">RSI ' + Number(t.rsi15 || 50).toFixed(0) + ' · Tkr %' + Number(t.takerRaw || 50).toFixed(0) + '</div></td>' +
+            '<td style="color:' + usdClr(t.netPnl) + ';font-weight:900;">' + fmtUsdSign(t.netPnl) + '</td>' +
+            '<td style="color:' + usdClr(t.longNet) + ';font-weight:900;">' + fmtUsdSign(t.longNet) + '<div style="font-size:9px;color:var(--muted);">MFE +%' + Number(t.longMfe || 0).toFixed(1) + '</div></td>' +
+            '<td style="color:' + usdClr(t.shortNet) + ';font-weight:900;">' + fmtUsdSign(t.shortNet) + '<div style="font-size:9px;color:var(--muted);">MFE +%' + Number(t.shortMfe || 0).toFixed(1) + '</div></td>' +
+            '<td>' + bestBadge + '</td>' +
+            '<td style="font-size:10.5px;">' + reasonCol + '</td>' +
+          '</tr>';
+        }).join('');
+        var totalAll = Number(replayCache.totalTradesCount || rawList.length);
+        if (totalAll > shown.length && !q && filt === 'all') {
+          html += '<tr><td colspan="12" style="text-align:center;color:#38bdf8;font-weight:700;padding:12px;">Tabloda en güncel ' + shown.length + ' / ' + totalAll + ' kurulum gösteriliyor — TÜM ' + totalAll + ' SATIRI incelemek için yukarıdan "📥 İşlemler Excel" butonuna basın!</td></tr>';
         }
-        replayCache = data;
-        var s = data.summary || {};
-        var netClr = (s.netPnl || 0) >= 0 ? 'var(--green)' : 'var(--red)';
-        var lClr = (s.longNet || 0) >= 0 ? 'var(--green)' : 'var(--red)';
-        var sClr = (s.shortNet || 0) >= 0 ? 'var(--green)' : 'var(--red)';
-        var oClr = (s.oppositeNet || 0) >= 0 ? 'var(--green)' : 'var(--red)';
-        if (line) line.textContent = '✅ Tamamlandı (' + (data.generatedAt || '') + ') | ' + s.coinsScanned + ' Saf Kripto Futures · Son ' + s.hours + ' Saat · $100 Başlangıç · ' + (s.maxSlots || 3) + ' Slot · %' + (s.riskPct || 7.5) + ' Bileşik Risk (' + (s.leverage || 15) + 'x) · Komisyon + Kayma Dahil';
-        if (grid) {
-          var card = function (lbl, val, sub, clr) {
-            return '<div style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;"><div style="font-size:10px;color:var(--muted);font-weight:700;">' + lbl + '</div><div style="font-size:16px;font-weight:900;color:' + (clr || 'var(--text)') + ';margin-top:2px;">' + val + '</div><div style="font-size:10px;color:var(--muted);margin-top:2px;">' + sub + '</div></div>';
-          };
-          grid.innerHTML =
-            card('BİTİŞ BAKİYESİ ($100 ->)', '$' + Number(s.finalBalance || 100).toFixed(2), 'Net: ' + ((s.netPnl >= 0 ? '+$' : '-$') + Math.abs(s.netPnl || 0).toFixed(2)) + ' (%' + (s.roiPct >= 0 ? '+' : '') + Number(s.roiPct || 0).toFixed(1) + ')', netClr) +
-            card('İŞLEM & WIN RATE', s.totalTrades + ' İşlem', s.wins + 'W / ' + s.losses + 'L (%' + s.winRate + ' WR) · PF: ' + s.profitFactor, 'var(--text)') +
-            card('🟢 LONG PERFORMANSI', (s.longNet >= 0 ? '+$' : '-$') + Math.abs(s.longNet || 0).toFixed(2), s.longCount + ' işlem · %' + s.longWr + ' WR', lClr) +
-            card('🔴 SHORT PERFORMANSI', (s.shortNet >= 0 ? '+$' : '-$') + Math.abs(s.shortNet || 0).toFixed(2), s.shortCount + ' işlem · %' + s.shortWr + ' WR', sClr) +
-            card('🔄 TERS YÖN KIYAS', (s.oppositeNet >= 0 ? '+$' : '-$') + Math.abs(s.oppositeNet || 0).toFixed(2), 'Avantaj: ' + (((s.netPnl - s.oppositeNet) >= 0 ? '+$' : '-$') + Math.abs((s.netPnl || 0) - (s.oppositeNet || 0)).toFixed(2)), oClr) +
-            card('MAX DÜŞÜŞ & KOMİSYON', '-%' + Number(s.maxDrawdownPct || 0).toFixed(1) + ' DD', 'Zirve: $' + Number(s.peakBalance || 100).toFixed(2) + ' · Komisyon: $' + Number(s.totalFees || 0).toFixed(2), 'var(--muted)');
-        }
-        var list = data.trades || [];
-        if (tbody) {
-          tbody.innerHTML = list.map(function (t) {
-            var isW = (t.netPnl || 0) >= 0;
-            var sCls = t.side === 'LONG' ? 'badge-side-long' : 'badge-side-short';
-            var tfTag = t.tf === '1H' ? ' <span style="font-size:9px;padding:1px 4px;border-radius:4px;background:rgba(124,58,237,0.16);color:var(--purple);font-weight:800;">1S</span>'
-              : (t.tf === 'BB' ? ' <span style="font-size:9px;padding:1px 4px;border-radius:4px;background:rgba(245,158,11,0.18);color:var(--amber);font-weight:800;">BB</span>'
-              : (t.tf === 'GD' ? ' <span style="font-size:9px;padding:1px 4px;border-radius:4px;background:rgba(6,182,212,0.16);color:var(--cyan);font-weight:800;">GD</span>' : ''));
-            return '<tr><td>' + t.id + '</td><td style="font-size:10px;color:var(--muted);">' + t.entryTime + '</td><td style="font-weight:900;">' + t.symbol + tfTag + '</td><td><span class="' + sCls + '">' + t.side + '</span></td><td style="font-size:11px;">$' + radarNum(t.entryPrice) + ' ➔ $' + radarNum(t.exitPrice) + '</td><td style="font-weight:700;">' + Number(t.volMult || 0).toFixed(1) + 'x</td><td>%' + Number(t.slPct || 0).toFixed(2) + '</td><td style="color:var(--green);font-weight:800;">+%' + Number(t.mfe || 0).toFixed(2) + '</td><td>' + t.durationMin + 'dk</td><td style="font-size:11px;">' + t.reason + '</td><td style="color:' + (isW ? 'var(--green)' : 'var(--red)') + ';font-weight:900;">' + (isW ? '+$' : '-$') + Math.abs(t.netPnl || 0).toFixed(2) + '</td><td style="font-weight:700;">$' + Number(t.balanceAfter || 100).toFixed(2) + '</td></tr>';
-          }).join('') || '<tr><td colspan="12" style="text-align:center;color:var(--muted);padding:16px;">Bu zaman aralığında balina kriterine uyan geçmiş işlem bulunmadı.</td></tr>';
-        }
-      } catch (e) {
-        if (line) line.textContent = '❌ Replay bağlantısı başarısız.';
-      } finally {
-        if (btn) btn.disabled = false;
+        tbody.innerHTML = html || '<tr><td colspan="12" style="text-align:center;color:var(--muted);padding:16px;">Seçili filtreye uyan kayıt bulunamadı.</td></tr>';
+      }
+
+      var cbody = document.getElementById('tbodyReplayCoins');
+      if (cbody && replaySubTab === 'coins') {
+        var coins = (replayCache.coinSummary || []).filter(function (c) {
+          return !q || String(c.symbol || '').toUpperCase().indexOf(q) !== -1;
+        });
+        cbody.innerHTML = coins.map(function (c, idx) {
+          var pClr = (c.periodChgPct || 0) >= 0 ? 'var(--green)' : 'var(--red)';
+          var bestLbl = c.bestSide === 'LONG' ? '<span style="color:var(--green);font-weight:900;">🟢 LONG</span>'
+            : (c.bestSide === 'SHORT' ? '<span style="color:var(--red);font-weight:900;">🔴 SHORT</span>'
+            : '<span style="color:var(--muted);font-size:10px;">' + escapeHtml(c.bestSide || '-') + '</span>');
+          return '<tr>' +
+            '<td>' + (idx + 1) + '</td>' +
+            '<td style="font-weight:900;">' + escapeHtml(c.symbol) + '</td>' +
+            '<td style="font-size:10px;color:var(--muted);">' + escapeHtml(c.tier || '-') + '</td>' +
+            '<td style="font-weight:700;">$' + Number(c.vol24M || 0).toFixed(1) + 'M</td>' +
+            '<td style="color:' + pClr + ';font-weight:800;">' + ((c.periodChgPct || 0) >= 0 ? '+' : '') + Number(c.periodChgPct || 0).toFixed(2) + '%</td>' +
+            '<td style="font-size:10.5px;"><span style="color:var(--green);">+%' + Number(c.maxUpPct || 0).toFixed(1) + '</span> / <span style="color:var(--red);">' + Number(c.maxDownPct || 0).toFixed(1) + '%</span></td>' +
+            '<td>%' + Number(c.avgAtr15 || 0).toFixed(2) + '</td>' +
+            '<td style="font-weight:700;">' + c.totalSetups + ' <span style="color:var(--muted);font-weight:600;">(' + c.botSignals + ' bot)</span></td>' +
+            '<td style="color:' + usdClr(c.botNet) + ';font-weight:900;">' + fmtUsdSign(c.botNet) + '</td>' +
+            '<td style="color:' + usdClr(c.allLongNet) + ';font-weight:900;">' + fmtUsdSign(c.allLongNet) + '<div style="font-size:9px;color:var(--muted);">%' + Number(c.allLongWr || 0).toFixed(0) + ' WR</div></td>' +
+            '<td style="color:' + usdClr(c.allShortNet) + ';font-weight:900;">' + fmtUsdSign(c.allShortNet) + '<div style="font-size:9px;color:var(--muted);">%' + Number(c.allShortWr || 0).toFixed(0) + ' WR</div></td>' +
+            '<td>' + bestLbl + '</td>' +
+          '</tr>';
+        }).join('') || '<tr><td colspan="12" style="text-align:center;color:var(--muted);padding:16px;">Koin bulunamadı.</td></tr>';
       }
     }
-    function exportReplayExcel() {
-      if (!replayCache || !replayCache.trades || !replayCache.trades.length) { loadReplay(); return; }
-      var lines = ['ID;Giris_Saati;Cikis_Saati;Koin;Yon;Giris_Fiyati;Cikis_Fiyati;Hacim_Kati;Taker_Pct;4s_Pct;ATR15m_Pct;SL_Pct;MFE_Pct;MAE_Pct;Sure_Dk;Cikis_Nedeni;Brut_USD;Komisyon_USD;Net_Kar_USD;Ters_PnL_USD;Kasa_Sonrasi_USD'];
-      replayCache.trades.slice().reverse().forEach(function (t) {
-        lines.push([t.id, '"' + t.entryTime + '"', '"' + t.exitTime + '"', t.symbol, t.side, t.entryPrice, t.exitPrice, t.volMult, t.taker, t.chg4h, t.atr15, t.slPct, t.mfe, t.mae, t.durationMin, '"' + String(t.reason || '') + '"', t.grossPnl, t.feeUsd, t.netPnl, t.oppPnl, t.balanceAfter].join(';'));
-      });
-      var blob = new Blob(['\uFEFF' + lines.join('\\n')], { type: 'text/csv;charset=utf-8;' });
-      var link = document.createElement('a');
-      link.href = URL.createObjectURL(blob);
-      link.download = 'marscoin_gecmis_replay_' + (replayCache.summary ? replayCache.summary.hours : 72) + 's.csv';
-      link.click();
+    function renderReplayCompleted(data) {
+      replayCache = data;
+      var line = document.getElementById('replayStatusLine');
+      var grid = document.getElementById('replaySummaryGrid');
+      var bGrid = document.getElementById('replayBreakdownGrid');
+      var pWrap = document.getElementById('replayProgressWrap');
+      var pBar = document.getElementById('replayProgressBar');
+      var bt = document.getElementById('btnSubTrades');
+      var bc = document.getElementById('btnSubCoins');
+      if (pBar) pBar.style.width = '100%';
+      setTimeout(function () { if (pWrap) pWrap.style.display = 'none'; }, 900);
+
+      var s = data.summary || {};
+      var modeLbl = s.mode === 'portfolio' ? ('Canlı Portföy (' + (s.maxSlots || 4) + ' Slot · %' + (s.riskPct || 6) + ' Bileşik)')
+        : (s.mode === 'all_signals' ? 'Sadece Bot Sinyalleri (Slotsuz · $10 Sabit Risk)' : 'Tüm Piyasa L vs S Tarama (Slotsuz · $10 Sabit Risk)');
+      if (line) line.textContent = '✅ Tamamlandı (' + (data.generatedAt || '') + ' · ' + (data.elapsedSec || 0) + ' sn) | ' + s.coinsScanned + '/' + (s.coinsTotal || s.coinsScanned) + ' Binance Koin · Son ' + s.hours + ' Saat · ' + modeLbl + ' · Komisyon + Kayma Dahil';
+      if (bt) bt.textContent = '📋 İşlem & Sinyaller (' + (data.totalTradesCount || 0) + ')';
+      if (bc) bc.textContent = '🌐 Tüm Koinler Özeti (' + ((data.coinSummary || []).length) + ' Koin)';
+
+      if (grid) {
+        var card = function (lbl, val, sub, clr) {
+          return '<div style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;"><div style="font-size:10px;color:var(--muted);font-weight:700;">' + lbl + '</div><div style="font-size:16px;font-weight:900;color:' + (clr || 'var(--text)') + ';margin-top:2px;">' + val + '</div><div style="font-size:10px;color:var(--muted);margin-top:2px;">' + sub + '</div></div>';
+        };
+        var c1 = s.mode === 'portfolio'
+          ? card('BİTİŞ BAKİYESİ ($100 ->)', '$' + Number(s.finalBalance || 100).toFixed(2), 'Net: ' + fmtUsdSign(s.netPnl) + ' (%' + (s.roiPct >= 0 ? '+' : '') + Number(s.roiPct || 0).toFixed(1) + ')', usdClr(s.netPnl))
+          : card('🤖 MEVCUT BOT SİNYALLERİ', fmtUsdSign(s.botApprovedNet), (s.botApprovedTrades || 0) + ' bot işlemi · %' + Number(s.botApprovedWr || 0).toFixed(1) + ' WR', usdClr(s.botApprovedNet));
+        grid.innerHTML =
+          c1 +
+          card('TOPLAM KURULUM & WR', (s.totalTrades || 0) + ' Kurulum', s.wins + 'W / ' + s.losses + 'L (%' + s.winRate + ' WR) · PF: ' + s.profitFactor, 'var(--text)') +
+          card('🟢 HEP LONG GİRİLSE', fmtUsdSign(s.allLongNet), 'Tüm kurulumlarda LONG · %' + Number(s.allLongWr || 0).toFixed(1) + ' WR', usdClr(s.allLongNet)) +
+          card('🔴 HEP SHORT GİRİLSE', fmtUsdSign(s.allShortNet), 'Tüm kurulumlarda SHORT · %' + Number(s.allShortWr || 0).toFixed(1) + ' WR', usdClr(s.allShortNet)) +
+          card('🧭 YÖN AVANTAJI', fmtUsdSign(s.netPnl), 'Ters Yön: ' + fmtUsdSign(s.oppositeNet) + ' · Fark: ' + fmtUsdSign((s.netPnl || 0) - (s.oppositeNet || 0)), usdClr(s.netPnl)) +
+          card('TARANAN KOİN & KOMİSYON', (s.coinsScanned || 0) + ' / ' + (s.coinsTotal || s.coinsScanned) + ' Koin', 'MaxDD: -%' + Number(s.maxDrawdownPct || 0).toFixed(1) + ' · Komisyon: $' + Number(s.totalFees || 0).toFixed(2), 'var(--muted)');
+      }
+      if (bGrid) {
+        bGrid.innerHTML =
+          renderBreakdownBox('⚙️ Motor Bazlı (Bot vs LONG vs SHORT)', s.engineBreakdown) +
+          renderBreakdownBox('💧 Koin Likidite Bazlı', s.tierBreakdown) +
+          renderBreakdownBox('🧭 BTC Rejimi Bazlı', s.regimeBreakdown);
+      }
+      renderReplayTables();
+    }
+    function stopReplayPolling() {
+      if (replayPollTimer) { clearTimeout(replayPollTimer); replayPollTimer = null; }
+      var btn = document.getElementById('btnRunReplay');
+      var cBtn = document.getElementById('btnCancelReplay');
+      if (btn) btn.disabled = false;
+      if (cBtn) cBtn.style.display = 'none';
+    }
+    async function cancelReplay() {
+      if (!replayActiveJobId) return;
+      try { await fetch('/api/replay-cancel?jobId=' + encodeURIComponent(replayActiveJobId)); } catch (e) {}
+      replayActiveJobId = null;
+      stopReplayPolling();
+      var line = document.getElementById('replayStatusLine');
+      var pWrap = document.getElementById('replayProgressWrap');
+      if (line) line.textContent = '⏹️ Tarama kullanıcı tarafından durduruldu.';
+      if (pWrap) pWrap.style.display = 'none';
+    }
+    async function pollReplayJob(jobId) {
+      if (replayActiveJobId !== jobId) return;
+      try {
+        var res = await fetch('/api/replay-progress?jobId=' + encodeURIComponent(jobId));
+        var data = await res.json();
+        if (replayActiveJobId !== jobId) return;
+        var line = document.getElementById('replayStatusLine');
+        var pWrap = document.getElementById('replayProgressWrap');
+        var pBar = document.getElementById('replayProgressBar');
+        if (!data || !data.ok) {
+          stopReplayPolling();
+          replayActiveJobId = null;
+          if (line) line.textContent = '❌ Replay alınamadı: ' + ((data && data.error) || 'hata');
+          if (pWrap) pWrap.style.display = 'none';
+          return;
+        }
+        var pct = data.totalCoins > 0 ? Math.min(99, Math.round((data.doneCoins / data.totalCoins) * 100)) : 4;
+        if (pWrap) pWrap.style.display = 'block';
+        if (pBar) pBar.style.width = (data.status === 'done' ? 100 : pct) + '%';
+        if (data.status === 'running') {
+          if (line) line.textContent = data.statusText || ('⏳ Taranıyor... ' + data.doneCoins + '/' + data.totalCoins);
+          replayPollTimer = setTimeout(function () { pollReplayJob(jobId); }, 1200);
+          return;
+        }
+        stopReplayPolling();
+        if (data.status === 'done') {
+          renderReplayCompleted(data);
+        } else {
+          if (pWrap) pWrap.style.display = 'none';
+          if (line) line.textContent = data.statusText || ('❌ ' + (data.error || 'Tarama tamamlanamadı.'));
+        }
+      } catch (e) {
+        if (replayActiveJobId === jobId) {
+          replayPollTimer = setTimeout(function () { pollReplayJob(jobId); }, 2000);
+        }
+      }
+    }
+    async function loadReplay(forceRefresh) {
+      if (replayActiveJobId) {
+        try { await fetch('/api/replay-cancel?jobId=' + encodeURIComponent(replayActiveJobId)); } catch (e) {}
+      }
+      if (replayPollTimer) { clearTimeout(replayPollTimer); replayPollTimer = null; }
+      var line = document.getElementById('replayStatusLine');
+      var pWrap = document.getElementById('replayProgressWrap');
+      var pBar = document.getElementById('replayProgressBar');
+      var tbody = document.getElementById('tbodyReplayTrades');
+      var btn = document.getElementById('btnRunReplay');
+      var cBtn = document.getElementById('btnCancelReplay');
+      var hours = document.getElementById('selReplayHours') ? Number(document.getElementById('selReplayHours').value) : 48;
+      var scope = document.getElementById('selReplayScope') ? document.getElementById('selReplayScope').value : 'all';
+      var mode = document.getElementById('selReplayMode') ? document.getElementById('selReplayMode').value : 'market';
+
+      if (btn) btn.disabled = true;
+      if (cBtn) cBtn.style.display = '';
+      if (pWrap) pWrap.style.display = 'block';
+      if (pBar) pBar.style.width = '3%';
+      if (line) line.textContent = '⏳ Tarama başlatılıyor (' + (scope === 'all' ? 'Tüm Binance ~400 Koin' : 'Likit ~100 Koin') + ' · Son ' + hours + ' Saat)...';
+      if (tbody) tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;color:var(--muted);padding:18px;">⏳ Binance Futures grafikleri arka planda taranıyor (zaman aşımı yok)...</td></tr>';
+
+      try {
+        var url = '/api/replay-start?hours=' + encodeURIComponent(hours) + '&scope=' + encodeURIComponent(scope) + '&mode=' + encodeURIComponent(mode) + (forceRefresh ? '&force=1' : '');
+        var res = await fetch(url);
+        var started = await res.json();
+        if (!started || !started.ok || !started.jobId) {
+          stopReplayPolling();
+          if (pWrap) pWrap.style.display = 'none';
+          if (line) line.textContent = '❌ Başlatılamadı: ' + ((started && started.error) || 'hata');
+          return;
+        }
+        replayActiveJobId = started.jobId;
+        pollReplayJob(started.jobId);
+      } catch (e) {
+        stopReplayPolling();
+        if (pWrap) pWrap.style.display = 'none';
+        if (line) line.textContent = '❌ Sunucuya bağlanılamadı.';
+      }
+    }
+    function exportReplayExcel(type) {
+      var kind = type === 'coins' ? 'coins' : 'trades';
+      if (!replayCache || !replayCache.jobId) {
+        loadReplay(false);
+        return;
+      }
+      window.location.href = '/api/replay-csv?jobId=' + encodeURIComponent(replayCache.jobId) + '&type=' + kind;
     }
     const LS_HIST = "moon_cloud_history";
     const LS_BAL = "moon_cloud_balance";
@@ -5016,11 +5888,107 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (pathname === '/api/replay-start') {
+    try {
+      const hours = Number(parsedUrl.searchParams.get('hours')) || 48;
+      const scope = parsedUrl.searchParams.get('scope') || 'all';
+      const mode = parsedUrl.searchParams.get('mode') || 'market';
+      const force = parsedUrl.searchParams.get('force') === '1';
+      const job = startReplayJob(hours, scope, mode, force);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        ok: true,
+        jobId: job.jobId,
+        status: job.status,
+        hours: job.hours,
+        scope: job.scope,
+        mode: job.mode
+      }));
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, error: err.message }));
+    }
+    return;
+  }
+
+  if (pathname === '/api/replay-progress') {
+    const jobId = parsedUrl.searchParams.get('jobId') || '';
+    const job = replayJobs.get(jobId);
+    if (!job) {
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, error: 'Tarama işi bulunamadı (sunucu yeniden başlamış olabilir).' }));
+      return;
+    }
+    const elapsedSec = Math.max(0, Math.round(((job.finishedAt || Date.now()) - job.startedAt) / 1000));
+    const payload = {
+      ok: true,
+      jobId: job.jobId,
+      status: job.status,
+      hours: job.hours,
+      scope: job.scope,
+      mode: job.mode,
+      doneCoins: job.doneCoins,
+      totalCoins: job.totalCoins,
+      loadedCoins: job.loadedCoins,
+      eventsFound: job.eventsFound,
+      elapsedSec,
+      etaSec: job.etaSec,
+      statusText: job.statusText,
+      error: job.error
+    };
+    if (job.status === 'done' && job.result) {
+      payload.generatedAt = job.result.generatedAt;
+      payload.summary = job.result.summary;
+      payload.coinSummary = job.result.coinSummary || [];
+      payload.totalTradesCount = (job.result.trades || []).length;
+      payload.tradesPreview = (job.result.trades || []).slice(0, 600);
+    }
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(payload));
+    return;
+  }
+
+  if (pathname === '/api/replay-cancel') {
+    const jobId = parsedUrl.searchParams.get('jobId') || '';
+    const job = replayJobs.get(jobId);
+    if (job && job.status === 'running') {
+      job.cancelled = true;
+      job.statusText = '⏹️ İptal ediliyor...';
+    }
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: true }));
+    return;
+  }
+
+  if (pathname === '/api/replay-csv') {
+    const jobId = parsedUrl.searchParams.get('jobId') || '';
+    const type = parsedUrl.searchParams.get('type') === 'coins' ? 'coins' : 'trades';
+    const job = replayJobs.get(jobId);
+    if (!job || job.status !== 'done' || !job.result) {
+      res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+      res.end('Önce taramayı tamamlayın.');
+      return;
+    }
+    const s = job.result.summary || {};
+    const fname = type === 'coins'
+      ? `marscoin_tum_koinler_${s.scope || 'all'}_${s.mode || 'market'}_${s.hours || 48}s.csv`
+      : `marscoin_tum_islemler_${s.scope || 'all'}_${s.mode || 'market'}_${s.hours || 48}s.csv`;
+    const csv = type === 'coins' ? buildReplayCoinsCsv(job.result) : buildReplayTradesCsv(job.result);
+    res.writeHead(200, {
+      'Content-Type': 'text/csv; charset=utf-8',
+      'Content-Disposition': `attachment; filename="${fname}"`
+    });
+    res.end(csv);
+    return;
+  }
+
   if (pathname === '/api/replay-backtest') {
     try {
       const hours = Number(parsedUrl.searchParams.get('hours')) || 72;
       const coins = Number(parsedUrl.searchParams.get('coins')) || (hours > 240 ? 65 : 120);
-      const result = await runHistoricalReplay(hours, coins);
+      const scope = parsedUrl.searchParams.get('scope') || (coins >= 200 ? 'all' : 'liquid');
+      const mode = parsedUrl.searchParams.get('mode') || 'portfolio';
+      const result = await runHistoricalReplay(hours, coins, { scope, mode });
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(result));
     } catch (err) {
