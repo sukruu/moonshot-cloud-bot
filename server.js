@@ -1657,6 +1657,7 @@ function evaluateBbSnapback15m(k, idx, btcReg, btc15m = 0) {
   let sumV = 0;
   for (let m = idx - 20; m < idx; m++) sumV += parseFloat(k[m][5]) || 0;
   const volMult = sumV > 0 ? (parseFloat(k[idx][5]) || 0) / (sumV / 20) : 1;
+  if (volMult < 1.00) return null; // Ortalamanın altındaki (<1.0x) hacimsiz cılız kırmızı mumları ele (48s + 30g + 62.5g PF 1.68, DD %34.5!)
   const open1h = parseFloat(k[idx - 4][1]) || o;
   const open3h = parseFloat(k[idx - 12][1]) || o;
   const slPct = Number(Math.max(1.00, Math.min(2.80, atr15 * 1.50)).toFixed(2));
@@ -1700,6 +1701,7 @@ function evaluateHiddenDistrib15m(k, idx, btc15m = 0) {
   let sumV = 0;
   for (let m = idx - 20; m < idx; m++) sumV += parseFloat(k[m][5]) || 0;
   const volMult = sumV > 0 ? (parseFloat(k[idx][5]) || 0) / (sumV / 20) : 1;
+  if (volMult < 1.00) return null; // Ortalamanın altındaki (<1.0x) hacimsiz cılız kırmızı mumları ele (48s + 30g + 62.5g PF 1.68, DD %34.5!)
   if (volMult < 1.60) return null;
 
   let trSum = 0;
@@ -2181,6 +2183,7 @@ function analyzeCoinForReplay(sym, k, meta, btcRegime, cutoffTs, mode) {
           else if (move <= -1.20) skipReason = 'MUM_COK_DUSTU';
           else if (atr15 > 2.00) skipReason = 'ATR_YUKSEK(>2)';
           else if (chg4h >= 9.0) skipReason = '4S_PARABOLIK';
+          else if (volMultFast < 1.00) skipReason = 'HACIM_<1.0x';
           else if (takerFast > 47) skipReason = 'SATICI_ZAYIF';
           else skipReason = 'BBZ_VEYA_EMA';
         }
