@@ -408,8 +408,10 @@ function getSettingsPayload() {
   };
 }
 
-// 📱 WHATSAPP BİLDİRİM MOTORU (CallMeBot — Render Env + Yerel Kayıt Destekli)
+// 🔔 MOBİL BİLDİRİM MOTORU (ntfy Push + CallMeBot WhatsApp — Render Env + Yerel Kayıt Destekli)
 let whatsappCfg = {
+  ntfyTopic: '',
+  ntfyServer: 'https://ntfy.sh',
   phone: '',
   apiKey: '',
   enabled: true,
@@ -422,6 +424,17 @@ let whatsappStats = {
   lastStatus: ''
 };
 let whatsappQueue = Promise.resolve();
+
+function normalizeNtfyTopic(raw) {
+  return String(raw || '').trim().replace(/^https?:\/\/[^/]+\//i, '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64);
+}
+
+function maskNtfyTopic(t) {
+  const s = String(t || '');
+  if (!s) return '';
+  if (s.length <= 6) return s.slice(0, 2) + '***';
+  return s.slice(0, 4) + '***' + s.slice(-2);
+}
 
 function normalizeWhatsAppPhone(raw) {
   let d = String(raw || '').replace(/[^\d]/g, '');
@@ -443,6 +456,8 @@ function loadWhatsAppConfig() {
     if (fs.existsSync(NOTIFY_FILE)) {
       const saved = JSON.parse(fs.readFileSync(NOTIFY_FILE, 'utf8'));
       if (saved && typeof saved === 'object') {
+        if (saved.ntfyTopic) whatsappCfg.ntfyTopic = normalizeNtfyTopic(saved.ntfyTopic);
+        if (saved.ntfyServer) whatsappCfg.ntfyServer = String(saved.ntfyServer).trim() || 'https://ntfy.sh';
         if (saved.phone) whatsappCfg.phone = normalizeWhatsAppPhone(saved.phone);
         if (saved.apiKey) whatsappCfg.apiKey = String(saved.apiKey).trim();
         if (typeof saved.enabled === 'boolean') whatsappCfg.enabled = saved.enabled;
@@ -453,22 +468,27 @@ function loadWhatsAppConfig() {
   } catch (e) {}
 
   // Render Environment Variables varsa her zaman en yüksek önceliğe sahiptir (deploy sonrası silinmez!)
+  const envTopic = normalizeNtfyTopic(process.env.NTFY_TOPIC || '');
+  const envNtfySrv = String(process.env.NTFY_SERVER || '').trim();
   const envPhone = normalizeWhatsAppPhone(process.env.WHATSAPP_PHONE || '');
   const envKey = String(process.env.WHATSAPP_APIKEY || '').trim();
+  if (envTopic) whatsappCfg.ntfyTopic = envTopic;
+  if (envNtfySrv) whatsappCfg.ntfyServer = envNtfySrv;
   if (envPhone) whatsappCfg.phone = envPhone;
   if (envKey) whatsappCfg.apiKey = envKey;
-  if (process.env.WHATSAPP_ENABLED !== undefined) {
-    whatsappCfg.enabled = !/^(0|false|no|off)$/i.test(String(process.env.WHATSAPP_ENABLED).trim());
-  }
-  if (process.env.WHATSAPP_ON_CLOSE !== undefined) {
-    whatsappCfg.onClose = !/^(0|false|no|off)$/i.test(String(process.env.WHATSAPP_ON_CLOSE).trim());
-  }
-  if (process.env.WHATSAPP_ON_OPEN !== undefined) {
-    whatsappCfg.onOpen = /^(1|true|yes|on)$/i.test(String(process.env.WHATSAPP_ON_OPEN).trim());
-  }
+  const envEn = process.env.NTFY_ENABLED !== undefined ? process.env.NTFY_ENABLED : process.env.WHATSAPP_ENABLED;
+  const envClose = process.env.NTFY_ON_CLOSE !== undefined ? process.env.NTFY_ON_CLOSE : process.env.WHATSAPP_ON_CLOSE;
+  const envOpen = process.env.NTFY_ON_OPEN !== undefined ? process.env.NTFY_ON_OPEN : process.env.WHATSAPP_ON_OPEN;
+  if (envEn !== undefined) whatsappCfg.enabled = !/^(0|false|no|off)$/i.test(String(envEn).trim());
+  if (envClose !== undefined) whatsappCfg.onClose = !/^(0|false|no|off)$/i.test(String(envClose).trim());
+  if (envOpen !== undefined) whatsappCfg.onOpen = /^(1|true|yes|on)$/i.test(String(envOpen).trim());
 }
 
 function saveWhatsAppConfig(patch = {}) {
+  if (patch.ntfyTopic !== undefined) {
+    const cleanedTopic = normalizeNtfyTopic(patch.ntfyTopic);
+    if (cleanedTopic || patch.clearCredentials) whatsappCfg.ntfyTopic = cleanedTopic;
+  }
   if (patch.phone !== undefined) {
     const cleaned = normalizeWhatsAppPhone(patch.phone);
     if (cleaned || patch.clearCredentials) whatsappCfg.phone = cleaned;
@@ -482,6 +502,8 @@ function saveWhatsAppConfig(patch = {}) {
   if (typeof patch.onOpen === 'boolean') whatsappCfg.onOpen = patch.onOpen;
   try {
     fs.writeFileSync(NOTIFY_FILE, JSON.stringify({
+      ntfyTopic: whatsappCfg.ntfyTopic,
+      ntfyServer: whatsappCfg.ntfyServer,
       phone: whatsappCfg.phone,
       apiKey: whatsappCfg.apiKey,
       enabled: whatsappCfg.enabled,
@@ -493,14 +515,22 @@ function saveWhatsAppConfig(patch = {}) {
 }
 
 function getWhatsAppPublicState() {
-  const fromEnv = Boolean(normalizeWhatsAppPhone(process.env.WHATSAPP_PHONE || '') && String(process.env.WHATSAPP_APIKEY || '').trim());
+  const ntfyFromEnv = Boolean(normalizeNtfyTopic(process.env.NTFY_TOPIC || ''));
+  const waFromEnv = Boolean(normalizeWhatsAppPhone(process.env.WHATSAPP_PHONE || '') && String(process.env.WHATSAPP_APIKEY || '').trim());
+  const ntfyConfigured = Boolean(whatsappCfg.ntfyTopic);
+  const waConfigured = Boolean(whatsappCfg.phone && whatsappCfg.apiKey);
   return {
-    configured: Boolean(whatsappCfg.phone && whatsappCfg.apiKey),
+    configured: ntfyConfigured || waConfigured,
+    ntfyConfigured,
+    waConfigured,
     enabled: Boolean(whatsappCfg.enabled),
     onClose: Boolean(whatsappCfg.onClose),
     onOpen: Boolean(whatsappCfg.onOpen),
+    ntfyTopicMasked: maskNtfyTopic(whatsappCfg.ntfyTopic),
     phoneMasked: maskWhatsAppPhone(whatsappCfg.phone),
-    fromEnv,
+    fromEnv: ntfyFromEnv || waFromEnv,
+    ntfyFromEnv,
+    waFromEnv,
     sentCount: whatsappStats.sentCount,
     lastSentAt: whatsappStats.lastSentAt,
     lastStatus: whatsappStats.lastStatus
@@ -523,6 +553,50 @@ function formatWaEngine(radarTag, strategy) {
   return '🐋 15dk Balina';
 }
 
+async function sendNtfyNotification(payload, overrideTopic = null) {
+  const topic = normalizeNtfyTopic(overrideTopic || whatsappCfg.ntfyTopic);
+  if (!topic) return { ok: false, error: 'ntfy gizli kanal adı tanımlı değil.' };
+  const baseUrl = String(whatsappCfg.ntfyServer || 'https://ntfy.sh').replace(/\/+$/, '') + '/';
+  const clickUrl = process.env.RENDER_EXTERNAL_URL || 'https://moonshot-cloud-bot.onrender.com';
+  const bodyObj = {
+    topic,
+    title: String(payload.title || 'MARSCOIN BOT'),
+    message: String(payload.message || ''),
+    priority: Number(payload.priority) || 4,
+    tags: Array.isArray(payload.tags) ? payload.tags : ['bell'],
+    click: payload.click || clickUrl
+  };
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 10000);
+  try {
+    const res = await fetch(baseUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json; charset=utf-8' },
+      body: JSON.stringify(bodyObj),
+      signal: controller.signal
+    });
+    if (res.ok) {
+      whatsappStats.sentCount++;
+      whatsappStats.lastSentAt = trTime();
+      whatsappStats.lastStatus = '✅ ntfy Gönderildi';
+      addLog(`🔔 ntfy mobil bildirim gönderildi (${maskNtfyTopic(topic)})`, 'INFO');
+      return { ok: true, detail: 'ntfy bildirimi telefonuna anında gönderildi!' };
+    }
+    const errText = (await res.text()).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120);
+    const errMsg = errText || `HTTP ${res.status}`;
+    whatsappStats.lastStatus = `❌ ntfy: ${errMsg.slice(0, 45)}`;
+    addLog(`⚠️ ntfy bildirimi başarısız: ${errMsg}`, 'WARN');
+    return { ok: false, error: errMsg };
+  } catch (err) {
+    const msg = err && err.name === 'AbortError' ? 'ntfy zaman aşımı (10 sn)' : (err ? err.message : 'Bağlantı hatası');
+    whatsappStats.lastStatus = `❌ ntfy: ${msg.slice(0, 45)}`;
+    addLog(`⚠️ ntfy bağlantı hatası: ${msg}`, 'WARN');
+    return { ok: false, error: msg };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 function sendWhatsAppMessage(text, overrideCfg = null) {
   const phone = normalizeWhatsAppPhone((overrideCfg && overrideCfg.phone) || whatsappCfg.phone);
   const apiKey = String((overrideCfg && overrideCfg.apiKey) || whatsappCfg.apiKey || '').trim();
@@ -542,17 +616,17 @@ function sendWhatsAppMessage(text, overrideCfg = null) {
       if (isQueued) {
         whatsappStats.sentCount++;
         whatsappStats.lastSentAt = trTime();
-        whatsappStats.lastStatus = '✅ Gönderildi';
+        whatsappStats.lastStatus = '✅ WA Gönderildi';
         addLog(`📱 WhatsApp bildirimi gönderildi (${maskWhatsAppPhone(phone)})`, 'INFO');
         return { ok: true, detail: 'Mesaj WhatsApp kuyruğuna alındı!' };
       }
       const errMsg = bodyClean ? bodyClean.slice(0, 140) : `HTTP ${res.status}`;
-      whatsappStats.lastStatus = `❌ ${errMsg.slice(0, 50)}`;
+      whatsappStats.lastStatus = `❌ WA: ${errMsg.slice(0, 45)}`;
       addLog(`⚠️ WhatsApp bildirimi başarısız: ${errMsg}`, 'WARN');
       return { ok: false, error: errMsg };
     } catch (err) {
       const msg = err && err.name === 'AbortError' ? 'CallMeBot zaman aşımı (12 sn)' : (err ? err.message : 'Bağlantı hatası');
-      whatsappStats.lastStatus = `❌ ${msg.slice(0, 50)}`;
+      whatsappStats.lastStatus = `❌ WA: ${msg.slice(0, 45)}`;
       addLog(`⚠️ WhatsApp bağlantı hatası: ${msg}`, 'WARN');
       return { ok: false, error: msg };
     } finally {
@@ -567,44 +641,83 @@ function sendWhatsAppMessage(text, overrideCfg = null) {
 }
 
 function notifyTradeClosed(trade) {
-  if (!trade || !whatsappCfg.enabled || !whatsappCfg.onClose || !whatsappCfg.phone || !whatsappCfg.apiKey) return;
+  if (!trade || !whatsappCfg.enabled || !whatsappCfg.onClose) return;
+  const hasNtfy = Boolean(whatsappCfg.ntfyTopic);
+  const hasWa = Boolean(whatsappCfg.phone && whatsappCfg.apiKey);
+  if (!hasNtfy && !hasWa) return;
+
   const pnl = Number(trade.pnl) || 0;
   const roi = Number(trade.roi) || 0;
-  const hdr = pnl > 0.05
+  const isWin = pnl > 0.05;
+  const isLoss = pnl < -0.05;
+  const hdr = isWin
     ? '✅ İŞLEM SONUÇLANDI (KÂR)'
-    : (pnl < -0.05 ? '❌ İŞLEM SONUÇLANDI (ZARAR)' : '🛡️ İŞLEM SONUÇLANDI (BAŞABAŞ)');
+    : (isLoss ? '❌ İŞLEM SONUÇLANDI (ZARAR)' : '🛡️ İŞLEM SONUÇLANDI (BAŞABAŞ)');
   const pnlStr = `${pnl >= 0 ? '+$' : '-$'}${Math.abs(pnl).toFixed(2)}`;
   const roiStr = `${roi >= 0 ? '+' : ''}%${roi.toFixed(1)}`;
   const sideIcon = trade.side === 'LONG' ? '🟢 LONG' : '🔴 SHORT';
   const engineLbl = formatWaEngine(trade.radarTag, trade.strategy);
   const st = getStats();
   const reasonShort = String(trade.exitReason || '-').replace(/\s+/g, ' ').trim().slice(0, 75);
-  const msg = [
-    hdr,
-    `🪙 ${trade.symbol} · ${sideIcon} (${trade.leverage || CONFIG.leverage}x)`,
-    `⚙️ Motor: ${engineLbl}`,
-    `💵 Sonuç: ${pnlStr} (${roiStr} ROI)`,
+  const bodyLines = [
+    `⚙️ Motor: ${engineLbl} (${trade.leverage || CONFIG.leverage}x)`,
     `📍 Fiyat: $${formatWaPrice(trade.entryPrice)} ➔ $${formatWaPrice(trade.exitPrice)}`,
     `📈 Zirve (MFE): +%${Number(trade.mfe || 0).toFixed(2)} · Süre: ${trade.durationMin || 0} dk`,
     `🏁 Neden: ${reasonShort}`,
     `💰 Güncel Kasa: $${st.balance} (${st.totalTrades} işlem · %${st.winRate} WR)`
-  ].join('\n');
-  sendWhatsAppMessage(msg).catch(() => {});
+  ];
+
+  if (hasNtfy) {
+    const titlePrefix = isWin ? '✅' : (isLoss ? '❌' : '🛡️');
+    sendNtfyNotification({
+      title: `${titlePrefix} ${trade.symbol} ${trade.side} ${pnlStr} (${roiStr})`,
+      message: bodyLines.join('\n'),
+      priority: 4,
+      tags: isWin ? ['white_check_mark', 'moneybag'] : (isLoss ? ['x', 'chart_with_downwards_trend'] : ['shield'])
+    }).catch(() => {});
+  }
+  if (hasWa) {
+    const msg = [
+      hdr,
+      `🪙 ${trade.symbol} · ${sideIcon} (${trade.leverage || CONFIG.leverage}x)`,
+      `💵 Sonuç: ${pnlStr} (${roiStr} ROI)`,
+      ...bodyLines
+    ].join('\n');
+    sendWhatsAppMessage(msg).catch(() => {});
+  }
 }
 
 function notifyTradeOpened(pos) {
-  if (!pos || !whatsappCfg.enabled || !whatsappCfg.onOpen || !whatsappCfg.phone || !whatsappCfg.apiKey) return;
+  if (!pos || !whatsappCfg.enabled || !whatsappCfg.onOpen) return;
+  const hasNtfy = Boolean(whatsappCfg.ntfyTopic);
+  const hasWa = Boolean(whatsappCfg.phone && whatsappCfg.apiKey);
+  if (!hasNtfy && !hasWa) return;
+
   const sideIcon = pos.side === 'LONG' ? '🟢 LONG' : '🔴 SHORT';
   const engineLbl = formatWaEngine(pos.radarTag, pos.strategy);
-  const msg = [
-    '🚀 YENİ İŞLEM AÇILDI',
-    `🪙 ${pos.symbol} · ${sideIcon} (${pos.leverage || CONFIG.leverage}x)`,
+  const bodyLines = [
     `⚙️ Motor: ${engineLbl}`,
     `📍 Giriş: $${formatWaPrice(pos.entryPrice)} · Teminat: $${Number(pos.margin || 0).toFixed(2)}`,
     `🛑 Stop: -%${Number(pos.slPct || CONFIG.slPct).toFixed(2)} · 🎯 Hedef: +%${Number(pos.moonPct || CONFIG.moonPct).toFixed(2)}`,
     `💰 Kasa: $${balance.toFixed(2)} (${activePositions.length}/${CONFIG.maxSlots} Slot)`
-  ].join('\n');
-  sendWhatsAppMessage(msg).catch(() => {});
+  ];
+
+  if (hasNtfy) {
+    sendNtfyNotification({
+      title: `🚀 AÇILDI: ${pos.symbol} ${pos.side} (${pos.leverage || CONFIG.leverage}x)`,
+      message: bodyLines.join('\n'),
+      priority: 3,
+      tags: ['rocket']
+    }).catch(() => {});
+  }
+  if (hasWa) {
+    const msg = [
+      '🚀 YENİ İŞLEM AÇILDI',
+      `🪙 ${pos.symbol} · ${sideIcon} (${pos.leverage || CONFIG.leverage}x)`,
+      ...bodyLines
+    ].join('\n');
+    sendWhatsAppMessage(msg).catch(() => {});
+  }
 }
 
 // Depolamayı Başlat & Bakiye Eşitle ($100)
@@ -4910,13 +5023,13 @@ function serveDashboardHtml() {
 
         <details id="waDetails" style="margin-top:8px; background:var(--panel2); border:1px solid var(--border); border-radius:8px; padding:7px 9px;">
           <summary style="cursor:pointer; display:flex; justify-content:space-between; align-items:center; list-style:none; font-size:10.5px; font-weight:800; color:var(--text);">
-            <span>📱 WHATSAPP BİLDİRİM</span>
+            <span>🔔 MOBİL BİLDİRİM (ntfy)</span>
             <span id="waStatusPill" class="status-pill ${getWhatsAppPublicState().configured && getWhatsAppPublicState().enabled ? 'green' : ''}" style="font-size:8.5px;padding:1.5px 6px;">${getWhatsAppPublicState().configured ? (getWhatsAppPublicState().enabled ? (getWhatsAppPublicState().fromEnv ? 'AKTİF (ENV)' : 'AKTİF') : 'KAPALI') : 'KURULMADI'}</span>
           </summary>
           <div style="margin-top:8px; display:flex; flex-direction:column; gap:6px;">
-            <div style="display:grid; grid-template-columns:1fr 1fr; gap:5px;">
-              <input type="text" id="inpWaPhone" placeholder="Tel: 905xxxxxxxxx" style="width:100%; box-sizing:border-box; background:var(--panel); color:var(--text); border:1px solid var(--border); border-radius:6px; padding:5px 7px; font-size:11px; font-weight:700;">
-              <input type="password" id="inpWaKey" placeholder="CallMeBot API Key" style="width:100%; box-sizing:border-box; background:var(--panel); color:var(--text); border:1px solid var(--border); border-radius:6px; padding:5px 7px; font-size:11px; font-weight:700;">
+            <div style="display:flex; gap:5px; align-items:center;">
+              <input type="text" id="inpNtfyTopic" placeholder="ntfy gizli kanal (ör. sukru-mars-8429)" style="flex:1; min-width:0; box-sizing:border-box; background:var(--panel); color:var(--text); border:1px solid var(--border); border-radius:6px; padding:5px 7px; font-size:11px; font-weight:700;">
+              <button type="button" onclick="generateNtfyTopic()" title="Rastgele gizli kanal üret" class="btn-action btn-secondary" style="min-height:28px; padding:4px 8px; font-size:10.5px; white-space:nowrap;">🎲 Üret</button>
             </div>
             <div style="display:flex; gap:10px; flex-wrap:wrap; font-size:10.5px; color:var(--text); font-weight:600;">
               <label style="display:flex; align-items:center; gap:4px; cursor:pointer;"><input type="checkbox" id="chkWaOnClose" ${getWhatsAppPublicState().onClose ? 'checked' : ''}> 🏁 Sonuçlanınca</label>
@@ -4928,11 +5041,18 @@ function serveDashboardHtml() {
             </div>
             <div id="waFeedback" style="font-size:10px; color:var(--muted); line-height:1.35;"></div>
             <div style="font-size:9.5px; color:var(--muted); line-height:1.38; border-top:1px dashed var(--border); padding-top:5px;">
-              <b>1 dk Kurulum (CallMeBot):</b><br>
-              1) Rehbere <b>+34 644 45 70 57</b> ekle, WhatsApp'tan <code>I allow callmebot to send me messages</code> yaz.<br>
-              2) Gelen <b>API Key</b>'i buraya girip Test Gönder'e bas.<br>
-              3) 7/24 kalıcı olması için Render <b>Environment</b> kısmına <code>WHATSAPP_PHONE</code> ve <code>WHATSAPP_APIKEY</code> ekle.
+              <b>15 sn Kurulum (Ücretsiz · Hesap Gerekmez):</b><br>
+              1) Telefona <b>ntfy</b> uygulamasını indir (iOS / Android).<br>
+              2) <b>🎲 Üret</b>'e bas (veya gizli bir kanal adı yaz), aynı adı <b>ntfy</b> uygulamasında <b>+</b> ile ekle.<br>
+              3) <b>🧪 Test Gönder</b>'e bas! 7/24 kalıcı olması için Render <b>Environment</b>'a <code>NTFY_TOPIC</code> ekle.
             </div>
+            <details style="border-top:1px dashed var(--border); padding-top:5px;">
+              <summary style="cursor:pointer; font-size:9.5px; color:var(--muted); font-weight:700;">📱 Opsiyonel: WhatsApp (CallMeBot) Yedeği</summary>
+              <div style="display:grid; grid-template-columns:1fr 1fr; gap:5px; margin-top:5px;">
+                <input type="text" id="inpWaPhone" placeholder="Tel: 905xxxxxxxxx" style="width:100%; box-sizing:border-box; background:var(--panel); color:var(--text); border:1px solid var(--border); border-radius:6px; padding:5px 7px; font-size:10.5px; font-weight:700;">
+                <input type="password" id="inpWaKey" placeholder="CallMeBot API Key" style="width:100%; box-sizing:border-box; background:var(--panel); color:var(--text); border:1px solid var(--border); border-radius:6px; padding:5px 7px; font-size:10.5px; font-weight:700;">
+              </div>
+            </details>
           </div>
         </details>
 
@@ -5842,9 +5962,23 @@ function serveDashboardHtml() {
       window.location.replace(window.location.origin + window.location.pathname + '?reset=' + Date.now());
     }
 
-    // 📱 WHATSAPP BİLDİRİM (CALLMEBOT) ARAYÜZ & SENKRON
+    // 🔔 MOBİL BİLDİRİM (ntfy + CallMeBot) ARAYÜZ & SENKRON
     const LS_WA = 'moon_wa_cfg';
     let waAutoSynced = false;
+    function generateNtfyTopic() {
+      const chars = 'abcdefghjkmnpqrstuvwxyz23456789';
+      let rnd = '';
+      for (let i = 0; i < 8; i++) rnd += chars[Math.floor(Math.random() * chars.length)];
+      const topic = 'marscoin-' + rnd;
+      const inp = document.getElementById('inpNtfyTopic');
+      if (inp) { inp.value = topic; inp.focus(); inp.select(); }
+      const fb = document.getElementById('waFeedback');
+      if (fb) {
+        fb.dataset.sticky = '1';
+        fb.style.color = '#38bdf8';
+        fb.innerText = '🎲 Yeni gizli kanal: ' + topic + ' — Bunu ntfy uygulamasında + ile ekle, sonra Test Gönder!';
+      }
+    }
     function syncWhatsAppUi(wa) {
       if (!wa) return;
       const pill = document.getElementById('waStatusPill');
@@ -5864,6 +5998,10 @@ function serveDashboardHtml() {
       const cOpen = document.getElementById('chkWaOnOpen');
       if (cClose && document.activeElement !== cClose) cClose.checked = !!wa.onClose;
       if (cOpen && document.activeElement !== cOpen) cOpen.checked = !!wa.onOpen;
+      const inpT = document.getElementById('inpNtfyTopic');
+      if (inpT && !inpT.value && wa.ntfyTopicMasked && document.activeElement !== inpT) {
+        inpT.placeholder = 'Kayıtlı kanal: ' + wa.ntfyTopicMasked;
+      }
       const inpP = document.getElementById('inpWaPhone');
       if (inpP && !inpP.value && wa.phoneMasked && document.activeElement !== inpP) {
         inpP.placeholder = 'Kayıtlı: ' + wa.phoneMasked;
@@ -5871,7 +6009,8 @@ function serveDashboardHtml() {
       const fb = document.getElementById('waFeedback');
       if (fb && !fb.dataset.sticky && wa.configured) {
         fb.style.color = 'var(--muted)';
-        fb.innerText = (wa.phoneMasked ? ('Numara: ' + wa.phoneMasked) : '') + (wa.lastSentAt ? (' · Son: ' + wa.lastSentAt + ' (' + wa.lastStatus + ')') : (wa.sentCount ? (' · Gönderilen: ' + wa.sentCount) : ' · Hazır'));
+        const ch = [wa.ntfyTopicMasked ? ('ntfy: ' + wa.ntfyTopicMasked) : '', wa.phoneMasked ? ('WA: ' + wa.phoneMasked) : ''].filter(Boolean).join(' · ');
+        fb.innerText = ch + (wa.lastSentAt ? (' · Son: ' + wa.lastSentAt + ' (' + wa.lastStatus + ')') : (wa.sentCount ? (' · Gönderilen: ' + wa.sentCount) : ' · Hazır'));
       }
       // Sunucu yeniden başladıysa ve Render Env tanımlı değilse tarayıcı kaydını 1 kez geri yükle
       if (!wa.configured && !waAutoSynced) {
@@ -5880,7 +6019,7 @@ function serveDashboardHtml() {
           const raw = localStorage.getItem(LS_WA);
           if (raw) {
             const saved = JSON.parse(raw);
-            if (saved && saved.phone && saved.apiKey) {
+            if (saved && (saved.ntfyTopic || (saved.phone && saved.apiKey))) {
               fetch('/api/whatsapp-config', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -5893,12 +6032,14 @@ function serveDashboardHtml() {
     }
 
     async function saveWhatsAppConfig() {
+      const ntfyTopic = (document.getElementById('inpNtfyTopic')?.value || '').trim();
       const phone = (document.getElementById('inpWaPhone')?.value || '').trim();
       const apiKey = (document.getElementById('inpWaKey')?.value || '').trim();
       const onClose = !!document.getElementById('chkWaOnClose')?.checked;
       const onOpen = !!document.getElementById('chkWaOnOpen')?.checked;
       const fb = document.getElementById('waFeedback');
       const payload = { enabled: (onClose || onOpen), onClose, onOpen };
+      if (ntfyTopic) payload.ntfyTopic = ntfyTopic;
       if (phone) payload.phone = phone;
       if (apiKey) payload.apiKey = apiKey;
       try {
@@ -5912,6 +6053,7 @@ function serveDashboardHtml() {
           try {
             const prev = JSON.parse(localStorage.getItem(LS_WA) || '{}');
             localStorage.setItem(LS_WA, JSON.stringify({
+              ntfyTopic: ntfyTopic || prev.ntfyTopic || '',
               phone: phone || prev.phone || '',
               apiKey: apiKey || prev.apiKey || '',
               enabled: payload.enabled,
@@ -5922,7 +6064,7 @@ function serveDashboardHtml() {
           if (fb) {
             fb.dataset.sticky = '1';
             fb.style.color = 'var(--green)';
-            fb.innerText = '✅ WhatsApp ayarları kaydedildi!';
+            fb.innerText = '✅ Mobil bildirim ayarları kaydedildi!';
             setTimeout(function () { if (fb) delete fb.dataset.sticky; }, 5000);
           }
           if (data.whatsapp) syncWhatsAppUi(data.whatsapp);
@@ -5937,6 +6079,7 @@ function serveDashboardHtml() {
     }
 
     async function testWhatsAppConfig() {
+      const ntfyTopic = (document.getElementById('inpNtfyTopic')?.value || '').trim();
       const phone = (document.getElementById('inpWaPhone')?.value || '').trim();
       const apiKey = (document.getElementById('inpWaKey')?.value || '').trim();
       const onClose = !!document.getElementById('chkWaOnClose')?.checked;
@@ -5944,8 +6087,9 @@ function serveDashboardHtml() {
       const btn = document.getElementById('btnWaTest');
       const fb = document.getElementById('waFeedback');
       if (btn) btn.disabled = true;
-      if (fb) { fb.dataset.sticky = '1'; fb.style.color = 'var(--muted)'; fb.innerText = '⏳ CallMeBot test mesajı gönderiliyor...'; }
+      if (fb) { fb.dataset.sticky = '1'; fb.style.color = 'var(--muted)'; fb.innerText = '⏳ Test bildirimi gönderiliyor...'; }
       const payload = { onClose, onOpen };
+      if (ntfyTopic) payload.ntfyTopic = ntfyTopic;
       if (phone) payload.phone = phone;
       if (apiKey) payload.apiKey = apiKey;
       try {
@@ -5956,10 +6100,11 @@ function serveDashboardHtml() {
         });
         const data = await res.json();
         if (data && data.ok) {
-          if (phone || apiKey) {
+          if (ntfyTopic || phone || apiKey) {
             try {
               const prev = JSON.parse(localStorage.getItem(LS_WA) || '{}');
               localStorage.setItem(LS_WA, JSON.stringify({
+                ntfyTopic: ntfyTopic || prev.ntfyTopic || '',
                 phone: phone || prev.phone || '',
                 apiKey: apiKey || prev.apiKey || '',
                 enabled: true,
@@ -5968,7 +6113,7 @@ function serveDashboardHtml() {
               }));
             } catch (e) {}
           }
-          if (fb) { fb.style.color = 'var(--green)'; fb.innerText = '✅ ' + (data.detail || "Test mesajı WhatsApp'a gönderildi!"); }
+          if (fb) { fb.style.color = 'var(--green)'; fb.innerText = '✅ ' + (data.detail || 'Test bildirimi telefonuna gönderildi!'); }
           if (data.whatsapp) syncWhatsAppUi(data.whatsapp);
         } else if (fb) {
           fb.style.color = 'var(--red)';
@@ -6693,6 +6838,7 @@ const server = http.createServer(async (req, res) => {
         return;
       }
       saveWhatsAppConfig({
+        ntfyTopic: body.ntfyTopic,
         phone: body.phone,
         apiKey: body.apiKey,
         enabled: typeof body.enabled === 'boolean' ? body.enabled : undefined,
@@ -6700,7 +6846,8 @@ const server = http.createServer(async (req, res) => {
         onOpen: typeof body.onOpen === 'boolean' ? body.onOpen : undefined,
         clearCredentials: !!body.clearCredentials
       });
-      addLog(`📱 WhatsApp bildirim ayarları güncellendi (${whatsappCfg.phone ? maskWhatsAppPhone(whatsappCfg.phone) : 'tanımsız'} | Kapanış: ${whatsappCfg.onClose ? 'AÇIK' : 'KAPALI'} | Açılış: ${whatsappCfg.onOpen ? 'AÇIK' : 'KAPALI'})`, 'INFO');
+      const chTag = [whatsappCfg.ntfyTopic ? `ntfy:${maskNtfyTopic(whatsappCfg.ntfyTopic)}` : '', (whatsappCfg.phone && whatsappCfg.apiKey) ? `WA:${maskWhatsAppPhone(whatsappCfg.phone)}` : ''].filter(Boolean).join(' + ') || 'tanımsız';
+      addLog(`🔔 Mobil bildirim ayarları güncellendi (${chTag} | Kapanış: ${whatsappCfg.onClose ? 'AÇIK' : 'KAPALI'} | Açılış: ${whatsappCfg.onOpen ? 'AÇIK' : 'KAPALI'})`, 'INFO');
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ ok: true, whatsapp: getWhatsAppPublicState() }));
     } catch (err) {
@@ -6713,8 +6860,9 @@ const server = http.createServer(async (req, res) => {
   if (pathname === '/api/whatsapp-test' && req.method === 'POST') {
     try {
       const body = await parseJsonBody(req).catch(() => ({}));
-      if (body && (body.phone || body.apiKey || typeof body.onClose === 'boolean' || typeof body.onOpen === 'boolean')) {
+      if (body && (body.ntfyTopic || body.phone || body.apiKey || typeof body.onClose === 'boolean' || typeof body.onOpen === 'boolean')) {
         saveWhatsAppConfig({
+          ntfyTopic: body.ntfyTopic,
           phone: body.phone,
           apiKey: body.apiKey,
           enabled: true,
@@ -6723,15 +6871,42 @@ const server = http.createServer(async (req, res) => {
         });
       }
       const st = getStats();
-      const testMsg = [
-        '🤖 MARSCOIN BOT — WhatsApp Testi Başarılı!',
-        `💰 Güncel Kasa: $${st.balance} (${st.totalTrades} işlem · %${st.winRate} WR)`,
-        `📊 Aktif Pozisyon: ${st.activeCount}/${CONFIG.maxSlots}`,
-        '🔔 İşlem sonuçlandığında özet mesajı anında buraya gelecek.'
-      ].join('\n');
-      const result = await sendWhatsAppMessage(testMsg);
+      const hasNtfy = Boolean(whatsappCfg.ntfyTopic);
+      const hasWa = Boolean(whatsappCfg.phone && whatsappCfg.apiKey);
+      if (!hasNtfy && !hasWa) {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, error: 'Önce ntfy gizli kanal adı (veya CallMeBot bilgisi) girin.', whatsapp: getWhatsAppPublicState() }));
+        return;
+      }
+      const details = [];
+      const errors = [];
+      if (hasNtfy) {
+        const rNtfy = await sendNtfyNotification({
+          title: '🔔 MARSCOIN BOT — Mobil Bildirim Aktif!',
+          message: `💰 Güncel Kasa: $${st.balance} (${st.totalTrades} işlem · %${st.winRate} WR)\n📊 Aktif Pozisyon: ${st.activeCount}/${CONFIG.maxSlots}\n🏁 İşlem sonuçlandığında anında bildirim alacaksın.`,
+          priority: 4,
+          tags: ['bell', 'rocket']
+        });
+        if (rNtfy.ok) details.push(rNtfy.detail); else errors.push('ntfy: ' + rNtfy.error);
+      }
+      if (hasWa) {
+        const testMsg = [
+          '🤖 MARSCOIN BOT — WhatsApp Testi Başarılı!',
+          `💰 Güncel Kasa: $${st.balance} (${st.totalTrades} işlem · %${st.winRate} WR)`,
+          `📊 Aktif Pozisyon: ${st.activeCount}/${CONFIG.maxSlots}`,
+          '🔔 İşlem sonuçlandığında özet mesajı anında buraya gelecek.'
+        ].join('\n');
+        const rWa = await sendWhatsAppMessage(testMsg);
+        if (rWa.ok) details.push(rWa.detail); else errors.push('WA: ' + rWa.error);
+      }
+      const ok = details.length > 0;
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ ...result, whatsapp: getWhatsAppPublicState() }));
+      res.end(JSON.stringify({
+        ok,
+        detail: details.join(' | '),
+        error: errors.join(' | '),
+        whatsapp: getWhatsAppPublicState()
+      }));
     } catch (err) {
       res.writeHead(500, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ ok: false, error: err.message, whatsapp: getWhatsAppPublicState() }));
