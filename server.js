@@ -17,6 +17,7 @@ const HISTORY_FILE = path.join(DATA_DIR, 'trades_history.json');
 const CSV_FILE = path.join(DATA_DIR, 'trades_history.csv');
 const STATE_FILE = path.join(DATA_DIR, 'bot_state.json');
 const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
+const NOTIFY_FILE = path.join(DATA_DIR, 'notify.json');
 
 let evaluatePreTradeClearance = () => ({ approved: true, judicialScore: 85, verdict: 'BERAAT', reason: '' });
 try {
@@ -407,9 +408,209 @@ function getSettingsPayload() {
   };
 }
 
+// 📱 WHATSAPP BİLDİRİM MOTORU (CallMeBot — Render Env + Yerel Kayıt Destekli)
+let whatsappCfg = {
+  phone: '',
+  apiKey: '',
+  enabled: true,
+  onClose: true,
+  onOpen: false
+};
+let whatsappStats = {
+  sentCount: 0,
+  lastSentAt: '',
+  lastStatus: ''
+};
+let whatsappQueue = Promise.resolve();
+
+function normalizeWhatsAppPhone(raw) {
+  let d = String(raw || '').replace(/[^\d]/g, '');
+  if (d.startsWith('00')) d = d.slice(2);
+  if (d.length === 11 && d.startsWith('05')) d = '90' + d.slice(1);
+  else if (d.length === 10 && d.startsWith('5')) d = '90' + d;
+  return d;
+}
+
+function maskWhatsAppPhone(p) {
+  const s = String(p || '');
+  if (!s) return '';
+  if (s.length <= 6) return s.slice(0, 2) + '***';
+  return s.slice(0, 4) + '****' + s.slice(-2);
+}
+
+function loadWhatsAppConfig() {
+  try {
+    if (fs.existsSync(NOTIFY_FILE)) {
+      const saved = JSON.parse(fs.readFileSync(NOTIFY_FILE, 'utf8'));
+      if (saved && typeof saved === 'object') {
+        if (saved.phone) whatsappCfg.phone = normalizeWhatsAppPhone(saved.phone);
+        if (saved.apiKey) whatsappCfg.apiKey = String(saved.apiKey).trim();
+        if (typeof saved.enabled === 'boolean') whatsappCfg.enabled = saved.enabled;
+        if (typeof saved.onClose === 'boolean') whatsappCfg.onClose = saved.onClose;
+        if (typeof saved.onOpen === 'boolean') whatsappCfg.onOpen = saved.onOpen;
+      }
+    }
+  } catch (e) {}
+
+  // Render Environment Variables varsa her zaman en yüksek önceliğe sahiptir (deploy sonrası silinmez!)
+  const envPhone = normalizeWhatsAppPhone(process.env.WHATSAPP_PHONE || '');
+  const envKey = String(process.env.WHATSAPP_APIKEY || '').trim();
+  if (envPhone) whatsappCfg.phone = envPhone;
+  if (envKey) whatsappCfg.apiKey = envKey;
+  if (process.env.WHATSAPP_ENABLED !== undefined) {
+    whatsappCfg.enabled = !/^(0|false|no|off)$/i.test(String(process.env.WHATSAPP_ENABLED).trim());
+  }
+  if (process.env.WHATSAPP_ON_CLOSE !== undefined) {
+    whatsappCfg.onClose = !/^(0|false|no|off)$/i.test(String(process.env.WHATSAPP_ON_CLOSE).trim());
+  }
+  if (process.env.WHATSAPP_ON_OPEN !== undefined) {
+    whatsappCfg.onOpen = /^(1|true|yes|on)$/i.test(String(process.env.WHATSAPP_ON_OPEN).trim());
+  }
+}
+
+function saveWhatsAppConfig(patch = {}) {
+  if (patch.phone !== undefined) {
+    const cleaned = normalizeWhatsAppPhone(patch.phone);
+    if (cleaned || patch.clearCredentials) whatsappCfg.phone = cleaned;
+  }
+  if (patch.apiKey !== undefined) {
+    const cleanedKey = String(patch.apiKey || '').trim();
+    if (cleanedKey || patch.clearCredentials) whatsappCfg.apiKey = cleanedKey;
+  }
+  if (typeof patch.enabled === 'boolean') whatsappCfg.enabled = patch.enabled;
+  if (typeof patch.onClose === 'boolean') whatsappCfg.onClose = patch.onClose;
+  if (typeof patch.onOpen === 'boolean') whatsappCfg.onOpen = patch.onOpen;
+  try {
+    fs.writeFileSync(NOTIFY_FILE, JSON.stringify({
+      phone: whatsappCfg.phone,
+      apiKey: whatsappCfg.apiKey,
+      enabled: whatsappCfg.enabled,
+      onClose: whatsappCfg.onClose,
+      onOpen: whatsappCfg.onOpen,
+      savedAt: Date.now()
+    }, null, 2), 'utf8');
+  } catch (e) {}
+}
+
+function getWhatsAppPublicState() {
+  const fromEnv = Boolean(normalizeWhatsAppPhone(process.env.WHATSAPP_PHONE || '') && String(process.env.WHATSAPP_APIKEY || '').trim());
+  return {
+    configured: Boolean(whatsappCfg.phone && whatsappCfg.apiKey),
+    enabled: Boolean(whatsappCfg.enabled),
+    onClose: Boolean(whatsappCfg.onClose),
+    onOpen: Boolean(whatsappCfg.onOpen),
+    phoneMasked: maskWhatsAppPhone(whatsappCfg.phone),
+    fromEnv,
+    sentCount: whatsappStats.sentCount,
+    lastSentAt: whatsappStats.lastSentAt,
+    lastStatus: whatsappStats.lastStatus
+  };
+}
+
+function formatWaPrice(p) {
+  const n = Number(p) || 0;
+  if (n <= 0) return '0';
+  if (n < 0.001) return n.toFixed(6);
+  if (n < 0.1) return n.toFixed(5);
+  if (n < 10) return n.toFixed(4);
+  return n.toFixed(2);
+}
+
+function formatWaEngine(radarTag, strategy) {
+  const tag = String(radarTag || '');
+  if (strategy === 'BB_MR' || tag.includes('BB DÖNÜŞ')) return '🧲 BB Dönüş';
+  if (tag.includes('1S') || tag.includes('1H')) return '⏱️ 1S Balina';
+  return '🐋 15dk Balina';
+}
+
+function sendWhatsAppMessage(text, overrideCfg = null) {
+  const phone = normalizeWhatsAppPhone((overrideCfg && overrideCfg.phone) || whatsappCfg.phone);
+  const apiKey = String((overrideCfg && overrideCfg.apiKey) || whatsappCfg.apiKey || '').trim();
+  if (!phone || !apiKey) {
+    return Promise.resolve({ ok: false, error: 'WhatsApp telefon veya CallMeBot API Key tanımlı değil.' });
+  }
+
+  const runSend = async () => {
+    const url = `https://api.callmebot.com/whatsapp.php?phone=${encodeURIComponent(phone)}&text=${encodeURIComponent(text)}&apikey=${encodeURIComponent(apiKey)}`;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 12000);
+    try {
+      const res = await fetch(url, { method: 'GET', signal: controller.signal });
+      const bodyRaw = await res.text();
+      const bodyClean = bodyRaw.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+      const isQueued = res.ok && /message queued|queued|sent|success/i.test(bodyClean) && !/invalid|error|not found|incorrect|wrong/i.test(bodyClean);
+      if (isQueued) {
+        whatsappStats.sentCount++;
+        whatsappStats.lastSentAt = trTime();
+        whatsappStats.lastStatus = '✅ Gönderildi';
+        addLog(`📱 WhatsApp bildirimi gönderildi (${maskWhatsAppPhone(phone)})`, 'INFO');
+        return { ok: true, detail: 'Mesaj WhatsApp kuyruğuna alındı!' };
+      }
+      const errMsg = bodyClean ? bodyClean.slice(0, 140) : `HTTP ${res.status}`;
+      whatsappStats.lastStatus = `❌ ${errMsg.slice(0, 50)}`;
+      addLog(`⚠️ WhatsApp bildirimi başarısız: ${errMsg}`, 'WARN');
+      return { ok: false, error: errMsg };
+    } catch (err) {
+      const msg = err && err.name === 'AbortError' ? 'CallMeBot zaman aşımı (12 sn)' : (err ? err.message : 'Bağlantı hatası');
+      whatsappStats.lastStatus = `❌ ${msg.slice(0, 50)}`;
+      addLog(`⚠️ WhatsApp bağlantı hatası: ${msg}`, 'WARN');
+      return { ok: false, error: msg };
+    } finally {
+      clearTimeout(timer);
+      await new Promise(r => setTimeout(r, 2500));
+    }
+  };
+
+  const p = whatsappQueue.then(runSend, runSend);
+  whatsappQueue = p.catch(() => {});
+  return p;
+}
+
+function notifyTradeClosed(trade) {
+  if (!trade || !whatsappCfg.enabled || !whatsappCfg.onClose || !whatsappCfg.phone || !whatsappCfg.apiKey) return;
+  const pnl = Number(trade.pnl) || 0;
+  const roi = Number(trade.roi) || 0;
+  const hdr = pnl > 0.05
+    ? '✅ İŞLEM SONUÇLANDI (KÂR)'
+    : (pnl < -0.05 ? '❌ İŞLEM SONUÇLANDI (ZARAR)' : '🛡️ İŞLEM SONUÇLANDI (BAŞABAŞ)');
+  const pnlStr = `${pnl >= 0 ? '+$' : '-$'}${Math.abs(pnl).toFixed(2)}`;
+  const roiStr = `${roi >= 0 ? '+' : ''}%${roi.toFixed(1)}`;
+  const sideIcon = trade.side === 'LONG' ? '🟢 LONG' : '🔴 SHORT';
+  const engineLbl = formatWaEngine(trade.radarTag, trade.strategy);
+  const st = getStats();
+  const reasonShort = String(trade.exitReason || '-').replace(/\s+/g, ' ').trim().slice(0, 75);
+  const msg = [
+    hdr,
+    `🪙 ${trade.symbol} · ${sideIcon} (${trade.leverage || CONFIG.leverage}x)`,
+    `⚙️ Motor: ${engineLbl}`,
+    `💵 Sonuç: ${pnlStr} (${roiStr} ROI)`,
+    `📍 Fiyat: $${formatWaPrice(trade.entryPrice)} ➔ $${formatWaPrice(trade.exitPrice)}`,
+    `📈 Zirve (MFE): +%${Number(trade.mfe || 0).toFixed(2)} · Süre: ${trade.durationMin || 0} dk`,
+    `🏁 Neden: ${reasonShort}`,
+    `💰 Güncel Kasa: $${st.balance} (${st.totalTrades} işlem · %${st.winRate} WR)`
+  ].join('\n');
+  sendWhatsAppMessage(msg).catch(() => {});
+}
+
+function notifyTradeOpened(pos) {
+  if (!pos || !whatsappCfg.enabled || !whatsappCfg.onOpen || !whatsappCfg.phone || !whatsappCfg.apiKey) return;
+  const sideIcon = pos.side === 'LONG' ? '🟢 LONG' : '🔴 SHORT';
+  const engineLbl = formatWaEngine(pos.radarTag, pos.strategy);
+  const msg = [
+    '🚀 YENİ İŞLEM AÇILDI',
+    `🪙 ${pos.symbol} · ${sideIcon} (${pos.leverage || CONFIG.leverage}x)`,
+    `⚙️ Motor: ${engineLbl}`,
+    `📍 Giriş: $${formatWaPrice(pos.entryPrice)} · Teminat: $${Number(pos.margin || 0).toFixed(2)}`,
+    `🛑 Stop: -%${Number(pos.slPct || CONFIG.slPct).toFixed(2)} · 🎯 Hedef: +%${Number(pos.moonPct || CONFIG.moonPct).toFixed(2)}`,
+    `💰 Kasa: $${balance.toFixed(2)} (${activePositions.length}/${CONFIG.maxSlots} Slot)`
+  ].join('\n');
+  sendWhatsAppMessage(msg).catch(() => {});
+}
+
 // Depolamayı Başlat & Bakiye Eşitle ($100)
 function initStorage() {
   loadSettings();
+  loadWhatsAppConfig();
   try {
     if (fs.existsSync(STATE_FILE)) {
       const saved = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
@@ -3421,6 +3622,7 @@ async function scanLoop() {
           `🐋 POZİSYON AÇILDI: [${pick.side}] ${pick.sym} @ $${pick.curP.toFixed(4)} | ${pick.radarTag} | Teminat: $${pick.tradeMargin.toFixed(1)} (${pick.position.leverage}x) | SL: -%${pick.tradeSlPct.toFixed(2)} | BE: +%${pick.position.bePct.toFixed(2)} | Trail: +%${pick.tradeTp1Pct.toFixed(2)} | Moon(${moonR}): +%${pick.tradeMoonPct.toFixed(2)}`,
           'TRADE'
         );
+        notifyTradeOpened(pick.position);
       }
     }
   } catch (err) {
@@ -3859,6 +4061,7 @@ function closeTrade(pos, exitReason) {
   schedulePostTradeTelemetry(tradeRecord, pos.entryTime || (now - durMin * 60000));
 
   addLog(`🏁 KAPANDI: [${pos.side}] ${pos.symbol} | PnL: ${totalTradePnl >= 0 ? '+' : ''}$${totalTradePnl.toFixed(2)} (%${totalTradeRoi >= 0 ? '+' : ''}${totalTradeRoi.toFixed(1)} ROI) | ${formattedExitReason}`, totalTradePnl >= 0 ? 'WIN' : 'LOSS');
+  notifyTradeClosed(tradeRecord);
 }
 
 // 4. HTML VE WEBSİTESİ (BİREBİR EKRAN 1 TASARIMI)
@@ -4705,6 +4908,34 @@ function serveDashboardHtml() {
           <div class="sidebar-plan-row">🚀 <b>Bileşik:</b> Tavan yok · 2 ardışık zarar ➔ <b>4s mola</b> · 62.5g PF <b>1.63</b> / 30g WR <b>%70</b>.</div>
         </div>
 
+        <details id="waDetails" style="margin-top:8px; background:var(--panel2); border:1px solid var(--border); border-radius:8px; padding:7px 9px;">
+          <summary style="cursor:pointer; display:flex; justify-content:space-between; align-items:center; list-style:none; font-size:10.5px; font-weight:800; color:var(--text);">
+            <span>📱 WHATSAPP BİLDİRİM</span>
+            <span id="waStatusPill" class="status-pill ${getWhatsAppPublicState().configured && getWhatsAppPublicState().enabled ? 'green' : ''}" style="font-size:8.5px;padding:1.5px 6px;">${getWhatsAppPublicState().configured ? (getWhatsAppPublicState().enabled ? (getWhatsAppPublicState().fromEnv ? 'AKTİF (ENV)' : 'AKTİF') : 'KAPALI') : 'KURULMADI'}</span>
+          </summary>
+          <div style="margin-top:8px; display:flex; flex-direction:column; gap:6px;">
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:5px;">
+              <input type="text" id="inpWaPhone" placeholder="Tel: 905xxxxxxxxx" style="width:100%; box-sizing:border-box; background:var(--panel); color:var(--text); border:1px solid var(--border); border-radius:6px; padding:5px 7px; font-size:11px; font-weight:700;">
+              <input type="password" id="inpWaKey" placeholder="CallMeBot API Key" style="width:100%; box-sizing:border-box; background:var(--panel); color:var(--text); border:1px solid var(--border); border-radius:6px; padding:5px 7px; font-size:11px; font-weight:700;">
+            </div>
+            <div style="display:flex; gap:10px; flex-wrap:wrap; font-size:10.5px; color:var(--text); font-weight:600;">
+              <label style="display:flex; align-items:center; gap:4px; cursor:pointer;"><input type="checkbox" id="chkWaOnClose" ${getWhatsAppPublicState().onClose ? 'checked' : ''}> 🏁 Sonuçlanınca</label>
+              <label style="display:flex; align-items:center; gap:4px; cursor:pointer;"><input type="checkbox" id="chkWaOnOpen" ${getWhatsAppPublicState().onOpen ? 'checked' : ''}> 🚀 Açılınca da</label>
+            </div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:5px;">
+              <button type="button" onclick="saveWhatsAppConfig()" class="btn-action btn-secondary" style="min-height:30px; padding:5px; font-size:10.5px;">💾 Kaydet</button>
+              <button type="button" id="btnWaTest" onclick="testWhatsAppConfig()" class="btn-action" style="min-height:30px; padding:5px; font-size:10.5px; background:rgba(34,197,94,0.16); color:var(--green); border:1px solid rgba(34,197,94,0.45);">🧪 Test Gönder</button>
+            </div>
+            <div id="waFeedback" style="font-size:10px; color:var(--muted); line-height:1.35;"></div>
+            <div style="font-size:9.5px; color:var(--muted); line-height:1.38; border-top:1px dashed var(--border); padding-top:5px;">
+              <b>1 dk Kurulum (CallMeBot):</b><br>
+              1) Rehbere <b>+34 644 45 70 57</b> ekle, WhatsApp'tan <code>I allow callmebot to send me messages</code> yaz.<br>
+              2) Gelen <b>API Key</b>'i buraya girip Test Gönder'e bas.<br>
+              3) 7/24 kalıcı olması için Render <b>Environment</b> kısmına <code>WHATSAPP_PHONE</code> ve <code>WHATSAPP_APIKEY</code> ekle.
+            </div>
+          </div>
+        </details>
+
         <div class="action-buttons-grid">
           <a href="/api/download-csv" class="btn-action btn-secondary">📊 CSV İNDİR</a>
           <button onclick="resetBalance()" class="btn-action btn-reset">🧹 SIFIRLA ($100)</button>
@@ -5349,6 +5580,7 @@ function serveDashboardHtml() {
 
         // ⚙️ Ayar senkronu (deploy sonrası sunucu varsayılana döndüyse tarayıcı kaydını geri yükler)
         syncSettings(data.settings, data.settingsCustomized);
+        if (data.whatsapp) syncWhatsAppUi(data.whatsapp);
 
         // Performans & İstatistikler
         document.getElementById("stBalance").innerText = '$' + data.stats.balance;
@@ -5597,7 +5829,9 @@ function serveDashboardHtml() {
       if (!confirm("DİKKAT: Bakiye $100.00 olarak sıfırlanacak ve tüm geçmiş kalıcı olarak silinecektir. Emin misiniz?")) return;
       window.isResetting = true;
       try {
+        const savedWa = localStorage.getItem('moon_wa_cfg');
         localStorage.clear();
+        if (savedWa) localStorage.setItem('moon_wa_cfg', savedWa);
         sessionStorage.clear();
         const res = await fetch('/api/reset-balance?amount=100');
         const data = await res.json();
@@ -5606,6 +5840,146 @@ function serveDashboardHtml() {
         }
       } catch (e) {}
       window.location.replace(window.location.origin + window.location.pathname + '?reset=' + Date.now());
+    }
+
+    // 📱 WHATSAPP BİLDİRİM (CALLMEBOT) ARAYÜZ & SENKRON
+    const LS_WA = 'moon_wa_cfg';
+    let waAutoSynced = false;
+    function syncWhatsAppUi(wa) {
+      if (!wa) return;
+      const pill = document.getElementById('waStatusPill');
+      if (pill) {
+        if (wa.configured && wa.enabled) {
+          pill.innerText = wa.fromEnv ? 'AKTİF (ENV)' : 'AKTİF';
+          pill.className = 'status-pill green';
+        } else if (wa.configured) {
+          pill.innerText = 'KAPALI';
+          pill.className = 'status-pill';
+        } else {
+          pill.innerText = 'KURULMADI';
+          pill.className = 'status-pill';
+        }
+      }
+      const cClose = document.getElementById('chkWaOnClose');
+      const cOpen = document.getElementById('chkWaOnOpen');
+      if (cClose && document.activeElement !== cClose) cClose.checked = !!wa.onClose;
+      if (cOpen && document.activeElement !== cOpen) cOpen.checked = !!wa.onOpen;
+      const inpP = document.getElementById('inpWaPhone');
+      if (inpP && !inpP.value && wa.phoneMasked && document.activeElement !== inpP) {
+        inpP.placeholder = 'Kayıtlı: ' + wa.phoneMasked;
+      }
+      const fb = document.getElementById('waFeedback');
+      if (fb && !fb.dataset.sticky && wa.configured) {
+        fb.style.color = 'var(--muted)';
+        fb.innerText = (wa.phoneMasked ? ('Numara: ' + wa.phoneMasked) : '') + (wa.lastSentAt ? (' · Son: ' + wa.lastSentAt + ' (' + wa.lastStatus + ')') : (wa.sentCount ? (' · Gönderilen: ' + wa.sentCount) : ' · Hazır'));
+      }
+      // Sunucu yeniden başladıysa ve Render Env tanımlı değilse tarayıcı kaydını 1 kez geri yükle
+      if (!wa.configured && !waAutoSynced) {
+        waAutoSynced = true;
+        try {
+          const raw = localStorage.getItem(LS_WA);
+          if (raw) {
+            const saved = JSON.parse(raw);
+            if (saved && saved.phone && saved.apiKey) {
+              fetch('/api/whatsapp-config', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(saved)
+              }).catch(function () {});
+            }
+          }
+        } catch (e) {}
+      }
+    }
+
+    async function saveWhatsAppConfig() {
+      const phone = (document.getElementById('inpWaPhone')?.value || '').trim();
+      const apiKey = (document.getElementById('inpWaKey')?.value || '').trim();
+      const onClose = !!document.getElementById('chkWaOnClose')?.checked;
+      const onOpen = !!document.getElementById('chkWaOnOpen')?.checked;
+      const fb = document.getElementById('waFeedback');
+      const payload = { enabled: (onClose || onOpen), onClose, onOpen };
+      if (phone) payload.phone = phone;
+      if (apiKey) payload.apiKey = apiKey;
+      try {
+        const res = await fetch('/api/whatsapp-config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (data && data.ok) {
+          try {
+            const prev = JSON.parse(localStorage.getItem(LS_WA) || '{}');
+            localStorage.setItem(LS_WA, JSON.stringify({
+              phone: phone || prev.phone || '',
+              apiKey: apiKey || prev.apiKey || '',
+              enabled: payload.enabled,
+              onClose,
+              onOpen
+            }));
+          } catch (e) {}
+          if (fb) {
+            fb.dataset.sticky = '1';
+            fb.style.color = 'var(--green)';
+            fb.innerText = '✅ WhatsApp ayarları kaydedildi!';
+            setTimeout(function () { if (fb) delete fb.dataset.sticky; }, 5000);
+          }
+          if (data.whatsapp) syncWhatsAppUi(data.whatsapp);
+        } else if (fb) {
+          fb.dataset.sticky = '1';
+          fb.style.color = 'var(--red)';
+          fb.innerText = '❌ Kaydedilemedi: ' + ((data && data.error) || 'hata');
+        }
+      } catch (e) {
+        if (fb) { fb.style.color = 'var(--red)'; fb.innerText = '❌ Sunucu bağlantı hatası.'; }
+      }
+    }
+
+    async function testWhatsAppConfig() {
+      const phone = (document.getElementById('inpWaPhone')?.value || '').trim();
+      const apiKey = (document.getElementById('inpWaKey')?.value || '').trim();
+      const onClose = !!document.getElementById('chkWaOnClose')?.checked;
+      const onOpen = !!document.getElementById('chkWaOnOpen')?.checked;
+      const btn = document.getElementById('btnWaTest');
+      const fb = document.getElementById('waFeedback');
+      if (btn) btn.disabled = true;
+      if (fb) { fb.dataset.sticky = '1'; fb.style.color = 'var(--muted)'; fb.innerText = '⏳ CallMeBot test mesajı gönderiliyor...'; }
+      const payload = { onClose, onOpen };
+      if (phone) payload.phone = phone;
+      if (apiKey) payload.apiKey = apiKey;
+      try {
+        const res = await fetch('/api/whatsapp-test', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (data && data.ok) {
+          if (phone || apiKey) {
+            try {
+              const prev = JSON.parse(localStorage.getItem(LS_WA) || '{}');
+              localStorage.setItem(LS_WA, JSON.stringify({
+                phone: phone || prev.phone || '',
+                apiKey: apiKey || prev.apiKey || '',
+                enabled: true,
+                onClose,
+                onOpen
+              }));
+            } catch (e) {}
+          }
+          if (fb) { fb.style.color = 'var(--green)'; fb.innerText = '✅ ' + (data.detail || "Test mesajı WhatsApp'a gönderildi!"); }
+          if (data.whatsapp) syncWhatsAppUi(data.whatsapp);
+        } else if (fb) {
+          fb.style.color = 'var(--red)';
+          fb.innerText = '❌ ' + ((data && data.error) || 'Gönderilemedi');
+        }
+      } catch (e) {
+        if (fb) { fb.style.color = 'var(--red)'; fb.innerText = '❌ Sunucu bağlantı hatası.'; }
+      } finally {
+        if (btn) btn.disabled = false;
+        setTimeout(function () { if (fb) delete fb.dataset.sticky; }, 9000);
+      }
     }
 
 
@@ -6109,6 +6483,7 @@ const server = http.createServer(async (req, res) => {
       pingStats: pingStats,
       shadowCount: shadowSignals.length,
       btcRegime: liveBtcRegime,
+      whatsapp: getWhatsAppPublicState(),
       feed: {
         book: bookFeed,
         futuresSymbols: [...symbolFeed.values()].filter(v => v === 'futures').length,
@@ -6300,6 +6675,67 @@ const server = http.createServer(async (req, res) => {
     addLog(`🧹 Bakiye $${balance.toFixed(2)} olarak ve işlem geçmişi tamamen sıfırlandı.`, 'RESET');
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ ok: true, balance, resetEpoch }));
+    return;
+  }
+
+  if (pathname === '/api/whatsapp-config' && req.method === 'GET') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: true, whatsapp: getWhatsAppPublicState() }));
+    return;
+  }
+
+  if (pathname === '/api/whatsapp-config' && req.method === 'POST') {
+    try {
+      const body = await parseJsonBody(req);
+      if (!body || typeof body !== 'object') {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, error: 'Geçersiz istek.' }));
+        return;
+      }
+      saveWhatsAppConfig({
+        phone: body.phone,
+        apiKey: body.apiKey,
+        enabled: typeof body.enabled === 'boolean' ? body.enabled : undefined,
+        onClose: typeof body.onClose === 'boolean' ? body.onClose : undefined,
+        onOpen: typeof body.onOpen === 'boolean' ? body.onOpen : undefined,
+        clearCredentials: !!body.clearCredentials
+      });
+      addLog(`📱 WhatsApp bildirim ayarları güncellendi (${whatsappCfg.phone ? maskWhatsAppPhone(whatsappCfg.phone) : 'tanımsız'} | Kapanış: ${whatsappCfg.onClose ? 'AÇIK' : 'KAPALI'} | Açılış: ${whatsappCfg.onOpen ? 'AÇIK' : 'KAPALI'})`, 'INFO');
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, whatsapp: getWhatsAppPublicState() }));
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, error: err.message }));
+    }
+    return;
+  }
+
+  if (pathname === '/api/whatsapp-test' && req.method === 'POST') {
+    try {
+      const body = await parseJsonBody(req).catch(() => ({}));
+      if (body && (body.phone || body.apiKey || typeof body.onClose === 'boolean' || typeof body.onOpen === 'boolean')) {
+        saveWhatsAppConfig({
+          phone: body.phone,
+          apiKey: body.apiKey,
+          enabled: true,
+          onClose: typeof body.onClose === 'boolean' ? body.onClose : whatsappCfg.onClose,
+          onOpen: typeof body.onOpen === 'boolean' ? body.onOpen : whatsappCfg.onOpen
+        });
+      }
+      const st = getStats();
+      const testMsg = [
+        '🤖 MARSCOIN BOT — WhatsApp Testi Başarılı!',
+        `💰 Güncel Kasa: $${st.balance} (${st.totalTrades} işlem · %${st.winRate} WR)`,
+        `📊 Aktif Pozisyon: ${st.activeCount}/${CONFIG.maxSlots}`,
+        '🔔 İşlem sonuçlandığında özet mesajı anında buraya gelecek.'
+      ].join('\n');
+      const result = await sendWhatsAppMessage(testMsg);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ...result, whatsapp: getWhatsAppPublicState() }));
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, error: err.message, whatsapp: getWhatsAppPublicState() }));
+    }
     return;
   }
 
