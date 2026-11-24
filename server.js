@@ -408,9 +408,10 @@ function getSettingsPayload() {
   };
 }
 
-// 🔔 MOBİL BİLDİRİM MOTORU (ntfy Push + CallMeBot WhatsApp — Render Env + Yerel Kayıt Destekli)
+// 🔔 MOBİL BİLDİRİM MOTORU (ntfy Push + CallMeBot WhatsApp — Render Env + Kalıcı Varsayılan)
+const DEFAULT_NTFY_TOPIC = 'marscoin-uxzm2vyd';
 let whatsappCfg = {
-  ntfyTopic: '',
+  ntfyTopic: DEFAULT_NTFY_TOPIC,
   ntfyServer: 'https://ntfy.sh',
   phone: '',
   apiKey: '',
@@ -516,6 +517,7 @@ function saveWhatsAppConfig(patch = {}) {
 
 function getWhatsAppPublicState() {
   const ntfyFromEnv = Boolean(normalizeNtfyTopic(process.env.NTFY_TOPIC || ''));
+  const ntfyPermanent = Boolean(ntfyFromEnv || (DEFAULT_NTFY_TOPIC && whatsappCfg.ntfyTopic === DEFAULT_NTFY_TOPIC));
   const waFromEnv = Boolean(normalizeWhatsAppPhone(process.env.WHATSAPP_PHONE || '') && String(process.env.WHATSAPP_APIKEY || '').trim());
   const ntfyConfigured = Boolean(whatsappCfg.ntfyTopic);
   const waConfigured = Boolean(whatsappCfg.phone && whatsappCfg.apiKey);
@@ -528,8 +530,8 @@ function getWhatsAppPublicState() {
     onOpen: Boolean(whatsappCfg.onOpen),
     ntfyTopicMasked: maskNtfyTopic(whatsappCfg.ntfyTopic),
     phoneMasked: maskWhatsAppPhone(whatsappCfg.phone),
-    fromEnv: ntfyFromEnv || waFromEnv,
-    ntfyFromEnv,
+    fromEnv: ntfyPermanent || waFromEnv,
+    ntfyFromEnv: ntfyPermanent,
     waFromEnv,
     sentCount: whatsappStats.sentCount,
     lastSentAt: whatsappStats.lastSentAt,
@@ -5024,7 +5026,7 @@ function serveDashboardHtml() {
         <details id="waDetails" style="margin-top:8px; background:var(--panel2); border:1px solid var(--border); border-radius:8px; padding:7px 9px;">
           <summary style="cursor:pointer; display:flex; justify-content:space-between; align-items:center; list-style:none; font-size:10.5px; font-weight:800; color:var(--text);">
             <span>🔔 MOBİL BİLDİRİM (ntfy)</span>
-            <span id="waStatusPill" class="status-pill ${getWhatsAppPublicState().configured && getWhatsAppPublicState().enabled ? 'green' : ''}" style="font-size:8.5px;padding:1.5px 6px;">${getWhatsAppPublicState().configured ? (getWhatsAppPublicState().enabled ? (getWhatsAppPublicState().fromEnv ? 'AKTİF (ENV)' : 'AKTİF') : 'KAPALI') : 'KURULMADI'}</span>
+            <span id="waStatusPill" class="status-pill ${getWhatsAppPublicState().configured && getWhatsAppPublicState().enabled ? 'green' : ''}" style="font-size:8.5px;padding:1.5px 6px;">${getWhatsAppPublicState().configured ? (getWhatsAppPublicState().enabled ? (getWhatsAppPublicState().fromEnv ? 'AKTİF (KALICI)' : 'AKTİF') : 'KAPALI') : 'KURULMADI'}</span>
           </summary>
           <div style="margin-top:8px; display:flex; flex-direction:column; gap:6px;">
             <div style="display:flex; gap:5px; align-items:center;">
@@ -5984,7 +5986,7 @@ function serveDashboardHtml() {
       const pill = document.getElementById('waStatusPill');
       if (pill) {
         if (wa.configured && wa.enabled) {
-          pill.innerText = wa.fromEnv ? 'AKTİF (ENV)' : 'AKTİF';
+          pill.innerText = wa.fromEnv ? 'AKTİF (KALICI)' : 'AKTİF';
           pill.className = 'status-pill green';
         } else if (wa.configured) {
           pill.innerText = 'KAPALI';

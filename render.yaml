@@ -7,3 +7,6 @@ services:
     buildCommand: ""
     startCommand: node server.js
     autoDeploy: true
+    envVars:
+      - key: NTFY_TOPIC
+        value: marscoin-uxzm2vyd
