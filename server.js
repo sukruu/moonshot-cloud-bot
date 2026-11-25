@@ -1917,8 +1917,13 @@ function evaluateWhaleSpike1h(k1h, idx) {
   return { approved: false, why: 'TREND_OR_TAKER', ...diag };
 }
 
-// 🧲 3. MOTOR — V7.2 TEMİZLENMİŞ BB Z-SCORE AŞIRI ALIM DÖNÜŞÜ (BTC BOĞA + TESTERE'de 7/24 AKTİF!)
-// 488 Koin 30g + 62.5g Dış-Örneklem Çift Doğrulamalı: RSI≥72, EMA20≥+%1.6, Satıcı≥%53, ATR 0.90–2.00, Fiyat≥$0.02, 15dk -%0.10..-%1.20, 4s<+%9.0, Hacim≥1.0x
+// 🧲 3. MOTOR — V7.3 TEMİZLENMİŞ BB Z-SCORE AŞIRI ALIM DÖNÜŞÜ (BTC BOĞA + TESTERE'de 7/24 AKTİF!)
+// 488 Koin 30g + 62.5g Dış-Örneklem Çift Doğrulamalı: RSI≥72, EMA20≥+%1.6, Satıcı≥%53, ATR 0.90–1.65, Fiyat≥$0.02, 15dk -%0.30..-%1.20, 4s<+%9.0, Hacim≥1.0x (PF 2.00, WR %70.2!)
+function getSessionRiskMult(tsMs = Date.now()) {
+  const hourTR = new Date((Number(tsMs) || Date.now()) + (3 * 3600 * 1000)).getUTCHours();
+  return (hourTR >= 0 && hourTR < 4) ? 0.50 : 1.0; // 00:00–04:00 TR (21–01 UTC günlük mum kapanış ölü likidite saati): %50 risk!
+}
+
 function evaluateBbSnapback15m(k, idx, btcReg, btc15m = 0) {
   if (!Array.isArray(k) || idx < 55 || idx >= k.length) return null;
   if (btcReg === 'BEAR' || btc15m > 0.25) return null;
@@ -1926,7 +1931,7 @@ function evaluateBbSnapback15m(k, idx, btcReg, btc15m = 0) {
   const c = parseFloat(k[idx][4]) || 0;
   if (c < 0.02 || o <= 0 || c >= o) return null; // Kırmızı teyit mumu + ≥$0.02 penny-koin tabanı (30g + 62.5g çift doğrulama!)
   const move = ((c - o) / o) * 100;
-  if (move > -0.10 || move <= -1.20) return null; // Gövdesiz mikro-doji (>-0.10%) ve aşırı düşmüş dip (≤-1.20%) ele!
+  if (move > -0.30 || move <= -1.20) return null; // Zayıf boğa bayrağı (>-0.30%) ve aşırı düşmüş dip (≤-1.20%) ele!
 
   const q = parseFloat(k[idx][7]) || 0;
   const tb = parseFloat(k[idx][10]) || 0;
@@ -1968,7 +1973,7 @@ function evaluateBbSnapback15m(k, idx, btcReg, btc15m = 0) {
     if (pc > 0) trSum += (Math.max(hh - ll, Math.abs(hh - pc), Math.abs(ll - pc)) / pc) * 100;
   }
   const atr15 = trSum / 14;
-  if (atr15 < 0.90 || atr15 > 2.00) return null; // Aşırı oynak (ATR>2.0) short-squeeze koinlerini ele!
+  if (atr15 < 0.90 || atr15 > 1.65) return null; // Aşırı oynak (ATR>1.65) short-squeeze koinlerini ele (30g + 62.5g ikisinde de net negatif!)
 
   const open4h = parseFloat(k[idx - 16][1]) || o;
   const chg4h = open4h > 0 ? ((c - open4h) / open4h) * 100 : 0;
@@ -2500,9 +2505,9 @@ function analyzeCoinForReplay(sym, k, meta, btcRegime, cutoffTs, mode) {
           if (candSide === 'LONG') skipReason = 'DIP_LONG_KAPALI';
           else if (btcReg === 'BEAR') skipReason = 'BTC_BEAR';
           else if (c < 0.02) skipReason = 'PENNY_<0.02';
-          else if (move > -0.10) skipReason = 'MIKRO_DOJI';
+          else if (move > -0.30) skipReason = 'ZAYIF_MUM(>-0.30)';
           else if (move <= -1.20) skipReason = 'MUM_COK_DUSTU';
-          else if (atr15 > 2.00) skipReason = 'ATR_YUKSEK(>2)';
+          else if (atr15 > 1.65) skipReason = 'ATR_YUKSEK(>1.65)';
           else if (chg4h >= 9.0) skipReason = '4S_PARABOLIK';
           else if (volMultFast < 1.00) skipReason = 'HACIM_<1.0x';
           else if (takerFast > 47) skipReason = 'SATICI_ZAYIF';
@@ -2881,7 +2886,8 @@ async function runHistoricalReplay(hours = 72, maxCoins = 120, opts = {}) {
           if ((coinCd[ev.symbol] || 0) > evEntryTs) continue;
 
           const slPctEst = ev.slPct;
-          const rawRiskUsd = Math.max(1.50, bal * (replayRiskPct / 100) * (ev.riskMult || 1.0));
+          const sessionMult = getSessionRiskMult(evEntryTs);
+          const rawRiskUsd = Math.max(1.50, bal * (replayRiskPct / 100) * (ev.riskMult || 1.0) * sessionMult);
           const reqNominal = rawRiskUsd / ((slPctEst + 0.09) / 100);
           const reqMargin = reqNominal / replayLev;
           const bookedMargin = openSlots.reduce((acc, pSlot) => acc + (pSlot.margin || 0), 0);
@@ -3526,7 +3532,8 @@ async function scanLoop() {
         // 🚀 TRINITY RİSK BÜTÇESİ: Balina (15dk+1S) %100 risk, BB Dönüş & Gizli Dağıtım %50 risk (Limitsiz Bileşik!)
         const tradeSlPct = Number((sig.slPctOverride || Math.max(1.00, Math.min(2.80, sig.atr15 * 1.50))).toFixed(2));
         const cfgRiskPct = Math.max(1.0, Math.min(10.0, Number(CONFIG.riskPct) || 6.0));
-        const engineRiskMult = Number(sig.riskMult) || 1.0;
+        const sessionRiskMult = getSessionRiskMult(now);
+        const engineRiskMult = (Number(sig.riskMult) || 1.0) * sessionRiskMult;
         const equityRiskUsd = Math.max(1.50, Number((balance * (cfgRiskPct / 100) * engineRiskMult).toFixed(2)));
         const targetRiskUsd = circuitOn ? Math.max(1.50, Number((equityRiskUsd * 0.50).toFixed(2))) : equityRiskUsd;
         const effectiveStopCostPct = tradeSlPct + 0.09;
@@ -5026,11 +5033,11 @@ function serveDashboardHtml() {
           </div>
         </div>
 
-        <div class="sidebar-section-title">🎯 V7.2 3'LÜ MOTOR & KORUMA</div>
+        <div class="sidebar-section-title">🎯 V7.3 3'LÜ MOTOR & KORUMA</div>
         <div class="sidebar-plan-card">
           <div class="sidebar-plan-row">🐋 <b>Balina (15dk+1S):</b> <b>≥$5M</b> (~150 koin), <b>2.5–8x</b> hacim, tam risk (<b>L 5R / S 3.5R</b>).</div>
-          <div class="sidebar-plan-row">🧲 <b>BB Dönüş V7.2:</b> <b>Fiyat≥$0.02 · 15dk -%0.10..-1.2% · RSI≥72 · ATR≤2 · 4s&lt;%9</b> (%75 risk).</div>
-          <div class="sidebar-plan-row">🚀 <b>Bileşik & Kalkan:</b> Aynı yön <b>max 3/4 slot</b> · 2 zarar ➔ <b>4s mola</b> · 62.5g PF <b>1.82</b> / DD <b>%31</b>.</div>
+          <div class="sidebar-plan-row">🧲 <b>BB Dönüş V7.3:</b> <b>Fiyat≥$0.02 · 15dk -%0.30..-1.2% · ATR≤1.65 · RSI≥72 · 4s&lt;%9</b> (%75 risk).</div>
+          <div class="sidebar-plan-row">🚀 <b>Bileşik & Kalkan:</b> Aynı yön <b>max 3/4</b> · <b>00–04 TR %50 risk</b> · 62.5g PF <b>2.00</b> / DD <b>%26</b>.</div>
         </div>
 
         <details id="waDetails" style="margin-top:8px; background:var(--panel2); border:1px solid var(--border); border-radius:8px; padding:7px 9px;">
