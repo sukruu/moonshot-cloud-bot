@@ -1917,16 +1917,16 @@ function evaluateWhaleSpike1h(k1h, idx) {
   return { approved: false, why: 'TREND_OR_TAKER', ...diag };
 }
 
-// 🧲 3. MOTOR — V7 TEMİZLENMİŞ BB Z-SCORE AŞIRI ALIM DÖNÜŞÜ (BTC BOĞA + TESTERE'de 7/24 AKTİF!)
-// 488 Koin 30g + 62.5g Dış-Örneklem Çift Doğrulamalı: RSI≥72, EMA20≥+%1.6, Satıcı≥%53, ATR 0.90–2.00, 15dk>-1.20%, 4s<+%9.0 (%69.8 WR, PF 1.63, 6/6 dönem pozitif!)
+// 🧲 3. MOTOR — V7.2 TEMİZLENMİŞ BB Z-SCORE AŞIRI ALIM DÖNÜŞÜ (BTC BOĞA + TESTERE'de 7/24 AKTİF!)
+// 488 Koin 30g + 62.5g Dış-Örneklem Çift Doğrulamalı: RSI≥72, EMA20≥+%1.6, Satıcı≥%53, ATR 0.90–2.00, Fiyat≥$0.02, 15dk -%0.10..-%1.20, 4s<+%9.0, Hacim≥1.0x
 function evaluateBbSnapback15m(k, idx, btcReg, btc15m = 0) {
   if (!Array.isArray(k) || idx < 55 || idx >= k.length) return null;
   if (btcReg === 'BEAR' || btc15m > 0.25) return null;
   const o = parseFloat(k[idx][1]) || 0;
   const c = parseFloat(k[idx][4]) || 0;
-  if (c <= 0 || o <= 0 || c >= o) return null; // Kırmızı teyit mumu şart!
+  if (c < 0.02 || o <= 0 || c >= o) return null; // Kırmızı teyit mumu + ≥$0.02 penny-koin tabanı (30g + 62.5g çift doğrulama!)
   const move = ((c - o) / o) * 100;
-  if (move <= -1.20) return null; // Zaten -%1.2+ çakılmış dibi kovalama (62.5g H1+H2 & 30g net negatif!)
+  if (move > -0.10 || move <= -1.20) return null; // Gövdesiz mikro-doji (>-0.10%) ve aşırı düşmüş dip (≤-1.20%) ele!
 
   const q = parseFloat(k[idx][7]) || 0;
   const tb = parseFloat(k[idx][10]) || 0;
@@ -2499,6 +2499,8 @@ function analyzeCoinForReplay(sym, k, meta, btcRegime, cutoffTs, mode) {
         } else {
           if (candSide === 'LONG') skipReason = 'DIP_LONG_KAPALI';
           else if (btcReg === 'BEAR') skipReason = 'BTC_BEAR';
+          else if (c < 0.02) skipReason = 'PENNY_<0.02';
+          else if (move > -0.10) skipReason = 'MIKRO_DOJI';
           else if (move <= -1.20) skipReason = 'MUM_COK_DUSTU';
           else if (atr15 > 2.00) skipReason = 'ATR_YUKSEK(>2)';
           else if (chg4h >= 9.0) skipReason = '4S_PARABOLIK';
@@ -2863,6 +2865,7 @@ async function runHistoricalReplay(hours = 72, maxCoins = 120, opts = {}) {
         };
 
         const maxAuxSlots = Math.max(1, Math.min(3, replaySlots - 1));
+        const maxSameSide = replaySlots >= 4 ? 3 : replaySlots;
         for (const ev of workingEvents) {
           if (!ev.botApproved) continue;
           const evEntryTs = ev.candleTs + (15 * 60 * 1000);
@@ -2873,6 +2876,7 @@ async function runHistoricalReplay(hours = 72, maxCoins = 120, opts = {}) {
           }
           if (openSlots.length >= replaySlots) continue;
           if (openSlots.some(pSlot => pSlot.symbol === ev.symbol)) continue;
+          if (openSlots.filter(pSlot => pSlot.side === ev.side).length >= maxSameSide) continue;
           if (ev.isAux && openSlots.filter(pSlot => pSlot.isAux).length >= maxAuxSlots) continue;
           if ((coinCd[ev.symbol] || 0) > evEntryTs) continue;
 
@@ -3695,11 +3699,16 @@ async function scanLoop() {
       const taken = new Set(activePositions.map((p) => p.symbol));
       let activeAuxCount = activePositions.filter(p => p.isAux || p.strategy === 'BB_MR' || p.strategy === 'HDIST').length;
       const maxAuxSlots = Math.max(1, Math.min(3, (Number(CONFIG.maxSlots) || 4) - 1));
+      const maxSameSide = (Number(CONFIG.maxSlots) || 4) >= 4 ? 3 : (Number(CONFIG.maxSlots) || 4);
+      let activeLongCount = activePositions.filter(p => p.side === 'LONG').length;
+      let activeShortCount = activePositions.filter(p => p.side === 'SHORT').length;
       const room = CONFIG.maxSlots - activePositions.length;
       let opened = 0;
       let bookedMargin = activePositions.reduce((acc, p) => acc + (p.margin || 0), 0);
       for (const pick of scanEntryCandidates) {
         if (opened >= room || taken.has(pick.sym)) continue;
+        if (pick.side === 'LONG' && activeLongCount >= maxSameSide) continue;
+        if (pick.side === 'SHORT' && activeShortCount >= maxSameSide) continue;
         if (pick.isAux && activeAuxCount >= maxAuxSlots) continue;
         const curFree = Math.max(0, Number((balance - bookedMargin).toFixed(2)));
         let finalMargin = Math.min(pick.tradeMargin, curFree);
@@ -3708,6 +3717,7 @@ async function scanLoop() {
         pick.position.margin = pick.tradeMargin;
         pick.position.initialMargin = pick.tradeMargin;
         taken.add(pick.sym);
+        if (pick.side === 'LONG') activeLongCount++; else activeShortCount++;
         if (pick.isAux) activeAuxCount++;
         bookedMargin += pick.tradeMargin;
         activePositions.push(pick.position);
@@ -5016,11 +5026,11 @@ function serveDashboardHtml() {
           </div>
         </div>
 
-        <div class="sidebar-section-title">🎯 V7 3'LÜ MOTOR & KORUMA</div>
+        <div class="sidebar-section-title">🎯 V7.2 3'LÜ MOTOR & KORUMA</div>
         <div class="sidebar-plan-card">
           <div class="sidebar-plan-row">🐋 <b>Balina (15dk+1S):</b> <b>≥$5M</b> (~150 koin), <b>2.5–8x</b> hacim, tam risk (<b>L 5R / S 3.5R</b>).</div>
-          <div class="sidebar-plan-row">🧲 <b>BB Dönüş V7:</b> <b>RSI≥72 · ATR≤2 · 4s&lt;%9 · 15dk&gt;-%1.2</b> (max 3 slot, <b>%75 risk</b>).</div>
-          <div class="sidebar-plan-row">🚀 <b>Bileşik:</b> Tavan yok · 2 ardışık zarar ➔ <b>4s mola</b> · 62.5g PF <b>1.63</b> / 30g WR <b>%70</b>.</div>
+          <div class="sidebar-plan-row">🧲 <b>BB Dönüş V7.2:</b> <b>Fiyat≥$0.02 · 15dk -%0.10..-1.2% · RSI≥72 · ATR≤2 · 4s&lt;%9</b> (%75 risk).</div>
+          <div class="sidebar-plan-row">🚀 <b>Bileşik & Kalkan:</b> Aynı yön <b>max 3/4 slot</b> · 2 zarar ➔ <b>4s mola</b> · 62.5g PF <b>1.82</b> / DD <b>%31</b>.</div>
         </div>
 
         <details id="waDetails" style="margin-top:8px; background:var(--panel2); border:1px solid var(--border); border-radius:8px; padding:7px 9px;">
