@@ -1917,11 +1917,13 @@ function evaluateWhaleSpike1h(k1h, idx) {
   return { approved: false, why: 'TREND_OR_TAKER', ...diag };
 }
 
-// 🧲 3. MOTOR — V7.3 TEMİZLENMİŞ BB Z-SCORE AŞIRI ALIM DÖNÜŞÜ (BTC BOĞA + TESTERE'de 7/24 AKTİF!)
-// 488 Koin 30g + 62.5g Dış-Örneklem Çift Doğrulamalı: RSI≥72, EMA20≥+%1.6, Satıcı≥%53, ATR 0.90–1.65, Fiyat≥$0.02, 15dk -%0.30..-%1.20, 4s<+%9.0, Hacim≥1.0x (PF 2.00, WR %70.2!)
+// 🧲 3. MOTOR — V7.5 TEMİZLENMİŞ BB Z-SCORE AŞIRI ALIM DÖNÜŞÜ (BTC BOĞA + TESTERE'de AKTİF!)
+// 30g (15.000 satır) + 62.5g Bağımsız OOS Çift Doğrulamalı: Hacim≥$10M, 15dk -%0.45..-%1.20, ATR 0.90–1.65, Fiyat≥$0.02, 08–12 TR Kalkanı!
 function getSessionRiskMult(tsMs = Date.now()) {
   const hourTR = new Date((Number(tsMs) || Date.now()) + (3 * 3600 * 1000)).getUTCHours();
-  return (hourTR >= 0 && hourTR < 4) ? 0.50 : 1.0; // 00:00–04:00 TR (21–01 UTC günlük mum kapanış ölü likidite saati): %50 risk!
+  if (hourTR >= 8 && hourTR < 12) return 0.0;  // 08:00–12:00 TR (Avrupa açılış testeresi: 30g PF 0.77, 62.5g PF 0.80, 4/4 yarı ekside ➔ Pas!)
+  if (hourTR >= 0 && hourTR < 4) return 0.50;  // 00:00–04:00 TR (21–01 UTC günlük mum kapanış ölü likidite saati: %50 risk!)
+  return 1.0;
 }
 
 function evaluateBbSnapback15m(k, idx, btcReg, btc15m = 0) {
@@ -1931,7 +1933,7 @@ function evaluateBbSnapback15m(k, idx, btcReg, btc15m = 0) {
   const c = parseFloat(k[idx][4]) || 0;
   if (c < 0.02 || o <= 0 || c >= o) return null; // Kırmızı teyit mumu + ≥$0.02 penny-koin tabanı (30g + 62.5g çift doğrulama!)
   const move = ((c - o) / o) * 100;
-  if (move > -0.30 || move <= -1.20) return null; // Zayıf boğa bayrağı (>-0.30%) ve aşırı düşmüş dip (≤-1.20%) ele!
+  if (move > -0.45 || move <= -1.20) return null; // Zayıf kırmızı mum (>-0.45%: 30g PF 0.71, 62.5g PF 0.97) ve aşırı düşmüş dip (≤-1.20%) ele!
 
   const q = parseFloat(k[idx][7]) || 0;
   const tb = parseFloat(k[idx][10]) || 0;
@@ -2448,10 +2450,11 @@ function analyzeCoinForReplay(sym, k, meta, btcRegime, cutoffTs, mode) {
     const takerFast = q > 0 ? (tb / q) * 100 : 50;
     const volMultFast = avgVol20Arr[i] > 0 ? (vArr[i] / avgVol20Arr[i]) : 1;
 
-    // 1. Öncelik: 15dk Balina Kırılımı (BTC BULL/BEAR hizalı; V7.4: Balina SHORT için 24s Hacim ≥$10M!)
-    if ((btcReg === 'BULL' || btcReg === 'BEAR') && (takerFast <= 40 || takerFast >= 60) && volMultFast >= 2.45) {
+    // 1. Öncelik: 15dk Balina Kırılımı (V7.5: Saf Likit ≥$10M + 08–12 TR kalkanı)
+    const isV75LiquidAndSession = Number(meta.vol24M) >= 10 && getSessionRiskMult(ts + 15 * 60000) > 0;
+    if (isV75LiquidAndSession && (btcReg === 'BULL' || btcReg === 'BEAR') && (takerFast <= 40 || takerFast >= 60) && volMultFast >= 2.45) {
       const sig = evaluateWhaleSpike15m(k, i);
-      if (sig && sig.approved && ((sig.side === 'LONG' && btcReg === 'BULL') || (sig.side === 'SHORT' && btcReg === 'BEAR' && Number(meta.vol24M) >= 10))) {
+      if (sig && sig.approved && ((sig.side === 'LONG' && btcReg === 'BULL') || (sig.side === 'SHORT' && btcReg === 'BEAR'))) {
         seenEventKey.add(ts);
         const ev = emitEvent(sig, i, btcReg, btc15m, true, '-');
         if (ev) events.push(ev);
@@ -2459,8 +2462,8 @@ function analyzeCoinForReplay(sym, k, meta, btcRegime, cutoffTs, mode) {
       }
     }
 
-    // 2. Öncelik: BB Z-Score Aşırı Alım Dönüşü (BTC BOĞA + TESTERE'de 7/24 aktif)
-    if (btcReg !== 'BEAR' && takerFast <= 47 && btc15m <= 0.25 && cArr[i] < oArr[i] && rsiArr[i - 1] >= 71.5) {
+    // 2. Öncelik: BB Z-Score Aşırı Alım Dönüşü (V7.5: Saf Likit ≥$10M + 15dk ≤-%0.45 + 08–12 TR kalkanı)
+    if (isV75LiquidAndSession && btcReg !== 'BEAR' && takerFast <= 47 && btc15m <= 0.25 && cArr[i] < oArr[i] && rsiArr[i - 1] >= 71.5) {
       const sigBb = evaluateBbSnapback15m(k, i, btcReg, btc15m);
       if (sigBb && sigBb.approved) {
         seenEventKey.add(ts);
@@ -2491,11 +2494,11 @@ function analyzeCoinForReplay(sym, k, meta, btcRegime, cutoffTs, mode) {
         // Mevcut botun neden pas geçtiğini teşhis et
         let skipReason = 'FILTRE_DISI';
         if (meta.tier === 'MAJOR') skipReason = 'MAJOR_YASAKLI';
-        else if (meta.tier !== 'LIKIT_10M+' && meta.tier !== 'LIKIT_5M_10M') skipReason = 'KOIN_HACIM_<5M';
+        else if (Number(meta.vol24M) < 10) skipReason = 'KOIN_HACIM_<10M';
+        else if (getSessionRiskMult(ts + 15 * 60000) <= 0) skipReason = 'SEANS_08_12_TR';
         else if (isImpulse) {
           if (btcReg === 'CHOP') skipReason = 'BTC_CHOP';
           else if ((candSide === 'LONG' && btcReg !== 'BULL') || (candSide === 'SHORT' && btcReg !== 'BEAR')) skipReason = 'BTC_TERS';
-          else if (candSide === 'SHORT' && Number(meta.vol24M) < 10) skipReason = 'BALINA_SHORT_<10M';
           else if (atr15 < 0.90 || atr15 > 3.50) skipReason = 'ATR_DISI';
           else if (volMultFast < 2.50) skipReason = 'HACIM_<2.5x';
           else if (volMultFast > 8.00) skipReason = 'HACIM_CLIMAX';
@@ -2506,7 +2509,7 @@ function analyzeCoinForReplay(sym, k, meta, btcRegime, cutoffTs, mode) {
           if (candSide === 'LONG') skipReason = 'DIP_LONG_KAPALI';
           else if (btcReg === 'BEAR') skipReason = 'BTC_BEAR';
           else if (c < 0.02) skipReason = 'PENNY_<0.02';
-          else if (move > -0.30) skipReason = 'ZAYIF_MUM(>-0.30)';
+          else if (move > -0.45) skipReason = 'ZAYIF_MUM(>-0.45)';
           else if (move <= -1.20) skipReason = 'MUM_COK_DUSTU';
           else if (atr15 > 1.65) skipReason = 'ATR_YUKSEK(>1.65)';
           else if (chg4h >= 9.0) skipReason = '4S_PARABOLIK';
@@ -2551,7 +2554,7 @@ function analyzeCoinForReplay(sym, k, meta, btcRegime, cutoffTs, mode) {
     const sig1h = evaluateWhaleSpike1h(k1h, j);
     if (sig1h && sig1h.approved) {
       if (btcReg && ((sig1h.side === 'LONG' && btcReg !== 'BULL') || (sig1h.side === 'SHORT' && btcReg !== 'BEAR'))) continue;
-      if (sig1h.side === 'SHORT' && Number(meta.vol24M) < 10) continue; // V7.4: Balina SHORT ≥$10M
+      if (Number(meta.vol24M) < 10 || getSessionRiskMult(lastTs15 + 15 * 60000) <= 0) continue; // V7.5: Saf Likit ≥$10M + 08–12 TR kalkanı
       seenEventKey.add(lastTs15);
       const btc15m = btcRegime.byMove ? (btcRegime.byMove.get(lastTs15) || 0) : 0;
       const ev = emitEvent({ ...sig1h, timeframe: '1H' }, idx15, btcReg || 'CHOP', btc15m, true, '-');
@@ -2665,7 +2668,7 @@ async function runHistoricalReplay(hours = 72, maxCoins = 120, opts = {}) {
         const volM = (parseFloat(t.quoteVolume) || 0) / 1e6;
         if (price <= 0 || volM <= 0) return false;
         if (scope === 'all') return isPureCryptoFuturesSymbol(t.symbol);
-        return isTradableCryptoSymbol(t.symbol) && price >= 0.008 && volM >= 5.0;
+        return isTradableCryptoSymbol(t.symbol) && price >= 0.008 && volM >= 10.0;
       });
 
       const metaBySym = new Map();
@@ -2889,6 +2892,7 @@ async function runHistoricalReplay(hours = 72, maxCoins = 120, opts = {}) {
 
           const slPctEst = ev.slPct;
           const sessionMult = getSessionRiskMult(evEntryTs);
+          if (sessionMult <= 0) continue;
           const rawRiskUsd = Math.max(1.50, bal * (replayRiskPct / 100) * (ev.riskMult || 1.0) * sessionMult);
           const reqNominal = rawRiskUsd / ((slPctEst + 0.09) / 100);
           const reqMargin = reqNominal / replayLev;
@@ -3347,8 +3351,8 @@ async function scanLoop() {
         isVip
       };
     })
-    // 🚀 V7 CANLI EVREN: TÜM LİKİT & MİD-LİKİT SAF KRİPTO FUTURES'LAR (≥$5M, ~150+ koin kesintisiz!) TARANIR!
-    .filter(t => t.volM >= 5 && t.chg <= 80 && t.chg >= -50)
+    // 🚀 V7.5 CANLI EVREN: SAF LİKİT KRİPTO FUTURES'LAR (≥$10M, 30g PF 1.99 / WR %71.1, 62.5g PF 1.57!)
+    .filter(t => t.volM >= 10 && t.chg <= 80 && t.chg >= -50)
     .sort((a, b) => b.hotScore - a.hotScore)
     .slice(0, Math.max(220, Number(DYNAMIC.candidateSlice) || 220));
 
@@ -3373,12 +3377,20 @@ async function scanLoop() {
       } catch (e) {}
     }
 
+    const curSessionMult = getSessionRiskMult(now);
     if (now - lastScanHeartbeat > 60000 && topCandidates.length > 0) {
       lastScanHeartbeat = now;
-      const windowLbl = (secIn15mNow >= 4 && secIn15mNow <= 180)
-        ? '⚡ 15dk Kapanış Taraması AÇIK'
-        : `⏳ Sonraki 15dk mum: ${Math.ceil((900 - secIn15mNow) / 60)} dk`;
-      addLog(`🐋 [V7 Trinity Tarayıcı]: ${validTickers.length} Saf Kripto (${topCandidates.length} Likit Aday ≥$5M) | ${liveBtcRegime.label} | Lider: ${topCandidates[0].symbol} (24s: %${topCandidates[0].chg.toFixed(1)}) | ${windowLbl} | Slot: ${activePositions.length}/${CONFIG.maxSlots}`);
+      const windowLbl = curSessionMult <= 0
+        ? '🛡️ 08:00–12:00 TR Avrupa Açılış Kalkanı (Yeni İşlem Yok)'
+        : ((secIn15mNow >= 4 && secIn15mNow <= 180)
+          ? '⚡ 15dk Kapanış Taraması AÇIK'
+          : `⏳ Sonraki 15dk mum: ${Math.ceil((900 - secIn15mNow) / 60)} dk`);
+      addLog(`🐋 [V7.5 Trinity Tarayıcı]: ${validTickers.length} Saf Kripto (${topCandidates.length} Likit Aday ≥$10M) | ${liveBtcRegime.label} | Lider: ${topCandidates[0].symbol} (24s: %${topCandidates[0].chg.toFixed(1)}) | ${windowLbl} | Slot: ${activePositions.length}/${CONFIG.maxSlots}`);
+    }
+
+    // 🛡️ 08:00–12:00 TR (Avrupa açılış testeresi): yeni giriş açılmaz, gereksiz kline API çağrısı yapılmaz!
+    if (curSessionMult <= 0) {
+      return;
     }
 
     if (!global.whaleEvaluatedCandles) global.whaleEvaluatedCandles = new Map();
@@ -3541,6 +3553,7 @@ async function scanLoop() {
         const tradeSlPct = Number((sig.slPctOverride || Math.max(1.00, Math.min(2.80, sig.atr15 * 1.50))).toFixed(2));
         const cfgRiskPct = Math.max(1.0, Math.min(10.0, Number(CONFIG.riskPct) || 6.0));
         const sessionRiskMult = getSessionRiskMult(now);
+        if (sessionRiskMult <= 0) continue;
         const engineRiskMult = (Number(sig.riskMult) || 1.0) * sessionRiskMult;
         const equityRiskUsd = Math.max(1.50, Number((balance * (cfgRiskPct / 100) * engineRiskMult).toFixed(2)));
         const targetRiskUsd = circuitOn ? Math.max(1.50, Number((equityRiskUsd * 0.50).toFixed(2))) : equityRiskUsd;
@@ -5193,7 +5206,7 @@ function serveDashboardHtml() {
               <option value="720">Son 30 Gün (720s)</option>
             </select>
             <select id="selReplayScope" style="background:var(--panel2); color:var(--text); border:1px solid var(--border); border-radius:6px; padding:6px 8px; font-weight:800; font-size:11.5px;">
-              <option value="liquid" selected>💧 Canlı Likit (≥$5M · ~150 Koin)</option>
+              <option value="liquid" selected>💧 Canlı Likit (≥$10M · V7.5)</option>
               <option value="all">🌐 Tüm Binance (~488 Koin)</option>
             </select>
             <select id="selReplayMode" style="background:var(--panel2); color:var(--text); border:1px solid var(--border); border-radius:6px; padding:6px 8px; font-weight:800; font-size:11.5px;">
