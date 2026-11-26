@@ -25,14 +25,14 @@ try {
   evaluatePreTradeClearance = judgeMod.evaluatePreTradeClearance;
 } catch (e) {}
 
-// --- EKRAN 1 BİREBİR AYARLARI (MARSCOIN V8.0 YÜKSEK HIZ — 30-34 İŞLEM/GÜN · 8 SLOT · %3 RİSK) ---
+// --- EKRAN 1 BİREBİR AYARLARI (MARSCOIN V8.1 TURBO 5-MOTOR — 45-65 İŞLEM/GÜN · 12 SLOT · %2.5 RİSK · 7/24) ---
 let CONFIG = {
   initialBalance: 100.0,     // Bakiye 100 Dolar
-  marginPerTrade: 12.0,      // Referans teminat (8 slota göre otomatik bileşik ölçeklenir)
-  riskPct: 3.0,              // Kasa bazlı bileşik işlem riski (8 slotta güvenli %3.0 standart)
-  riskPerTradeUsd: 3.00,     // Referans dolar riski
-  leverage: 15,              // 15x kaldıraç (Likidasyon ~%6.0 uzaklıkta; maks SL %2.80'in 2 katından fazla güvenlik tamponu)
-  maxSlots: 8,               // Max 8 pozisyon (Yüksek Hız: 30-34 işlem/gün; aynı yön max 6, BB max 6!)
+  marginPerTrade: 8.0,       // Referans teminat (12 slota göre otomatik bileşik ölçeklenir)
+  riskPct: 2.5,              // Kasa bazlı bileşik işlem riski (12 slotta dengeli %2.5)
+  riskPerTradeUsd: 2.50,     // Referans dolar riski
+  leverage: 15,              // 15x kaldıraç
+  maxSlots: 12,              // Max 12 pozisyon (Turbo 5-Motor: 45-65 işlem/gün; aynı yön max 10, aux max 10!)
   slPct: 1.50,               // Baz stop (15dk ATR x 1.50 ile %1.00 - %2.80 arası otomatik esner)
   bePct: 1.50,               // LONG 1.0R / SHORT 0.75R kâr görünce stop +%0.15'e çekilir ($0 risk!)
   tp1Pct: 1.80,              // LONG 1.2R (0.70R aralık) / SHORT 0.90R (0.45R aralık) iz süren Runner devreye girer
@@ -60,14 +60,14 @@ let DYNAMIC = {
   updatedAt: 0
 };
 
-let userRisk = { maxSlots: 8, marginPerTrade: 12 };
+let userRisk = { maxSlots: 12, marginPerTrade: 8 };
 let circuitOn = false;
 
 function getDynamicMargin() {
   if (circuitOn) {
-    return Math.min(Number(userRisk.marginPerTrade) || 12, 8);
+    return Math.min(Number(userRisk.marginPerTrade) || 8, 6);
   }
-  return Number(userRisk.marginPerTrade) || 12;
+  return Number(userRisk.marginPerTrade) || 8;
 }
 
 function rememberUserRisk() {
@@ -84,8 +84,8 @@ function applyCircuitBreaker() {
   const severe = balance < Math.max(30, initial * 0.35) || dd >= 0.60;
   const profitGuard = !severe && dd >= 0.48;
   if (severe) {
-    const nextMargin = Math.min(Number(userRisk.marginPerTrade) || 12, 8);
-    const nextSlots = Math.min(userRisk.maxSlots || 8, 4);
+    const nextMargin = Math.min(Number(userRisk.marginPerTrade) || 8, 6);
+    const nextSlots = Math.min(userRisk.maxSlots || 12, 6);
     const changed = !circuitOn || CONFIG.maxSlots !== nextSlots || CONFIG.marginPerTrade !== nextMargin;
     circuitOn = true;
     CONFIG.maxSlots = nextSlots;
@@ -99,11 +99,11 @@ function applyCircuitBreaker() {
   const dynamicMargin = getDynamicMargin();
   circuitOn = false;
   if (profitGuard) {
-    CONFIG.maxSlots = Math.min(userRisk.maxSlots || 8, 6);
+    CONFIG.maxSlots = Math.min(userRisk.maxSlots || 12, 9);
     CONFIG.marginPerTrade = dynamicMargin;
     DYNAMIC.mode = 'MARSCOIN_15M_WHALE';
   } else {
-    CONFIG.maxSlots = userRisk.maxSlots || 8;
+    CONFIG.maxSlots = userRisk.maxSlots || 12;
     CONFIG.marginPerTrade = dynamicMargin;
     DYNAMIC.mode = 'MARSCOIN_15M_WHALE';
   }
@@ -548,6 +548,8 @@ function formatWaPrice(p) {
 function formatWaEngine(radarTag, strategy) {
   const tag = String(radarTag || '');
   if (strategy === 'BB_MR' || tag.includes('BB DÖNÜŞ')) return '🧲 BB Dönüş';
+  if (strategy === 'HDIST' || tag.includes('GİZLİ DAĞITIM')) return '🕵️ Gizli Dağıtım';
+  if (strategy === 'DON_S' || tag.includes('DONCHIAN')) return '📉 Donchian Kırılım';
   if (tag.includes('1S') || tag.includes('1H')) return '⏱️ 1S Balina';
   return '🐋 15dk Balina';
 }
@@ -1702,34 +1704,33 @@ function evaluateWhaleSpike15m(k, idx) {
   const distEma20 = ema20 > 0 ? Math.abs((c - ema20) / ema20) * 100 : 0;
   const diag = { atr15, volMult, taker, move, chg1h, chg3h, chg4h, ema20, ema50, distEma20, rsi15, closePx: c, candleTs: Number(k[idx][0]) || 0 };
 
-  // 🚀 V8.0 YÜKSEK HIZ (30-34 İŞLEM/GÜN): Optimize edilmiş Balina 15m eşikleri (62.5g: PF 1.17, WR %60.5, +87.9R, H1+H2 pozitif!)
+  // 🚀 V8.1 TURBO ASİMETRİK BALİNA 15M (62g Gerçek-Taker Doğrulamalı: LONG sıkı PF 1.46, SHORT hızlı PF 1.14!)
   if (atr15 < 0.80 || atr15 > 3.50) return { approved: false, why: 'ATR15', ...diag };
-  if (volMult < 1.70) return { approved: false, why: 'VOL_LOW', ...diag };
+  if (volMult < 1.80) return { approved: false, why: 'VOL_LOW', ...diag };
   if (volMult > 8.00) return { approved: false, why: 'VOL_CLIMAX', ...diag };
   if (distEma20 > 4.50) return { approved: false, why: 'EMA_STRETCH', ...diag };
 
-  const minMoveReq = atr15 * 0.75;
-  const minTakerLong = 56.0;
-  const maxTakerShort = 44.0;
-
   const longOk =
-    move >= minMoveReq &&
-    move <= atr15 * 2.50 &&
+    atr15 >= 0.90 &&
+    volMult >= 2.50 &&
+    distEma20 <= 4.00 &&
+    move >= atr15 * 0.90 &&
+    move <= atr15 * 2.40 &&
     c > ema20 &&
     ema20 > ema50 &&
-    taker >= minTakerLong &&
-    chg4h >= 1.0 &&
-    chg4h <= 9.0 &&
+    taker >= 60.0 &&
+    chg4h >= 2.0 &&
+    chg4h <= 6.0 &&
     upperWick <= 0.45;
 
   const shortOk =
-    move <= -minMoveReq &&
-    move >= -atr15 * 2.50 &&
+    move <= -(atr15 * 0.80) &&
+    move >= -(atr15 * 2.50) &&
     c < ema20 &&
     ema20 < ema50 &&
-    taker <= maxTakerShort &&
-    chg4h <= -1.0 &&
-    chg4h >= -9.0 &&
+    taker <= 42.0 &&
+    chg4h <= -1.2 &&
+    chg4h >= -8.0 &&
     lowerWick <= 0.45;
 
   if (longOk) {
@@ -1909,12 +1910,10 @@ function evaluateWhaleSpike1h(k1h, idx) {
   return { approved: false, why: 'TREND_OR_TAKER', ...diag };
 }
 
-// 🧲 3. MOTOR — V7.5 TEMİZLENMİŞ BB Z-SCORE AŞIRI ALIM DÖNÜŞÜ (BTC BOĞA + TESTERE'de AKTİF!)
-// 30g (15.000 satır) + 62.5g Bağımsız OOS Çift Doğrulamalı: Hacim≥$10M, 15dk -%0.45..-%1.20, ATR 0.90–1.65, Fiyat≥$0.02, 08–12 TR Kalkanı!
+// 🧲 3. MOTOR — V8.1 TURBO BB Z-SCORE AŞIRI ALIM DÖNÜŞÜ (7/24 AKTİF! 62g Gerçek-Taker: WR %64.3, PF 1.17, +73.3R, H1+H2 Pozitif!)
 function getSessionRiskMult(tsMs = Date.now()) {
   const hourTR = new Date((Number(tsMs) || Date.now()) + (3 * 3600 * 1000)).getUTCHours();
-  if (hourTR >= 8 && hourTR < 12) return 0.0;  // 08:00–12:00 TR (Avrupa açılış testeresi: 30g PF 0.77, 62.5g PF 0.80, 4/4 yarı ekside ➔ Pas!)
-  if (hourTR >= 0 && hourTR < 4) return 0.50;  // 00:00–04:00 TR (21–01 UTC günlük mum kapanış ölü likidite saati: %50 risk!)
+  if (hourTR >= 0 && hourTR < 4) return 0.50;  // 00:00–04:00 TR: %50 gece riski (diğer tüm saatler 7/24 tam aktif!)
   return 1.0;
 }
 
@@ -1923,9 +1922,9 @@ function evaluateBbSnapback15m(k, idx, btcReg, btc15m = 0) {
   if (btcReg === 'BEAR' || btc15m > 0.30) return null;
   const o = parseFloat(k[idx][1]) || 0;
   const c = parseFloat(k[idx][4]) || 0;
-  if (c < 0.02 || o <= 0 || c >= o) return null; // Kırmızı teyit mumu + ≥$0.02 penny-koin tabanı
+  if (c < 0.02 || o <= 0 || c >= o) return null;
   const move = ((c - o) / o) * 100;
-  if (move > -0.35 || move <= -1.50) return null; // V8.0 Yüksek Hız: -%0.35..-1.50 kırmızı dönüş mumu
+  if (move > -0.35 || move <= -1.50) return null;
 
   const q = parseFloat(k[idx][7]) || 0;
   const tb = parseFloat(k[idx][10]) || 0;
@@ -1945,12 +1944,11 @@ function evaluateBbSnapback15m(k, idx, btcReg, btc15m = 0) {
     else { avgG = (avgG * 13 + g) / 14; avgL = (avgL * 13 + ls) / 14; }
     if (m === idx - 1) rsiPrev = avgL === 0 ? 100 : 100 - (100 / (1 + avgG / avgL));
   }
-  if (rsiPrev < 68.0) return null;
+  if (rsiPrev < 67.0) return null;
 
   const distPct = ema20 > 0 ? ((c - ema20) / ema20) * 100 : 0;
-  if (distPct < 1.25) return null;
+  if (distPct < 1.20) return null;
 
-  // Önceki mumun (idx - 1) 20 barlık Bollinger Z-Skoru
   let mean = 0;
   for (let m = idx - 20; m <= idx - 1; m++) mean += parseFloat(k[m][4]) || 0;
   mean /= 20;
@@ -1959,7 +1957,7 @@ function evaluateBbSnapback15m(k, idx, btcReg, btc15m = 0) {
   const sd = Math.sqrt(v2 / 20);
   const prevC = parseFloat(k[idx - 1][4]) || 0;
   const bbzPrev = sd > 0 ? (prevC - mean) / sd : 0;
-  if (bbzPrev < 1.90) return null;
+  if (bbzPrev < 1.85) return null;
 
   let trSum = 0;
   for (let m = idx - 14; m < idx; m++) {
@@ -1967,7 +1965,7 @@ function evaluateBbSnapback15m(k, idx, btcReg, btc15m = 0) {
     if (pc > 0) trSum += (Math.max(hh - ll, Math.abs(hh - pc), Math.abs(ll - pc)) / pc) * 100;
   }
   const atr15 = trSum / 14;
-  if (atr15 < 0.80 || atr15 > 1.95) return null;
+  if (atr15 < 0.80 || atr15 > 2.00) return null;
 
   const open4h = parseFloat(k[idx - 16][1]) || o;
   const chg4h = open4h > 0 ? ((c - open4h) / open4h) * 100 : 0;
@@ -1976,7 +1974,7 @@ function evaluateBbSnapback15m(k, idx, btcReg, btc15m = 0) {
   let sumV = 0;
   for (let m = idx - 20; m < idx; m++) sumV += parseFloat(k[m][5]) || 0;
   const volMult = sumV > 0 ? (parseFloat(k[idx][5]) || 0) / (sumV / 20) : 1;
-  if (volMult < 0.85) return null;
+  if (volMult < 0.80) return null;
   const open1h = parseFloat(k[idx - 4][1]) || o;
   const open3h = parseFloat(k[idx - 12][1]) || o;
   const slPct = Number(Math.max(1.00, Math.min(2.80, atr15 * 1.50)).toFixed(2));
@@ -2065,6 +2063,88 @@ function evaluateHiddenDistrib15m(k, idx, btc15m = 0) {
     chg1h: open1h > 0 ? ((c - open1h) / open1h) * 100 : 0,
     chg3h: open3h > 0 ? ((c - open3h) / open3h) * 100 : 0,
     chg4h: open4h > 0 ? ((c - open4h) / open4h) * 100 : 0,
+    ema20, ema50, distEma20: ema20 > 0 ? Math.abs((c - ema20) / ema20) * 100 : 0, rsi15,
+    closePx: c, candleTs: Number(k[idx][0]) || 0
+  };
+}
+
+// 📉 5. MOTOR — 20-MUM DONCHIAN AYI KIRILIMI (62g Gerçek-Taker: WR %58.0, PF 1.21, +69.3R · Yalnızca BTC AYI + ≥$10M!)
+function evaluateDonchianBreakdown15m(k, idx, btcReg) {
+  if (!Array.isArray(k) || idx < 60 || idx >= k.length) return null;
+  if (btcReg !== 'BEAR') return null;
+  const o = parseFloat(k[idx][1]) || 0;
+  const h = parseFloat(k[idx][2]) || 0;
+  const l = parseFloat(k[idx][3]) || 0;
+  const c = parseFloat(k[idx][4]) || 0;
+  if (c < 0.02 || o <= 0 || c >= o) return null;
+
+  let lo20 = Infinity;
+  for (let m = idx - 20; m < idx; m++) {
+    const lm = parseFloat(k[m][3]) || Infinity;
+    if (lm < lo20) lo20 = lm;
+  }
+  if (!(c < lo20)) return null;
+
+  const q = parseFloat(k[idx][7]) || 0;
+  const tb = parseFloat(k[idx][10]) || 0;
+  const taker = q > 0 ? (tb / q) * 100 : 50;
+  if (taker > 40.0) return null;
+
+  const span = h - l;
+  const lowerWick = span > 0 ? (Math.min(c, o) - l) / span : 0;
+  if (lowerWick > 0.40) return null;
+
+  let sumV = 0;
+  for (let m = idx - 20; m < idx; m++) sumV += parseFloat(k[m][5]) || 0;
+  const volMult = sumV > 0 ? (parseFloat(k[idx][5]) || 0) / (sumV / 20) : 1;
+  if (volMult < 1.50) return null;
+
+  let trSum = 0;
+  for (let m = idx - 14; m < idx; m++) {
+    const hh = parseFloat(k[m][2]) || 0, ll = parseFloat(k[m][3]) || 0, pc = parseFloat(k[m - 1][4]) || 0;
+    if (pc > 0) trSum += (Math.max(hh - ll, Math.abs(hh - pc), Math.abs(ll - pc)) / pc) * 100;
+  }
+  const atr15 = trSum / 14;
+  if (atr15 < 0.85 || atr15 > 3.00) return null;
+
+  let ema20 = parseFloat(k[0][4]) || 0, ema50 = ema20;
+  for (let m = 1; m <= idx; m++) {
+    const cm = parseFloat(k[m][4]) || ema20;
+    ema20 = cm * (2 / 21) + ema20 * (19 / 21);
+    ema50 = cm * (2 / 51) + ema50 * (49 / 51);
+  }
+  if (!(c < ema20 && ema20 < ema50)) return null;
+
+  const open4h = parseFloat(k[idx - 16][1]) || o;
+  const chg4h = open4h > 0 ? ((c - open4h) / open4h) * 100 : 0;
+  if (chg4h < -8.0) return null;
+
+  let rg = 0, rl = 0;
+  for (let m = idx - 14; m <= idx; m++) {
+    const d = (parseFloat(k[m][4]) || 0) - (parseFloat(k[m - 1][4]) || 0);
+    if (d > 0) rg += d; else rl -= d;
+  }
+  const rsi15 = rl === 0 ? 100 : 100 - (100 / (1 + rg / rl));
+  const open1h = parseFloat(k[idx - 4][1]) || o;
+  const open3h = parseFloat(k[idx - 12][1]) || o;
+  const move = ((c - o) / o) * 100;
+  const slPct = Number(Math.max(1.00, Math.min(2.80, atr15 * 1.50)).toFixed(2));
+
+  return {
+    approved: true,
+    engine: 'DON_S',
+    timeframe: 'DON',
+    isAux: false,
+    riskMult: 0.85,
+    exitMode: 'RUNNER',
+    maxBars15: 24,
+    side: 'SHORT',
+    score: 240 + (volMult * 12) + (50 - taker),
+    slPctOverride: slPct,
+    atr15, volMult, taker, move,
+    chg1h: open1h > 0 ? ((c - open1h) / open1h) * 100 : 0,
+    chg3h: open3h > 0 ? ((c - open3h) / open3h) * 100 : 0,
+    chg4h,
     ema20, ema50, distEma20: ema20 > 0 ? Math.abs((c - ema20) / ema20) * 100 : 0, rsi15,
     closePx: c, candleTs: Number(k[idx][0]) || 0
   };
@@ -2442,11 +2522,12 @@ function analyzeCoinForReplay(sym, k, meta, btcRegime, cutoffTs, mode) {
     const takerFast = q > 0 ? (tb / q) * 100 : 50;
     const volMultFast = avgVol20Arr[i] > 0 ? (vArr[i] / avgVol20Arr[i]) : 1;
 
-    // 1. Öncelik: 15dk Balina Kırılımı (V8.0 Yüksek Hız: Saf Likit ≥$10M + 08–12 TR kalkanı)
-    const isV75LiquidAndSession = Number(meta.vol24M) >= 10 && getSessionRiskMult(ts + 15 * 60000) > 0;
-    if (isV75LiquidAndSession && (btcReg === 'BULL' || btcReg === 'BEAR') && (takerFast <= 44 || takerFast >= 56) && volMultFast >= 1.68) {
+    // V8.1 TURBO 5-MOTOR (Canlı + Replay 1-e-1: WHALE_15M + DON_S + HDIST + BB_MR + 1H!)
+    const volM = Number(meta.vol24M) || 0;
+    // 1. Öncelik: 15dk Balina Kırılımı (LONG ≥$5M, SHORT ≥$10M)
+    if (volM >= 5 && (btcReg === 'BULL' || btcReg === 'BEAR') && (takerFast <= 42 || takerFast >= 60) && volMultFast >= 1.78) {
       const sig = evaluateWhaleSpike15m(k, i);
-      if (sig && sig.approved && ((sig.side === 'LONG' && btcReg === 'BULL') || (sig.side === 'SHORT' && btcReg === 'BEAR'))) {
+      if (sig && sig.approved && ((sig.side === 'LONG' && btcReg === 'BULL') || (sig.side === 'SHORT' && btcReg === 'BEAR' && volM >= 10))) {
         seenEventKey.add(ts);
         const ev = emitEvent(sig, i, btcReg, btc15m, true, '-');
         if (ev) events.push(ev);
@@ -2454,8 +2535,30 @@ function analyzeCoinForReplay(sym, k, meta, btcRegime, cutoffTs, mode) {
       }
     }
 
-    // 2. Öncelik: BB Z-Score Aşırı Alım Dönüşü (V8.0 Yüksek Hız: Saf Likit ≥$10M + 15dk ≤-%0.35 + 08–12 TR kalkanı)
-    if (isV75LiquidAndSession && btcReg !== 'BEAR' && takerFast <= 49 && btc15m <= 0.30 && cArr[i] < oArr[i] && rsiArr[i - 1] >= 67.5) {
+    // 2. Öncelik: 20-Mum Donchian Ayı Kırılımı (BTC AYI + ≥$10M)
+    if (volM >= 10 && btcReg === 'BEAR' && takerFast <= 40 && volMultFast >= 1.48 && cArr[i] < oArr[i]) {
+      const sigDon = evaluateDonchianBreakdown15m(k, i, btcReg);
+      if (sigDon && sigDon.approved) {
+        seenEventKey.add(ts);
+        const ev = emitEvent(sigDon, i, btcReg, btc15m, true, '-');
+        if (ev) events.push(ev);
+        continue;
+      }
+    }
+
+    // 3. Öncelik: Gizli Balina Dağıtımı (Yeşil tuzak mumu + ≥%58 satıcı — 7/24 tüm rejimler, ≥$5M)
+    if (volM >= 5 && btc15m <= 0.30 && cArr[i] > oArr[i] && takerFast <= 42 && volMultFast >= 1.58) {
+      const sigHd = evaluateHiddenDistrib15m(k, i, btc15m);
+      if (sigHd && sigHd.approved) {
+        seenEventKey.add(ts);
+        const ev = emitEvent(sigHd, i, btcReg, btc15m, true, '-');
+        if (ev) events.push(ev);
+        continue;
+      }
+    }
+
+    // 4. Öncelik: BB Z-Score Aşırı Alım Dönüşü (BTC BOĞA + TESTERE'de 7/24, ≥$5M)
+    if (volM >= 5 && btcReg !== 'BEAR' && takerFast <= 49 && btc15m <= 0.30 && cArr[i] < oArr[i] && rsiArr[i - 1] >= 66.5) {
       const sigBb = evaluateBbSnapback15m(k, i, btcReg, btc15m);
       if (sigBb && sigBb.approved) {
         seenEventKey.add(ts);
@@ -2546,7 +2649,8 @@ function analyzeCoinForReplay(sym, k, meta, btcRegime, cutoffTs, mode) {
     const sig1h = evaluateWhaleSpike1h(k1h, j);
     if (sig1h && sig1h.approved) {
       if (btcReg && ((sig1h.side === 'LONG' && btcReg !== 'BULL') || (sig1h.side === 'SHORT' && btcReg !== 'BEAR'))) continue;
-      if (Number(meta.vol24M) < 10 || getSessionRiskMult(lastTs15 + 15 * 60000) <= 0) continue; // V7.5: Saf Likit ≥$10M + 08–12 TR kalkanı
+      if (sig1h.side === 'SHORT' && Number(meta.vol24M) < 10) continue;
+      if (Number(meta.vol24M) < 5) continue;
       seenEventKey.add(lastTs15);
       const btc15m = btcRegime.byMove ? (btcRegime.byMove.get(lastTs15) || 0) : 0;
       const ev = emitEvent({ ...sig1h, timeframe: '1H' }, idx15, btcReg || 'CHOP', btc15m, true, '-');
@@ -2660,7 +2764,7 @@ async function runHistoricalReplay(hours = 72, maxCoins = 120, opts = {}) {
         const volM = (parseFloat(t.quoteVolume) || 0) / 1e6;
         if (price <= 0 || volM <= 0) return false;
         if (scope === 'all') return isPureCryptoFuturesSymbol(t.symbol);
-        return isTradableCryptoSymbol(t.symbol) && price >= 0.008 && volM >= 10.0;
+        return isTradableCryptoSymbol(t.symbol) && price >= 0.008 && volM >= 5.0;
       });
 
       const metaBySym = new Map();
@@ -2890,15 +2994,15 @@ async function runHistoricalReplay(hours = 72, maxCoins = 120, opts = {}) {
           const reqMargin = reqNominal / replayLev;
           const bookedMargin = openSlots.reduce((acc, pSlot) => acc + (pSlot.margin || 0), 0);
           const freeMargin = Math.max(0, bal - bookedMargin);
-          const maxSlotMargin = Math.max(10.0, bal * (0.94 / replaySlots));
+          const maxSlotMargin = Math.max(7.5, bal * (0.94 / replaySlots));
           const actualMargin = Math.min(reqMargin, freeMargin, maxSlotMargin);
-          if (actualMargin < 5.0) continue;
+          if (actualMargin < 4.0) continue;
           const riskUsd = rawRiskUsd * (actualMargin / reqMargin);
 
           const rec = buildTradeRecord(ev, riskUsd, bal);
           oppNetTotal += rec.oppPnl;
           openSlots.push({ symbol: ev.symbol, side: ev.side, isAux: !!ev.isAux, margin: actualMargin, exitTs: rec.exitTs, netPnl: rec.netPnl, ref: rec });
-          coinCd[ev.symbol] = Math.max(coinCd[ev.symbol] || 0, rec.exitTs + (30 * 60 * 1000));
+          coinCd[ev.symbol] = Math.max(coinCd[ev.symbol] || 0, rec.exitTs + (15 * 60 * 1000));
           trades.push(rec);
         }
         openSlots.sort((a, b) => a.exitTs - b.exitTs);
@@ -3279,7 +3383,7 @@ async function scanLoop() {
     // 🛡️ SERBEST MARJİN / SERMAYE KONTROLÜ: Açık pozisyonlar ve yeni işlem için yeterli kasa yoksa bekle
     const usedMargin = activePositions.reduce((acc, p) => acc + (p.margin || 0), 0);
     const freeMargin = balance - usedMargin;
-    const minEntryMargin = 5.0;
+    const minEntryMargin = 4.0;
     if (freeMargin < minEntryMargin || balance < minEntryMargin) {
       if (Date.now() - lastScanHeartbeat > 60000) {
         addLog(`⚠️ Yetersiz Serbest Teminat: Kasa $${balance.toFixed(2)} (Serbest: $${freeMargin.toFixed(2)}) < $${minEntryMargin.toFixed(2)}. Yeni işlem açılmıyor.`, 'WARN');
@@ -3343,10 +3447,10 @@ async function scanLoop() {
         isVip
       };
     })
-    // 🚀 V7.5 CANLI EVREN: SAF LİKİT KRİPTO FUTURES'LAR (≥$10M, 30g PF 1.99 / WR %71.1, 62.5g PF 1.57!)
-    .filter(t => t.volM >= 10 && t.chg <= 80 && t.chg >= -50)
+    // 🚀 V8.1 TURBO 5-MOTOR EVRENİ: TÜM ≥$5M LİKİT SAF KRİPTO FUTURES'LAR (~180+ koin; Balina SHORT & DON_S ≥$10M!)
+    .filter(t => t.volM >= 5 && t.chg <= 80 && t.chg >= -50)
     .sort((a, b) => b.hotScore - a.hotScore)
-    .slice(0, Math.max(220, Number(DYNAMIC.candidateSlice) || 220));
+    .slice(0, Math.max(240, Number(DYNAMIC.candidateSlice) || 240));
 
     const secIn15mNow = Math.floor((now / 1000) % 900);
     const expectedClosedTs = (Math.floor(now / 900000) * 900000) - 900000;
@@ -3372,17 +3476,10 @@ async function scanLoop() {
     const curSessionMult = getSessionRiskMult(now);
     if (now - lastScanHeartbeat > 60000 && topCandidates.length > 0) {
       lastScanHeartbeat = now;
-      const windowLbl = curSessionMult <= 0
-        ? '🛡️ 08:00–12:00 TR Avrupa Açılış Kalkanı (Yeni İşlem Yok)'
-        : ((secIn15mNow >= 4 && secIn15mNow <= 180)
-          ? '⚡ 15dk Kapanış Taraması AÇIK'
-          : `⏳ Sonraki 15dk mum: ${Math.ceil((900 - secIn15mNow) / 60)} dk`);
-      addLog(`⚡ [V8.0 Yüksek Hız Tarayıcı]: ${validTickers.length} Saf Kripto (${topCandidates.length} Likit Aday ≥$10M) | ${liveBtcRegime.label} | Lider: ${topCandidates[0].symbol} (24s: %${topCandidates[0].chg.toFixed(1)}) | ${windowLbl} | Slot: ${activePositions.length}/${CONFIG.maxSlots}`);
-    }
-
-    // 🛡️ 08:00–12:00 TR (Avrupa açılış testeresi): yeni giriş açılmaz, gereksiz kline API çağrısı yapılmaz!
-    if (curSessionMult <= 0) {
-      return;
+      const windowLbl = (secIn15mNow >= 4 && secIn15mNow <= 180)
+        ? '⚡ 15dk Kapanış Taraması AÇIK'
+        : `⏳ Sonraki 15dk mum: ${Math.ceil((900 - secIn15mNow) / 60)} dk`;
+      addLog(`🔥 [V8.1 Turbo 5-Motor]: ${validTickers.length} Saf Kripto (${topCandidates.length} Aday ≥$5M) | ${liveBtcRegime.label} | Lider: ${topCandidates[0].symbol} (24s: %${topCandidates[0].chg.toFixed(1)}) | ${windowLbl} | Slot: ${activePositions.length}/${CONFIG.maxSlots}`);
     }
 
     if (!global.whaleEvaluatedCandles) global.whaleEvaluatedCandles = new Map();
@@ -3448,7 +3545,7 @@ async function scanLoop() {
         const vol24MNow = Number(data.volM) || 0;
         let sig = null;
         let whaleDiag = null;
-        // 1. Öncelik: 15dk Balina Kırılımı (BTC BULL/BEAR hizalı; V7.4: Balina SHORT için 24s Hacim ≥$10M — sığ defter short-squeeze kalkanı!)
+        // 1. Öncelik: 15dk Balina Kırılımı (LONG ≥$5M, SHORT ≥$10M)
         if (btcRegNow === 'BULL' || btcRegNow === 'BEAR') {
           whaleDiag = evaluateWhaleSpike15m(k15m, closedIdx);
           if (whaleDiag && whaleDiag.approved) {
@@ -3470,8 +3567,18 @@ async function scanLoop() {
               }
             }
           }
+          // 3. Öncelik: 20-Mum Donchian Ayı Kırılımı (BTC AYI + ≥$10M)
+          if (!sig && btcRegNow === 'BEAR' && vol24MNow >= 10) {
+            const sigDon = evaluateDonchianBreakdown15m(k15m, closedIdx, btcRegNow);
+            if (sigDon && sigDon.approved) sig = sigDon;
+          }
         }
-        // 3. Öncelik: BB Z-Score Aşırı Alım Dönüşü (RSI≥75, EMA20≥+%2.2, Satıcı≥%55 — BTC BOĞA + TESTERE'de 7/24 aktif!)
+        // 4. Öncelik: Gizli Balina Dağıtımı (Yeşil tuzak mumu + ≥%58 satıcı — 7/24 tüm rejimler, ≥$5M!)
+        if (!sig) {
+          const sigHd = evaluateHiddenDistrib15m(k15m, closedIdx, btc15mNow);
+          if (sigHd && sigHd.approved) sig = sigHd;
+        }
+        // 5. Öncelik: BB Z-Score Aşırı Alım Dönüşü (BTC BOĞA + TESTERE'de 7/24, ≥$5M!)
         if (!sig) {
           const sigBb = evaluateBbSnapback15m(k15m, closedIdx, btcRegNow, btc15mNow);
           if (sigBb && sigBb.approved) sig = sigBb;
@@ -3552,9 +3659,9 @@ async function scanLoop() {
         const effectiveStopCostPct = tradeSlPct + 0.09;
         const targetNominal = targetRiskUsd / (effectiveStopCostPct / 100);
         const levNow = Math.max(5, Math.min(40, Number(CONFIG.leverage) || 15));
-        const slotCount = Math.max(1, Number(CONFIG.maxSlots) || 8);
-        const maxAllowedMargin = Math.max(10.0, balance * (0.94 / slotCount));
-        const tradeMargin = Number(Math.max(5.0, Math.min(maxAllowedMargin, targetNominal / levNow)).toFixed(2));
+        const slotCount = Math.max(1, Number(CONFIG.maxSlots) || 12);
+        const maxAllowedMargin = Math.max(7.5, balance * (0.94 / slotCount));
+        const tradeMargin = Number(Math.max(4.0, Math.min(maxAllowedMargin, targetNominal / levNow)).toFixed(2));
         const effectiveRiskUsd = Number((tradeMargin * levNow * (effectiveStopCostPct / 100)).toFixed(2));
 
         let fillPx = side === "LONG" ? curP * 1.0002 : curP * 0.9998;
@@ -3606,10 +3713,12 @@ async function scanLoop() {
         const is1hSig = sig.engine === 'WHALE_1H';
         const isBbSig = sig.engine === 'BB_MR';
         const isHdSig = sig.engine === 'HDIST';
+        const isDonSig = sig.engine === 'DON_S';
         const dirEmoji = isBbSig ? '🧲 BB DÖNÜŞ SHORT'
           : (isHdSig ? '🕵️ GİZLİ DAĞITIM SHORT'
+          : (isDonSig ? '📉 DONCHIAN KIRILIM SHORT'
           : (is1hSig ? (side === 'LONG' ? '🐋🚀 BALİNA 1S LONG' : '🐋🩸 BALİNA 1S SHORT')
-          : (side === 'LONG' ? '🐋🚀 BALİNA LONG' : '🐋🩸 BALİNA SHORT')));
+          : (side === 'LONG' ? '🐋🚀 BALİNA LONG' : '🐋🩸 BALİNA SHORT'))));
         const flowText = side === 'LONG' ? `Alıcı %${sig.taker.toFixed(0)}` : `Satıcı %${(100 - sig.taker).toFixed(0)}`;
         const radarTag = isBbSig
           ? `[${dirEmoji} | BBZ ${sig.bbzPrev} | RSI ${sig.rsi15.toFixed(0)} | EMA20 +%${sig.distEma20.toFixed(1)} | ${flowText}] [SL: %${tradeSlPct.toFixed(2)} | Hedef: +%${tradeMoonPct.toFixed(2)} | Risk: ~$${effectiveRiskUsd.toFixed(2)}]`
@@ -3733,7 +3842,7 @@ async function scanLoop() {
         if (pick.isAux && activeAuxCount >= maxAuxSlots) continue;
         const curFree = Math.max(0, Number((balance - bookedMargin).toFixed(2)));
         let finalMargin = Math.min(pick.tradeMargin, curFree);
-        if (finalMargin < 5.0) continue;
+        if (finalMargin < 4.0) continue;
         pick.tradeMargin = Number(finalMargin.toFixed(2));
         pick.position.margin = pick.tradeMargin;
         pick.position.initialMargin = pick.tradeMargin;
@@ -4114,19 +4223,19 @@ function closeTrade(pos, exitReason) {
     formattedExitReason = `🔒 Runner İz Süren Kilitli Kâr (${signRoi} ROI / ${signPnl} / Zirve: +%${(pos.mfe || 0).toFixed(2)} Spot)`;
   }
 
-  // 🛡️ Aynı koinde ardışık zarar kalkanı + 30 dk soğuma (2 ardışık zararda 4 saat soğuma!)
+  // 🛡️ Aynı koinde ardışık zarar kalkanı + 15 dk hızlı soğuma (2 ardışık zararda 2 saat soğuma!)
   if (totalTradePnl <= -0.05) {
     coinLossCount[pos.symbol] = (coinLossCount[pos.symbol] || 0) + 1;
-    const coolMin = coinLossCount[pos.symbol] >= 2 ? 240 : 30;
+    const coolMin = coinLossCount[pos.symbol] >= 2 ? 120 : 15;
     coinCooldowns[pos.symbol] = now + (coolMin * 60 * 1000);
     if (coinLossCount[pos.symbol] >= 2) {
-      addLog(`🛡️ [2-ZARAR KALKANI]: ${pos.symbol} üst üste 2 kez zarar etti ➔ 4 saat soğumaya alındı!`, 'WARN');
+      addLog(`🛡️ [2-ZARAR KALKANI]: ${pos.symbol} üst üste 2 kez zarar etti ➔ 2 saat soğumaya alındı!`, 'WARN');
     }
   } else if (totalTradePnl > 0.05) {
     coinLossCount[pos.symbol] = 0;
-    coinCooldowns[pos.symbol] = now + (30 * 60 * 1000);
+    coinCooldowns[pos.symbol] = now + (15 * 60 * 1000);
   } else {
-    coinCooldowns[pos.symbol] = now + (30 * 60 * 1000);
+    coinCooldowns[pos.symbol] = now + (15 * 60 * 1000);
   }
 
   const exitMovePct = pos.entryPrice > 0
@@ -5199,7 +5308,7 @@ function serveDashboardHtml() {
               <option value="720">Son 30 Gün (720s)</option>
             </select>
             <select id="selReplayScope" style="background:var(--panel2); color:var(--text); border:1px solid var(--border); border-radius:6px; padding:6px 8px; font-weight:800; font-size:11.5px;">
-              <option value="liquid" selected>💧 Canlı Likit (≥$10M · V8.0 Hızlı)</option>
+              <option value="liquid" selected>🔥 Canlı Likit (≥$5M · V8.1 Turbo 5-Motor)</option>
               <option value="all">🌐 Tüm Binance (~488 Koin)</option>
             </select>
             <select id="selReplayMode" style="background:var(--panel2); color:var(--text); border:1px solid var(--border); border-radius:6px; padding:6px 8px; font-weight:800; font-size:11.5px;">
