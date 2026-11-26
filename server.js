@@ -2448,10 +2448,10 @@ function analyzeCoinForReplay(sym, k, meta, btcRegime, cutoffTs, mode) {
     const takerFast = q > 0 ? (tb / q) * 100 : 50;
     const volMultFast = avgVol20Arr[i] > 0 ? (vArr[i] / avgVol20Arr[i]) : 1;
 
-    // 1. Öncelik: 15dk Balina Kırılımı (BTC BULL/BEAR hizalı)
+    // 1. Öncelik: 15dk Balina Kırılımı (BTC BULL/BEAR hizalı; V7.4: Balina SHORT için 24s Hacim ≥$10M!)
     if ((btcReg === 'BULL' || btcReg === 'BEAR') && (takerFast <= 40 || takerFast >= 60) && volMultFast >= 2.45) {
       const sig = evaluateWhaleSpike15m(k, i);
-      if (sig && sig.approved && ((sig.side === 'LONG' && btcReg === 'BULL') || (sig.side === 'SHORT' && btcReg === 'BEAR'))) {
+      if (sig && sig.approved && ((sig.side === 'LONG' && btcReg === 'BULL') || (sig.side === 'SHORT' && btcReg === 'BEAR' && Number(meta.vol24M) >= 10))) {
         seenEventKey.add(ts);
         const ev = emitEvent(sig, i, btcReg, btc15m, true, '-');
         if (ev) events.push(ev);
@@ -2495,6 +2495,7 @@ function analyzeCoinForReplay(sym, k, meta, btcRegime, cutoffTs, mode) {
         else if (isImpulse) {
           if (btcReg === 'CHOP') skipReason = 'BTC_CHOP';
           else if ((candSide === 'LONG' && btcReg !== 'BULL') || (candSide === 'SHORT' && btcReg !== 'BEAR')) skipReason = 'BTC_TERS';
+          else if (candSide === 'SHORT' && Number(meta.vol24M) < 10) skipReason = 'BALINA_SHORT_<10M';
           else if (atr15 < 0.90 || atr15 > 3.50) skipReason = 'ATR_DISI';
           else if (volMultFast < 2.50) skipReason = 'HACIM_<2.5x';
           else if (volMultFast > 8.00) skipReason = 'HACIM_CLIMAX';
@@ -2550,6 +2551,7 @@ function analyzeCoinForReplay(sym, k, meta, btcRegime, cutoffTs, mode) {
     const sig1h = evaluateWhaleSpike1h(k1h, j);
     if (sig1h && sig1h.approved) {
       if (btcReg && ((sig1h.side === 'LONG' && btcReg !== 'BULL') || (sig1h.side === 'SHORT' && btcReg !== 'BEAR'))) continue;
+      if (sig1h.side === 'SHORT' && Number(meta.vol24M) < 10) continue; // V7.4: Balina SHORT ≥$10M
       seenEventKey.add(lastTs15);
       const btc15m = btcRegime.byMove ? (btcRegime.byMove.get(lastTs15) || 0) : 0;
       const ev = emitEvent({ ...sig1h, timeframe: '1H' }, idx15, btcReg || 'CHOP', btc15m, true, '-');
@@ -3439,13 +3441,19 @@ async function scanLoop() {
 
         const btcRegNow = liveBtcRegime.regime || 'CHOP';
         const btc15mNow = Number(liveBtcRegime.btc15m) || 0;
+        const vol24MNow = Number(data.volM) || 0;
         let sig = null;
         let whaleDiag = null;
-        // 1. Öncelik: 15dk Balina Kırılımı (BTC BULL/BEAR hizalı)
+        // 1. Öncelik: 15dk Balina Kırılımı (BTC BULL/BEAR hizalı; V7.4: Balina SHORT için 24s Hacim ≥$10M — sığ defter short-squeeze kalkanı!)
         if (btcRegNow === 'BULL' || btcRegNow === 'BEAR') {
           whaleDiag = evaluateWhaleSpike15m(k15m, closedIdx);
-          if (whaleDiag && whaleDiag.approved && ((whaleDiag.side === 'LONG' && btcRegNow === 'BULL') || (whaleDiag.side === 'SHORT' && btcRegNow === 'BEAR'))) {
-            sig = whaleDiag;
+          if (whaleDiag && whaleDiag.approved) {
+            if (whaleDiag.side === 'LONG' && btcRegNow === 'BULL') {
+              sig = whaleDiag;
+            } else if (whaleDiag.side === 'SHORT' && btcRegNow === 'BEAR') {
+              if (vol24MNow >= 10) sig = whaleDiag;
+              else whaleDiag = { ...whaleDiag, approved: false, why: 'SHORT_VOL_<10M' };
+            }
           }
           // 2. Öncelik: 1 Saatlik Balina Kırılımı (:00 tam saat kapanışı)
           const isHourClose = (targetCandleTs % 3600000) === 2700000;
@@ -3453,7 +3461,7 @@ async function scanLoop() {
             const k1h = aggregate15mTo1h(k15m.slice(0, closedIdx + 1));
             if (k1h.length >= 56 && k1h[k1h.length - 1].lastTs15 === targetCandleTs) {
               const sig1h = evaluateWhaleSpike1h(k1h, k1h.length - 1);
-              if (sig1h && sig1h.approved && ((sig1h.side === 'LONG' && btcRegNow === 'BULL') || (sig1h.side === 'SHORT' && btcRegNow === 'BEAR'))) {
+              if (sig1h && sig1h.approved && ((sig1h.side === 'LONG' && btcRegNow === 'BULL') || (sig1h.side === 'SHORT' && btcRegNow === 'BEAR' && vol24MNow >= 10))) {
                 sig = sig1h;
               }
             }
