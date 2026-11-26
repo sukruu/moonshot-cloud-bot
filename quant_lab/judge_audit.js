@@ -121,8 +121,8 @@ class JudicialAuditCourt {
           offenses.push(`Yetersiz Satıcı Baskısı (%${(100 - taker).toFixed(1)})`);
         }
 
-        // Trend Kusuru (BB_MR aşırı alım dönüşü ralli tepesinde short açtığı için muaf tutulur!)
-        const isBbStrategy = String(t.strategy || '').includes('BB_MR') || String(t.radarTag || '').includes('BB DÖNÜŞ');
+        // Trend Kusuru (BB_MR / HDIST ters dönüş stratejileri ralli tepesinde short açtığı için muaf tutulur!)
+        const isBbStrategy = String(t.strategy || '').includes('BB_MR') || String(t.strategy || '').includes('HDIST') || String(t.radarTag || '').includes('BB DÖNÜŞ');
         if (side === 'LONG' && chg24 < -8.0) {
           score -= 20;
           offenses.push(`Piyasa Nizamına Aykırı (Günlük Çöküşte Long: %${chg24})`);
@@ -229,13 +229,22 @@ class JudicialAuditCourt {
         judicialScore -= 35;
         accusations.push(`BB Dönüş kırmızı teyit yok (%${chg15.toFixed(2)})`);
       }
+    } else if (strat === 'DON_S') {
+      if (taker > 39.0) {
+        judicialScore -= 35;
+        accusations.push(`Donchian kırılım satıcı yetersiz (alıcı %${taker.toFixed(1)})`);
+      }
+      if (chg15 >= 0) {
+        judicialScore -= 35;
+        accusations.push(`Donchian kırmızı teyit yok (%${chg15.toFixed(2)})`);
+      }
     } else if (strat === 'HDIST') {
       if (taker > 42.5) {
         judicialScore -= 35;
         accusations.push(`Gizli Dağıtım satıcı yetersiz (alıcı %${taker.toFixed(1)})`);
       }
     } else if (side === 'LONG') {
-      if (taker < 54.0) {
+      if (taker < 55.0) {
         judicialScore -= 35;
         accusations.push(`Alıcı yetersiz (%${taker.toFixed(1)})`);
       }
@@ -244,11 +253,11 @@ class JudicialAuditCourt {
         accusations.push(`15dk balina ivmesi yetersiz (%${chg15.toFixed(2)})`);
       }
     } else {
-      if (taker > 46.0) {
+      if (taker > 41.0) {
         judicialScore -= 35;
         accusations.push(`Satıcı yetersiz (alıcı %${taker.toFixed(1)})`);
       }
-      if (chg15 > -0.30) {
+      if (chg15 > -0.25) {
         judicialScore -= 35;
         accusations.push(`15dk balina düşüşü yetersiz (%${chg15.toFixed(2)})`);
       }
