@@ -121,8 +121,8 @@ class JudicialAuditCourt {
           offenses.push(`Yetersiz Satıcı Baskısı (%${(100 - taker).toFixed(1)})`);
         }
 
-        // Trend Kusuru (BB_MR / HDIST ters dönüş stratejileri ralli tepesinde short açtığı için muaf tutulur!)
-        const isBbStrategy = String(t.strategy || '').includes('BB_MR') || String(t.strategy || '').includes('HDIST') || String(t.radarTag || '').includes('BB DÖNÜŞ');
+        // Trend Kusuru (BB_MR / EMA_REJ / HDIST ters dönüş stratejileri ralli tepesinde short açtığı için muaf tutulur!)
+        const isBbStrategy = String(t.strategy || '').includes('BB_MR') || String(t.strategy || '').includes('EMA_REJ') || String(t.strategy || '').includes('HDIST') || String(t.radarTag || '').includes('BB DÖNÜŞ') || String(t.radarTag || '').includes('EMA20 REDDİ');
         if (side === 'LONG' && chg24 < -8.0) {
           score -= 20;
           offenses.push(`Piyasa Nizamına Aykırı (Günlük Çöküşte Long: %${chg24})`);
@@ -228,6 +228,15 @@ class JudicialAuditCourt {
       if (chg15 >= 0) {
         judicialScore -= 35;
         accusations.push(`BB Dönüş kırmızı teyit yok (%${chg15.toFixed(2)})`);
+      }
+    } else if (strat === 'EMA_REJ') {
+      if (taker > 44.0) {
+        judicialScore -= 35;
+        accusations.push(`EMA20 Reddi satıcı yetersiz (alıcı %${taker.toFixed(1)})`);
+      }
+      if (chg15 >= 0) {
+        judicialScore -= 35;
+        accusations.push(`EMA20 Reddi kırmızı teyit yok (%${chg15.toFixed(2)})`);
       }
     } else if (strat === 'DON_S') {
       if (taker > 39.0) {
