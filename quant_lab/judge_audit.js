@@ -238,6 +238,15 @@ class JudicialAuditCourt {
         judicialScore -= 35;
         accusations.push(`EMA20 Reddi kırmızı teyit yok (%${chg15.toFixed(2)})`);
       }
+    } else if (strat === 'SCOUT_S') {
+      if (taker > 46.0) {
+        judicialScore -= 35;
+        accusations.push(`Trend Scout satıcı yetersiz (alıcı %${taker.toFixed(1)})`);
+      }
+      if (chg15 >= 0) {
+        judicialScore -= 35;
+        accusations.push(`Trend Scout kırmızı teyit yok (%${chg15.toFixed(2)})`);
+      }
     } else if (strat === 'DON_S') {
       if (taker > 39.0) {
         judicialScore -= 35;

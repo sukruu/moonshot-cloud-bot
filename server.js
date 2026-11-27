@@ -118,10 +118,10 @@ function engineSnapshot() {
     userSlots: userRisk.maxSlots,
     userMargin: userRisk.marginPerTrade,
     gates: {
-      entry: 'V10.1 Turbo Pro · Her 10dk Tarama · Sıkı BB 2R + EMA20 Reddi 2R + Balina · 16 Slot',
+      entry: 'V10.2 Turbo Scout · Her 10dk En İyi Koin + BB 2R + REJ 2R + Balina · 16 Slot',
       book: 'defter fiyatı',
       judge: 'açık',
-      flow: '10dk Yuvarlanan 15m (Sıkı BB/REJ/LONG ≥$10M · Balina SHORT ≥$5M & BTC<EMA100)',
+      flow: '10dk Yuvarlanan 15m (4/4 Rejim Kârlı · 10dk Ort. Bekleme · BB/REJ/SCOUT ≥$10M)',
       freqai: 'kapalı',
       funding: 'kapalı',
       team: 'kapalı'
@@ -549,6 +549,7 @@ function formatWaEngine(radarTag, strategy) {
   const tag = String(radarTag || '');
   if (strategy === 'BB_MR' || tag.includes('BB DÖNÜŞ')) return '🧲 BB Dönüş 2R';
   if (strategy === 'EMA_REJ' || tag.includes('EMA20 REDDİ')) return '📐 EMA20 Reddi 2R';
+  if (strategy === 'SCOUT_S' || tag.includes('TREND SCOUT')) return '🎯 Trend Scout 10m';
   if (strategy === 'HDIST' || tag.includes('GİZLİ DAĞITIM')) return '🕵️ Gizli Dağıtım';
   if (strategy === 'DON_S' || tag.includes('DONCHIAN')) return '📉 Donchian Kırılım';
   if (tag.includes('1S') || tag.includes('1H')) return '⏱️ 1S Balina';
@@ -2107,6 +2108,83 @@ function evaluateEmaRejection15m(k, idx, btc15m = 0) {
   };
 }
 
+// 🎯 5. MOTOR — V10.2 10DK EN İYİ KOİN SCOUT (S3: Düşüş trendindeki en iyi koini seçer · RUNNER · %55 risk · 4/4 Veri Seti Pozitif · Ort. 10dk bekleme!)
+function evaluateTrendScout15m(k, idx, btc15m = 0) {
+  if (!Array.isArray(k) || idx < 55 || idx >= k.length) return null;
+  if (btc15m > 0.30) return null;
+  const o = parseFloat(k[idx][1]) || 0;
+  const h = parseFloat(k[idx][2]) || 0;
+  const l = parseFloat(k[idx][3]) || 0;
+  const c = parseFloat(k[idx][4]) || 0;
+  if (c < 0.02 || o <= 0 || c >= o) return null;
+  const move = ((c - o) / o) * 100;
+  if (move > -0.15) return null;
+
+  const q = parseFloat(k[idx][7]) || 0;
+  const tb = parseFloat(k[idx][10]) || 0;
+  const taker = q > 0 ? (tb / q) * 100 : 50;
+  if (taker > 45.0) return null;
+
+  const sp = h - l;
+  const lw = sp > 0 ? (Math.min(c, o) - l) / sp : 0;
+  if (lw > 0.45) return null;
+
+  let sumV = 0;
+  for (let m = idx - 20; m < idx; m++) sumV += parseFloat(k[m][5]) || 0;
+  const volMult = sumV > 0 ? (parseFloat(k[idx][5]) || 0) / (sumV / 20) : 1;
+  if (volMult < 1.00) return null;
+
+  let trSum = 0;
+  for (let m = idx - 14; m < idx; m++) {
+    const hh = parseFloat(k[m][2]) || 0, ll = parseFloat(k[m][3]) || 0, pc = parseFloat(k[m - 1][4]) || 0;
+    if (pc > 0) trSum += (Math.max(hh - ll, Math.abs(hh - pc), Math.abs(ll - pc)) / pc) * 100;
+  }
+  const atr15 = trSum / 14;
+  if (atr15 < 0.55 || atr15 > 2.50) return null;
+
+  let ema20 = parseFloat(k[0][4]) || 0, ema50 = ema20;
+  let rg = 0, rl = 0;
+  for (let m = 1; m <= idx; m++) {
+    const cm = parseFloat(k[m][4]) || ema20;
+    ema20 = cm * (2 / 21) + ema20 * (19 / 21);
+    ema50 = cm * (2 / 51) + ema50 * (49 / 51);
+  }
+  if (!(ema20 < ema50)) return null;
+
+  const distSig = ema20 > 0 ? ((c - ema20) / ema20) * 100 : 99;
+  if (distSig > 0.40 || distSig < -2.50) return null;
+
+  for (let m = idx - 14; m <= idx; m++) {
+    const d = (parseFloat(k[m][4]) || 0) - (parseFloat(k[m - 1][4]) || 0);
+    if (d > 0) rg += d; else rl -= d;
+  }
+  const rsi15 = rl === 0 ? 100 : 100 - (100 / (1 + rg / rl));
+  const open1h = parseFloat(k[idx - 4][1]) || o;
+  const open3h = parseFloat(k[idx - 12][1]) || o;
+  const open4h = parseFloat(k[idx - 16][1]) || o;
+  const slPct = Number(Math.max(0.90, Math.min(2.50, atr15 * 1.50)).toFixed(2));
+
+  return {
+    approved: true,
+    engine: 'SCOUT_S',
+    timeframe: 'SCT',
+    isAux: true,
+    isScout: true,
+    riskMult: 0.55,
+    exitMode: 'RUNNER',
+    maxBars15: 24,
+    side: 'SHORT',
+    score: 140 + (volMult * 15) + ((50 - taker) * 2) + (Math.abs(move) * 10),
+    slPctOverride: slPct,
+    atr15, volMult, taker, move,
+    chg1h: open1h > 0 ? ((c - open1h) / open1h) * 100 : 0,
+    chg3h: open3h > 0 ? ((c - open3h) / open3h) * 100 : 0,
+    chg4h: open4h > 0 ? ((c - open4h) / open4h) * 100 : 0,
+    ema20, ema50, distEma20: distSig, rsi15,
+    closePx: c, candleTs: Number(k[idx][0]) || 0
+  };
+}
+
 // 🕵️ 4. MOTOR — GİZLİ BALİNA DAĞITIMI (Yeşil mumda yüksek hacim + ≥%58 agresif satıcı baskısı! BOĞA+TESTERE+AYI tüm rejimlerde kârlı!)
 function evaluateHiddenDistrib15m(k, idx, btc15m = 0) {
   if (!Array.isArray(k) || idx < 55 || idx >= k.length) return null;
@@ -2686,6 +2764,17 @@ function analyzeCoinForReplay(sym, k, meta, btcRegime, cutoffTs, mode) {
       }
     }
 
+    // 4. Öncelik: V10.2 10dk Trend Scout (Ana motorlar boş geçerse en iyi düşüş trendi koinini seçer · max 6 slot · %55 risk!)
+    if (volM >= 10 && btc15m <= 0.30 && takerFast <= 45 && volMultFast >= 0.98 && cArr[i] < oArr[i] && ema20Arr[i] < ema50Arr[i]) {
+      const sigSct = evaluateTrendScout15m(k, i, btc15m);
+      if (sigSct && sigSct.approved) {
+        seenEventKey.add(ts);
+        const ev = emitEvent(sigSct, i, btcReg, btc15m, true, '-');
+        if (ev) events.push(ev);
+        continue;
+      }
+    }
+
     // 3. Geniş Piyasa Analizi Modu: Mevcut botun pas geçtiği güçlü hareket ve aşırı RSI kurulumlarını da L vs S test et!
     if (mode === 'market' && (i - lastMarketIdx) >= 8) {
       const o = oArr[i], c = cArr[i];
@@ -3091,6 +3180,14 @@ async function runHistoricalReplay(hours = 72, maxCoins = 120, opts = {}) {
         const maxAuxSlots = Math.max(1, replaySlots >= 12 ? (replaySlots - 2) : (replaySlots >= 6 ? (replaySlots - 2) : Math.min(3, replaySlots - 1)));
         const maxSameSide = replaySlots >= 14 ? Math.min(12, replaySlots - 4) : (replaySlots >= 6 ? (replaySlots - 2) : (replaySlots >= 4 ? 3 : replaySlots));
         const maxRejSlots = Math.max(2, Math.min(7, Math.floor(replaySlots * 0.45)));
+        const maxScoutSlots = Math.max(2, Math.min(6, Math.floor(replaySlots * 0.40)));
+        const barCoreCount = new Map();
+        const barScoutTaken = new Map();
+        for (const ev of workingEvents) {
+          if (ev.botApproved && ev.engine !== 'SCOUT_S') {
+            barCoreCount.set(ev.candleTs, (barCoreCount.get(ev.candleTs) || 0) + 1);
+          }
+        }
         for (const ev of workingEvents) {
           if (!ev.botApproved) continue;
           const evEntryTs = ev.candleTs + (15 * 60 * 1000);
@@ -3103,6 +3200,13 @@ async function runHistoricalReplay(hours = 72, maxCoins = 120, opts = {}) {
           if (openSlots.some(pSlot => pSlot.symbol === ev.symbol)) continue;
           if (openSlots.filter(pSlot => pSlot.side === ev.side).length >= maxSameSide) continue;
           if (ev.engine === 'EMA_REJ' && openSlots.filter(pSlot => pSlot.engine === 'EMA_REJ').length >= maxRejSlots) continue;
+          if (ev.engine === 'SCOUT_S') {
+            const coreInBar = barCoreCount.get(ev.candleTs) || 0;
+            const sctLimitBar = openSlots.length < 4 ? 2 : 1;
+            const sctAlreadyBar = barScoutTaken.get(ev.candleTs) || 0;
+            if (coreInBar >= sctLimitBar || (coreInBar + sctAlreadyBar) >= sctLimitBar) continue;
+            if (openSlots.filter(pSlot => pSlot.engine === 'SCOUT_S').length >= maxScoutSlots) continue;
+          }
           if (ev.isAux && openSlots.filter(pSlot => pSlot.isAux).length >= maxAuxSlots) continue;
           if ((coinCd[ev.symbol] || 0) > evEntryTs) continue;
 
@@ -3122,6 +3226,7 @@ async function runHistoricalReplay(hours = 72, maxCoins = 120, opts = {}) {
           const rec = buildTradeRecord(ev, riskUsd, bal);
           oppNetTotal += rec.oppPnl;
           openSlots.push({ symbol: ev.symbol, side: ev.side, engine: ev.engine, isAux: !!ev.isAux, margin: actualMargin, exitTs: rec.exitTs, netPnl: rec.netPnl, ref: rec });
+          if (ev.engine === 'SCOUT_S') barScoutTaken.set(ev.candleTs, (barScoutTaken.get(ev.candleTs) || 0) + 1);
           coinCd[ev.symbol] = Math.max(coinCd[ev.symbol] || 0, rec.exitTs + (15 * 60 * 1000));
           trades.push(rec);
         }
@@ -3218,6 +3323,7 @@ async function runHistoricalReplay(hours = 72, maxCoins = 120, opts = {}) {
         '1H': '⏱️ 1S Balina',
         'BB': '🧲 BB Dönüş 2R',
         'REJ': '📐 EMA20 Reddi 2R',
+        'SCT': '🎯 Trend Scout 10m',
         'DON': '📉 Donchian Kırılım',
         'PIYASA': '⚡ Piyasa İvme (Pas)',
         'RSI_D': '📉 Aşırı RSI (Pas)'
@@ -3606,7 +3712,7 @@ async function scanLoop() {
       const windowLbl = (secIn10mNow >= 4 && secIn10mNow <= 240)
         ? '⚡ 10dk Tarama AÇIK'
         : `⏳ Sonraki 10dk tarama: ${Math.ceil((600 - secIn10mNow) / 60)} dk`;
-      addLog(`🔥 [V10.1 Turbo Pro 10m]: ${validTickers.length} Saf Kripto (${topCandidates.length} Aday ≥$5M) | ${liveBtcRegime.label} | Lider: ${topCandidates[0].symbol} (24s: %${topCandidates[0].chg.toFixed(1)}) | ${windowLbl} | Slot: ${activePositions.length}/${CONFIG.maxSlots}`);
+      addLog(`🔥 [V10.2 Turbo Scout 10m]: ${validTickers.length} Saf Kripto (${topCandidates.length} Aday ≥$5M) | ${liveBtcRegime.label} | Lider: ${topCandidates[0].symbol} (24s: %${topCandidates[0].chg.toFixed(1)}) | ${windowLbl} | Slot: ${activePositions.length}/${CONFIG.maxSlots}`);
     }
 
     if (!global.whaleEvaluatedCandles) global.whaleEvaluatedCandles = new Map();
@@ -3703,6 +3809,11 @@ async function scanLoop() {
           if (!sig && vol24MNow >= 10) {
             const sigRej = evaluateEmaRejection15m(k15m, closedIdx, btc15mNow);
             if (sigRej && sigRej.approved) sig = sigRej;
+          }
+          // 4. Öncelik: V10.2 10dk En İyi Koin Trend Scout (Ana motorlar boş geçerse en iyi 1-2 koini açar · RUNNER · %55 risk!)
+          if (!sig && vol24MNow >= 10) {
+            const sigSct = evaluateTrendScout15m(k15m, closedIdx, btc15mNow);
+            if (sigSct && sigSct.approved) sig = sigSct;
           }
         }
         if (!sig) {
@@ -3839,18 +3950,20 @@ async function scanLoop() {
         const is1hSig = sig.engine === 'WHALE_1H';
         const isBbSig = sig.engine === 'BB_MR';
         const isRejSig = sig.engine === 'EMA_REJ';
+        const isSctSig = sig.engine === 'SCOUT_S';
         const isHdSig = sig.engine === 'HDIST';
         const isDonSig = sig.engine === 'DON_S';
         const dirEmoji = isBbSig ? '🧲 BB DÖNÜŞ SHORT'
           : (isRejSig ? '📐 EMA20 REDDİ SHORT'
+          : (isSctSig ? '🎯 TREND SCOUT SHORT'
           : (isHdSig ? '🕵️ GİZLİ DAĞITIM SHORT'
           : (isDonSig ? '📉 DONCHIAN KIRILIM SHORT'
           : (is1hSig ? (side === 'LONG' ? '🐋🚀 BALİNA 1S LONG' : '🐋🩸 BALİNA 1S SHORT')
-          : (side === 'LONG' ? '🐋🚀 BALİNA LONG' : '🐋🩸 BALİNA SHORT')))));
+          : (side === 'LONG' ? '🐋🚀 BALİNA LONG' : '🐋🩸 BALİNA SHORT'))))));
         const flowText = side === 'LONG' ? `Alıcı %${sig.taker.toFixed(0)}` : `Satıcı %${(100 - sig.taker).toFixed(0)}`;
         const radarTag = isBbSig
           ? `[${dirEmoji} | BBZ ${sig.bbzPrev} | RSI ${sig.rsi15.toFixed(0)} | EMA20 +%${sig.distEma20.toFixed(1)} | ${flowText}] [SL: %${tradeSlPct.toFixed(2)} | Hedef: +%${tradeMoonPct.toFixed(2)} | Risk: ~$${effectiveRiskUsd.toFixed(2)}]`
-          : (isRejSig
+          : ((isRejSig || isSctSig)
             ? `[${dirEmoji} | 15dk %${sig.move.toFixed(2)} | Hacim ${sig.volMult.toFixed(1)}x | ${flowText}] [SL: %${tradeSlPct.toFixed(2)} | Hedef: +%${tradeMoonPct.toFixed(2)} | Risk: ~$${effectiveRiskUsd.toFixed(2)}]`
             : (isHdSig
               ? `[${dirEmoji} | Yeşil +%${sig.move.toFixed(2)} | Hacim ${sig.volMult.toFixed(1)}x | ${flowText}] [SL: %${tradeSlPct.toFixed(2)} | ATR15m: %${sig.atr15.toFixed(2)} | Risk: ~$${effectiveRiskUsd.toFixed(2)}]`
@@ -3915,17 +4028,18 @@ async function scanLoop() {
           convictionScore: sig.isAux ? 85 : 95,
           convictionLabel: isBbSig ? '🧲 BB DÖNÜŞ 2R'
             : (isRejSig ? '📐 EMA20 REDDİ 2R'
+            : (isSctSig ? '🎯 TREND SCOUT 10m'
             : (isHdSig ? '🕵️ GİZLİ DAĞITIM'
             : (isDonSig ? '📉 DONCHIAN KIRILIM'
             : (is1hSig ? (side === 'LONG' ? '🐋 BALİNA 1S ROKET' : '🐋 BALİNA 1S ŞELALE')
-            : (side === 'LONG' ? '🐋 BALİNA ROKET 15M' : '🐋 BALİNA ŞELALE 15M'))))),
+            : (side === 'LONG' ? '🐋 BALİNA ROKET 15M' : '🐋 BALİNA ŞELALE 15M')))))),
           radarTag: radarTag,
           chg3h: Number(sig.chg3h.toFixed(2)),
           vol3hM: Number(vol3hM.toFixed(1)),
           chg24h: Number(chg.toFixed(2)),
           range3h: range3hStr,
           takerBuyRatio: Number(sig.taker.toFixed(1)),
-          signal: isBbSig ? '🧲 BB DÖNÜŞ' : (isRejSig ? '📐 EMA20 REDDİ' : (isHdSig ? '🕵️ GİZLİ DAĞITIM' : (isDonSig ? '📉 DONCHIAN' : (side === "LONG" ? "🐋🚀 BALİNA BOĞA" : "🐋🩸 BALİNA AYI")))),
+          signal: isBbSig ? '🧲 BB DÖNÜŞ' : (isRejSig ? '📐 EMA20 REDDİ' : (isSctSig ? '🎯 TREND SCOUT' : (isHdSig ? '🕵️ GİZLİ DAĞITIM' : (isDonSig ? '📉 DONCHIAN' : (side === "LONG" ? "🐋🚀 BALİNA BOĞA" : "🐋🩸 BALİNA AYI"))))),
           btc5mEntry: btc5mNumeric,
           btc15mEntry: btc15mNumeric
         };
@@ -3959,12 +4073,17 @@ async function scanLoop() {
     if (scanEntryCandidates.length > 0 && activePositions.length < CONFIG.maxSlots) {
       scanEntryCandidates.sort((a, b) => b.entryScore - a.entryScore);
       const taken = new Set(activePositions.map((p) => p.symbol));
-      let activeAuxCount = activePositions.filter(p => p.isAux || p.strategy === 'BB_MR' || p.strategy === 'EMA_REJ' || p.strategy === 'HDIST').length;
+      let activeAuxCount = activePositions.filter(p => p.isAux || p.strategy === 'BB_MR' || p.strategy === 'EMA_REJ' || p.strategy === 'SCOUT_S' || p.strategy === 'HDIST').length;
       let activeRejCount = activePositions.filter(p => p.strategy === 'EMA_REJ').length;
+      let activeScoutCount = activePositions.filter(p => p.strategy === 'SCOUT_S').length;
       const curMaxS = Number(CONFIG.maxSlots) || 16;
       const maxAuxSlots = Math.max(1, curMaxS >= 12 ? (curMaxS - 2) : (curMaxS >= 6 ? (curMaxS - 2) : Math.min(3, curMaxS - 1)));
       const maxSameSide = curMaxS >= 14 ? Math.min(12, curMaxS - 4) : (curMaxS >= 6 ? (curMaxS - 2) : (curMaxS >= 4 ? 3 : curMaxS));
       const maxRejSlots = Math.max(2, Math.min(7, Math.floor(curMaxS * 0.45)));
+      const maxScoutSlots = Math.max(2, Math.min(6, Math.floor(curMaxS * 0.40)));
+      const coreInScan = scanEntryCandidates.filter(c => c.position.strategy !== 'SCOUT_S').length;
+      const scoutTargetThisScan = activePositions.length < 4 ? 2 : 1;
+      let scoutOpenedThisScan = 0;
       let activeLongCount = activePositions.filter(p => p.side === 'LONG').length;
       let activeShortCount = activePositions.filter(p => p.side === 'SHORT').length;
       const room = CONFIG.maxSlots - activePositions.length;
@@ -3975,6 +4094,10 @@ async function scanLoop() {
         if (pick.side === 'LONG' && activeLongCount >= maxSameSide) continue;
         if (pick.side === 'SHORT' && activeShortCount >= maxSameSide) continue;
         if (pick.position.strategy === 'EMA_REJ' && activeRejCount >= maxRejSlots) continue;
+        if (pick.position.strategy === 'SCOUT_S') {
+          if (activeScoutCount >= maxScoutSlots) continue;
+          if ((coreInScan + scoutOpenedThisScan) >= scoutTargetThisScan) continue;
+        }
         if (pick.isAux && activeAuxCount >= maxAuxSlots) continue;
         const curFree = Math.max(0, Number((balance - bookedMargin).toFixed(2)));
         let finalMargin = Math.min(pick.tradeMargin, curFree);
@@ -3986,6 +4109,7 @@ async function scanLoop() {
         if (pick.side === 'LONG') activeLongCount++; else activeShortCount++;
         if (pick.isAux) activeAuxCount++;
         if (pick.position.strategy === 'EMA_REJ') activeRejCount++;
+        if (pick.position.strategy === 'SCOUT_S') { activeScoutCount++; scoutOpenedThisScan++; }
         bookedMargin += pick.tradeMargin;
         activePositions.push(pick.position);
         activeSyms.add(pick.sym);
@@ -4541,6 +4665,9 @@ function formatSignalCompact(rTag) {
     badgeClass = 'badge-sig-bear';
   } else if (rTag.includes('EMA20 REDDİ')) {
     label = '📐 EMA20 REDDİ';
+    badgeClass = 'badge-sig-bear';
+  } else if (rTag.includes('TREND SCOUT')) {
+    label = '🎯 TREND SCOUT';
     badgeClass = 'badge-sig-bear';
   } else if (rTag.includes('DONCHIAN')) {
     label = '📉 DONCHIAN';
@@ -5900,6 +6027,9 @@ function serveDashboardHtml() {
         badgeClass = 'badge-sig-bear';
       } else if (rTag.includes('EMA20 REDDİ')) {
         label = '📐 EMA20 REDDİ';
+        badgeClass = 'badge-sig-bear';
+      } else if (rTag.includes('TREND SCOUT')) {
+        label = '🎯 TREND SCOUT';
         badgeClass = 'badge-sig-bear';
       } else if (rTag.includes('BALİNA BOĞA')) {
         label = '🐋 BALİNA BOĞA';
