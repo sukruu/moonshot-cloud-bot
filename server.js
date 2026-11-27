@@ -118,10 +118,10 @@ function engineSnapshot() {
     userSlots: userRisk.maxSlots,
     userMargin: userRisk.marginPerTrade,
     gates: {
-      entry: 'V9.0 Pro · BB 2.0R Limit-TP + Makro EMA100 · 12 Slot',
+      entry: 'V9.0.1 Pro · BB 2.0R (≥$10M) + Makro EMA100 · 12 Slot',
       book: 'defter fiyatı',
       judge: 'açık',
-      flow: '15dk & 1S Saf Kripto Futures (BB Tüm Rejim 2.0R Limit-TP · SHORT BTC<EMA100)',
+      flow: '15dk & 1S Saf Kripto Futures (BB/DON/LONG ≥$10M · Balina SHORT ≥$5M & BTC<EMA100)',
       freqai: 'kapalı',
       funding: 'kapalı',
       team: 'kapalı'
@@ -2548,10 +2548,10 @@ function analyzeCoinForReplay(sym, k, meta, btcRegime, cutoffTs, mode) {
     const takerFast = q > 0 ? (tb / q) * 100 : 50;
     const volMultFast = avgVol20Arr[i] > 0 ? (vArr[i] / avgVol20Arr[i]) : 1;
 
-    // V9.0 PRO 4-MOTOR (Canlı + Replay 1-e-1: BB 2.0R Saf Limit-TP Tüm Rejimler · SHORT Makro BTC<EMA100 · LONG ≥$10M!)
+    // V9.0.1 PRO 4-MOTOR (Canlı + Replay 1-e-1: BB 2.0R & DON & LONG ≥$10M · Balina SHORT ≥$5M & BTC<EMA100!)
     const volM = Number(meta.vol24M) || 0;
-    // 1. Öncelik: BB Z-Score Aşırı Alım Dönüşü (TÜM REJİMLER · ≥$5M · SAF 2.0R LİMİT TP · RSI≥70, BBZ≥1.90, EMA≥1.30, tk≤46!)
-    if (volM >= 5 && takerFast <= 46 && btc15m <= 0.25 && cArr[i] < oArr[i] && rsiArr[i - 1] >= 69.5) {
+    // 1. Öncelik: BB Z-Score Aşırı Alım Dönüşü (TÜM REJİMLER · ≥$10M LİKİT · SAF 2.0R LİMİT TP · RSI≥70, BBZ≥1.90, EMA≥1.30, tk≤46!)
+    if (volM >= 10 && takerFast <= 46 && btc15m <= 0.25 && cArr[i] < oArr[i] && rsiArr[i - 1] >= 69.5) {
       const sigBb = evaluateBbSnapback15m(k, i, btcReg, btc15m);
       if (sigBb && sigBb.approved) {
         seenEventKey.add(ts);
@@ -2576,8 +2576,8 @@ function analyzeCoinForReplay(sym, k, meta, btcRegime, cutoffTs, mode) {
       }
     }
 
-    // 3. Öncelik: 20-Mum Donchian Ayı Kırılımı (BTC AYI + BTC<EMA100 + ≥$5M + Sıkı Satıcı ≤%38 + Low-ATR ≥0.55)
-    if (volM >= 5 && btcReg === 'BEAR' && btcBelow100 && takerFast <= 38 && volMultFast >= 1.78 && cArr[i] < oArr[i]) {
+    // 3. Öncelik: 20-Mum Donchian Ayı Kırılımı (BTC AYI + BTC<EMA100 + ≥$10M Likit + Sıkı Satıcı ≤%38 + Low-ATR ≥0.55)
+    if (volM >= 10 && btcReg === 'BEAR' && btcBelow100 && takerFast <= 38 && volMultFast >= 1.78 && cArr[i] < oArr[i]) {
       const sigDon = evaluateDonchianBreakdown15m(k, i, btcReg);
       if (sigDon && sigDon.approved) {
         seenEventKey.add(ts);
@@ -3568,11 +3568,13 @@ async function scanLoop() {
         const vol24MNow = Number(data.volM) || 0;
         let sig = null;
         let whaleDiag = null;
-        // V9.0 PRO 4-MOTOR (Canlı + Replay %100 1-e-1):
+        // V9.0.1 PRO 4-MOTOR (Canlı + Replay %100 1-e-1):
         if (vol24MNow >= 5) {
-          // 1. Öncelik: BB Z-Score Aşırı Alım Dönüşü (TÜM REJİMLER · ≥$5M · SAF 2.0R LİMİT TP · Erken BE/Trail YOK!)
-          const sigBb = evaluateBbSnapback15m(k15m, closedIdx, btcRegNow, btc15mNow);
-          if (sigBb && sigBb.approved) sig = sigBb;
+          // 1. Öncelik: BB Z-Score Aşırı Alım Dönüşü (TÜM REJİMLER · ≥$10M LİKİT · SAF 2.0R LİMİT TP · Erken BE/Trail YOK!)
+          if (vol24MNow >= 10) {
+            const sigBb = evaluateBbSnapback15m(k15m, closedIdx, btcRegNow, btc15mNow);
+            if (sigBb && sigBb.approved) sig = sigBb;
+          }
 
           // 2. Öncelik: 15dk Balina Kırılımı (LONG ≥$10M: BOĞA/TESTERE+BTC>=0 | SHORT ≥$5M: Yalnızca AYI + BTC<EMA100!)
           if (!sig) {
@@ -3587,8 +3589,8 @@ async function scanLoop() {
               }
             }
           }
-          // 3. Öncelik: 20-Mum Donchian Ayı Kırılımı (BTC AYI + BTC<EMA100 + ≥$5M + Sıkı Satıcı ≤%38 + Low-ATR ≥0.55)
-          if (!sig && btcRegNow === 'BEAR' && btcBelow100Now) {
+          // 3. Öncelik: 20-Mum Donchian Ayı Kırılımı (BTC AYI + BTC<EMA100 + ≥$10M Likit + Sıkı Satıcı ≤%38 + Low-ATR ≥0.55)
+          if (!sig && vol24MNow >= 10 && btcRegNow === 'BEAR' && btcBelow100Now) {
             const sigDon = evaluateDonchianBreakdown15m(k15m, closedIdx, btcRegNow);
             if (sigDon && sigDon.approved) sig = sigDon;
           }
@@ -5203,8 +5205,8 @@ function serveDashboardHtml() {
 
         <div class="sidebar-section-title">🎯 V9.0 PRO 4'LÜ MOTOR & KORUMA</div>
         <div class="sidebar-plan-card">
-          <div class="sidebar-plan-row">🧲 <b>BB Dönüş 2.0R:</b> Tüm rejimler · <b>≥$5M</b> · <b>Saf 2.0R Limit TP</b> (erken BE/Trail kâr doğrama YOK!).</div>
-          <div class="sidebar-plan-row">🐋 <b>Balina & Donchian:</b> <b>LONG ≥$10M</b> (Boğa/Testere) · <b>SHORT ≥$5M</b> (yalnızca Ayı + <b>BTC&lt;EMA100</b>).</div>
+          <div class="sidebar-plan-row">🧲 <b>BB Dönüş 2.0R:</b> Tüm rejimler · <b>≥$10M Likit</b> · <b>Saf 2.0R Limit TP</b> (erken BE/Trail kâr doğrama YOK!).</div>
+          <div class="sidebar-plan-row">🐋 <b>Balina & Donchian:</b> <b>LONG/DON ≥$10M</b> · <b>Balina SHORT ≥$5M</b> (yalnızca Ayı + <b>BTC&lt;EMA100</b>).</div>
           <div class="sidebar-plan-row">🚀 <b>Bileşik & Kalkan:</b> <b>12 Slot · %2.5 Risk</b> · <b>00–04 TR %50 risk</b> · 2 zarar ➔ 2 saat soğuma.</div>
         </div>
 
