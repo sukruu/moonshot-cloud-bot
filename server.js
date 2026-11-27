@@ -118,10 +118,10 @@ function engineSnapshot() {
     userSlots: userRisk.maxSlots,
     userMargin: userRisk.marginPerTrade,
     gates: {
-      entry: 'V10.0 Turbo · Her 10dk Tarama · BB 2R + EMA20 Reddi 2R + Balina · 16 Slot',
+      entry: 'V10.1 Turbo Pro · Her 10dk Tarama · Sıkı BB 2R + EMA20 Reddi 2R + Balina · 16 Slot',
       book: 'defter fiyatı',
       judge: 'açık',
-      flow: '10dk Yuvarlanan 15m (BB/REJ/LONG ≥$10M · Balina SHORT ≥$5M & BTC<EMA100)',
+      flow: '10dk Yuvarlanan 15m (Sıkı BB/REJ/LONG ≥$10M · Balina SHORT ≥$5M & BTC<EMA100)',
       freqai: 'kapalı',
       funding: 'kapalı',
       team: 'kapalı'
@@ -1947,17 +1947,17 @@ function getSessionRiskMult(tsMs = Date.now()) {
 
 function evaluateBbSnapback15m(k, idx, btcReg, btc15m = 0) {
   if (!Array.isArray(k) || idx < 55 || idx >= k.length) return null;
-  if (btc15m > 0.25) return null; // V10.0 Turbo: BOĞA + TESTERE + AYI tüm rejimlerde aktif (BTC sert yeşil mum hariç)
+  if (btc15m > 0.25) return null; // V10.1 Turbo Pro: Sıkı BB_T1 · BOĞA + TESTERE + AYI tüm rejimlerde aktif
   const o = parseFloat(k[idx][1]) || 0;
   const c = parseFloat(k[idx][4]) || 0;
   if (c < 0.02 || o <= 0 || c >= o) return null;
   const move = ((c - o) / o) * 100;
-  if (move > -0.25 || move <= -1.50) return null;
+  if (move > -0.30 || move <= -1.30) return null;
 
   const q = parseFloat(k[idx][7]) || 0;
   const tb = parseFloat(k[idx][10]) || 0;
   const taker = q > 0 ? (tb / q) * 100 : 50;
-  if (taker > 47.0) return null;
+  if (taker > 46.0) return null;
 
   let ema20 = parseFloat(k[0][4]) || 0;
   let ema50 = ema20;
@@ -1972,10 +1972,10 @@ function evaluateBbSnapback15m(k, idx, btcReg, btc15m = 0) {
     else { avgG = (avgG * 13 + g) / 14; avgL = (avgL * 13 + ls) / 14; }
     if (m === idx - 1) rsiPrev = avgL === 0 ? 100 : 100 - (100 / (1 + avgG / avgL));
   }
-  if (rsiPrev < 66.0) return null;
+  if (rsiPrev < 70.0) return null;
 
   const distPct = ema20 > 0 ? ((c - ema20) / ema20) * 100 : 0;
-  if (distPct < 1.00) return null;
+  if (distPct < 1.30) return null;
 
   let mean = 0;
   for (let m = idx - 20; m <= idx - 1; m++) mean += parseFloat(k[m][4]) || 0;
@@ -1985,7 +1985,7 @@ function evaluateBbSnapback15m(k, idx, btcReg, btc15m = 0) {
   const sd = Math.sqrt(v2 / 20);
   const prevC = parseFloat(k[idx - 1][4]) || 0;
   const bbzPrev = sd > 0 ? (prevC - mean) / sd : 0;
-  if (bbzPrev < 1.65) return null;
+  if (bbzPrev < 1.90) return null;
 
   let trSum = 0;
   for (let m = idx - 14; m < idx; m++) {
@@ -1993,16 +1993,16 @@ function evaluateBbSnapback15m(k, idx, btcReg, btc15m = 0) {
     if (pc > 0) trSum += (Math.max(hh - ll, Math.abs(hh - pc), Math.abs(ll - pc)) / pc) * 100;
   }
   const atr15 = trSum / 14;
-  if (atr15 < 0.60 || atr15 > 2.00) return null;
+  if (atr15 < 0.70 || atr15 > 1.75) return null;
 
   const open4h = parseFloat(k[idx - 16][1]) || o;
   const chg4h = open4h > 0 ? ((c - open4h) / open4h) * 100 : 0;
-  if (chg4h >= 10.5) return null;
+  if (chg4h >= 9.5) return null;
 
   let sumV = 0;
   for (let m = idx - 20; m < idx; m++) sumV += parseFloat(k[m][5]) || 0;
   const volMult = sumV > 0 ? (parseFloat(k[idx][5]) || 0) / (sumV / 20) : 1;
-  if (volMult < 0.80) return null;
+  if (volMult < 0.90) return null;
   const open1h = parseFloat(k[idx - 4][1]) || o;
   const open3h = parseFloat(k[idx - 12][1]) || o;
   const slPct = Number(Math.max(0.90, Math.min(2.50, atr15 * 1.50)).toFixed(2));
@@ -2649,8 +2649,8 @@ function analyzeCoinForReplay(sym, k, meta, btcRegime, cutoffTs, mode) {
 
     // V10.0 TURBO 3-MOTOR (Canlı 10dk Rolling + Replay 1-e-1: BB 2.0R + EMA20 Reddi 2.0R + Balina L/S!)
     const volM = Number(meta.vol24M) || 0;
-    // 1. Öncelik: BB Z-Score Aşırı Alım Dönüşü (TÜM REJİMLER · ≥$10M LİKİT · SAF 2.0R LİMİT TP · RSI≥66, BBZ≥1.65, EMA≥1.00, tk≤47!)
-    if (volM >= 10 && takerFast <= 47 && btc15m <= 0.25 && cArr[i] < oArr[i] && rsiArr[i - 1] >= 65.5) {
+    // 1. Öncelik: Sıkı BB Z-Score Aşırı Alım Dönüşü (TÜM REJİMLER · ≥$10M LİKİT · SAF 2.0R LİMİT TP · RSI≥70, BBZ≥1.90, EMA≥1.30, tk≤46!)
+    if (volM >= 10 && takerFast <= 46 && btc15m <= 0.25 && cArr[i] < oArr[i] && rsiArr[i - 1] >= 69.5) {
       const sigBb = evaluateBbSnapback15m(k, i, btcReg, btc15m);
       if (sigBb && sigBb.approved) {
         seenEventKey.add(ts);
@@ -3606,7 +3606,7 @@ async function scanLoop() {
       const windowLbl = (secIn10mNow >= 4 && secIn10mNow <= 240)
         ? '⚡ 10dk Tarama AÇIK'
         : `⏳ Sonraki 10dk tarama: ${Math.ceil((600 - secIn10mNow) / 60)} dk`;
-      addLog(`🔥 [V10.0 Turbo 10m]: ${validTickers.length} Saf Kripto (${topCandidates.length} Aday ≥$5M) | ${liveBtcRegime.label} | Lider: ${topCandidates[0].symbol} (24s: %${topCandidates[0].chg.toFixed(1)}) | ${windowLbl} | Slot: ${activePositions.length}/${CONFIG.maxSlots}`);
+      addLog(`🔥 [V10.1 Turbo Pro 10m]: ${validTickers.length} Saf Kripto (${topCandidates.length} Aday ≥$5M) | ${liveBtcRegime.label} | Lider: ${topCandidates[0].symbol} (24s: %${topCandidates[0].chg.toFixed(1)}) | ${windowLbl} | Slot: ${activePositions.length}/${CONFIG.maxSlots}`);
     }
 
     if (!global.whaleEvaluatedCandles) global.whaleEvaluatedCandles = new Map();
