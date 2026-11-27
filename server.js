@@ -118,10 +118,10 @@ function engineSnapshot() {
     userSlots: userRisk.maxSlots,
     userMargin: userRisk.marginPerTrade,
     gates: {
-      entry: 'V10.2 Turbo Scout · Her 10dk En İyi Koin + BB 2R + REJ 2R + Balina · 16 Slot',
+      entry: 'V10.3 Dual-Scout · Her 10dk Boğa/Ayı En İyi Koin + BB 2R + REJ 2R + Balina · 16 Slot',
       book: 'defter fiyatı',
       judge: 'açık',
-      flow: '10dk Yuvarlanan 15m (4/4 Rejim Kârlı · 10dk Ort. Bekleme · BB/REJ/SCOUT ≥$10M)',
+      flow: '10dk Yuvarlanan 15m (Boğa+Ayı Çift Scout · 4/4 Rejim Kârlı · 10dk Medyan Bekleme · ≥$10M)',
       freqai: 'kapalı',
       funding: 'kapalı',
       team: 'kapalı'
@@ -550,6 +550,7 @@ function formatWaEngine(radarTag, strategy) {
   if (strategy === 'BB_MR' || tag.includes('BB DÖNÜŞ')) return '🧲 BB Dönüş 2R';
   if (strategy === 'EMA_REJ' || tag.includes('EMA20 REDDİ')) return '📐 EMA20 Reddi 2R';
   if (strategy === 'SCOUT_S' || tag.includes('TREND SCOUT')) return '🎯 Trend Scout 10m';
+  if (strategy === 'SCOUT_L' || tag.includes('BULL SCOUT')) return '🟢 Bull Scout 10m';
   if (strategy === 'HDIST' || tag.includes('GİZLİ DAĞITIM')) return '🕵️ Gizli Dağıtım';
   if (strategy === 'DON_S' || tag.includes('DONCHIAN')) return '📉 Donchian Kırılım';
   if (tag.includes('1S') || tag.includes('1H')) return '⏱️ 1S Balina';
@@ -2185,6 +2186,82 @@ function evaluateTrendScout15m(k, idx, btc15m = 0) {
   };
 }
 
+// 🟢 6. MOTOR — V10.3 10DK BOĞA SCOUT (PB2: BTC > EMA50 & EMA100 iken yükseliş trendindeki koinlerin EMA20 destek sıçramasını yakalar · RUNNER · %50 risk · 4/4 Veri Seti Pozitif!)
+function evaluateBullPullbackScout15m(k, idx, btc15m = 0) {
+  if (!Array.isArray(k) || idx < 55 || idx >= k.length) return null;
+  if (btc15m < -0.20) return null;
+  const o = parseFloat(k[idx][1]) || 0;
+  const h = parseFloat(k[idx][2]) || 0;
+  const l = parseFloat(k[idx][3]) || 0;
+  const c = parseFloat(k[idx][4]) || 0;
+  if (c < 0.02 || o <= 0 || c <= o) return null;
+  const move = ((c - o) / o) * 100;
+  if (move < 0.15) return null;
+
+  const q = parseFloat(k[idx][7]) || 0;
+  const tb = parseFloat(k[idx][10]) || 0;
+  const taker = q > 0 ? (tb / q) * 100 : 50;
+  if (taker < 56.0) return null;
+
+  const sp = h - l;
+  const uw = sp > 0 ? (h - Math.max(c, o)) / sp : 0;
+  if (uw > 0.45) return null;
+
+  let sumV = 0;
+  for (let m = idx - 20; m < idx; m++) sumV += parseFloat(k[m][5]) || 0;
+  const volMult = sumV > 0 ? (parseFloat(k[idx][5]) || 0) / (sumV / 20) : 1;
+  if (volMult < 1.10) return null;
+
+  let trSum = 0;
+  for (let m = idx - 14; m < idx; m++) {
+    const hh = parseFloat(k[m][2]) || 0, ll = parseFloat(k[m][3]) || 0, pc = parseFloat(k[m - 1][4]) || 0;
+    if (pc > 0) trSum += (Math.max(hh - ll, Math.abs(hh - pc), Math.abs(ll - pc)) / pc) * 100;
+  }
+  const atr15 = trSum / 14;
+  if (atr15 < 0.55 || atr15 > 2.60) return null;
+
+  let ema20 = parseFloat(k[0][4]) || 0, ema50 = ema20;
+  for (let m = 1; m <= idx; m++) {
+    const cm = parseFloat(k[m][4]) || ema20;
+    ema20 = cm * (2 / 21) + ema20 * (19 / 21);
+    ema50 = cm * (2 / 51) + ema50 * (49 / 51);
+  }
+  if (!(ema20 > ema50)) return null;
+  if (!(l <= ema20 * 1.0015 && c > ema20)) return null;
+
+  const distSig = ema20 > 0 ? ((c - ema20) / ema20) * 100 : 0;
+  let rg = 0, rl = 0;
+  for (let m = idx - 14; m <= idx; m++) {
+    const d = (parseFloat(k[m][4]) || 0) - (parseFloat(k[m - 1][4]) || 0);
+    if (d > 0) rg += d; else rl -= d;
+  }
+  const rsi15 = rl === 0 ? 100 : 100 - (100 / (1 + rg / rl));
+  const open1h = parseFloat(k[idx - 4][1]) || o;
+  const open3h = parseFloat(k[idx - 12][1]) || o;
+  const open4h = parseFloat(k[idx - 16][1]) || o;
+  const slPct = Number(Math.max(0.95, Math.min(2.60, atr15 * 1.50)).toFixed(2));
+
+  return {
+    approved: true,
+    engine: 'SCOUT_L',
+    timeframe: 'SCTL',
+    isAux: true,
+    isScout: true,
+    riskMult: 0.50,
+    exitMode: 'RUNNER',
+    maxBars15: 24,
+    side: 'LONG',
+    score: 135 + (volMult * 15) + ((taker - 50) * 2) + (move * 10),
+    slPctOverride: slPct,
+    atr15, volMult, taker, move,
+    chg1h: open1h > 0 ? ((c - open1h) / open1h) * 100 : 0,
+    chg3h: open3h > 0 ? ((c - open3h) / open3h) * 100 : 0,
+    chg4h: open4h > 0 ? ((c - open4h) / open4h) * 100 : 0,
+    ema20, ema50, distEma20: distSig, rsi15,
+    closePx: c, candleTs: Number(k[idx][0]) || 0
+  };
+}
+
 // 🕵️ 4. MOTOR — GİZLİ BALİNA DAĞITIMI (Yeşil mumda yüksek hacim + ≥%58 agresif satıcı baskısı! BOĞA+TESTERE+AYI tüm rejimlerde kârlı!)
 function evaluateHiddenDistrib15m(k, idx, btc15m = 0) {
   if (!Array.isArray(k) || idx < 55 || idx >= k.length) return null;
@@ -2465,16 +2542,17 @@ function simulateWhaleTrade15m(k, entryIdx, sig, riskUsd, forceSide = null) {
 // - BULL: Balina LONG + BB 2.0R Limit-TP SHORT
 // - BEAR (BTC < EMA100): Balina SHORT + Donchian SHORT + BB 2.0R Limit-TP SHORT
 // - CHOP / Zayıf Ayı (BTC >= EMA100): BB 2.0R Limit-TP SHORT + Balina LONG (sahte ayı tuzağına short yok!)
-let liveBtcRegime = { ts: 0, regime: 'UNKNOWN', label: '⏳ BTC Rejimi hesaplanıyor', close: 0, ema20: 0, ema50: 0, ema100: 0, belowEma100: true, btc15m: 0 };
+let liveBtcRegime = { ts: 0, regime: 'UNKNOWN', label: '⏳ BTC Rejimi hesaplanıyor', close: 0, ema20: 0, ema50: 0, ema100: 0, belowEma100: true, aboveEma50: false, aboveEma100: false, btc15m: 0 };
 
-function formatBtcRegimeLabel(regime, belowEma100 = true) {
-  if (regime === 'BULL') return '🟢 BTC BOĞA (BB 2R + REJ 2R + Balina L)';
+function formatBtcRegimeLabel(regime, belowEma100 = true, aboveEma50 = false) {
+  const bullScoutTag = (!belowEma100 && aboveEma50) ? ' + Bull Scout L' : '';
+  if (regime === 'BULL') return `🟢 BTC BOĞA (BB 2R + REJ 2R + Balina L${bullScoutTag})`;
   if (regime === 'BEAR') {
     return belowEma100 === false
-      ? '🟠 BTC ZAYIF AYI (BB 2R + REJ 2R · Makro>EMA100)'
-      : '🔴 BTC AYI (Balina S + BB 2R + REJ 2R)';
+      ? `🟠 BTC ZAYIF AYI (BB 2R + REJ 2R + Scout S${bullScoutTag})`
+      : '🔴 BTC AYI (Balina S + BB 2R + REJ 2R + Scout S)';
   }
-  if (regime === 'CHOP') return '🟡 BTC TESTERE (BB 2R + REJ 2R + Balina L)';
+  if (regime === 'CHOP') return `🟡 BTC TESTERE (BB 2R + REJ 2R + Scout S${bullScoutTag})`;
   return '⏳ BTC Rejimi hesaplanıyor';
 }
 
@@ -2482,8 +2560,10 @@ function buildBtcRegimeMap15m(btcKlines) {
   const byTs = new Map();
   const byMove = new Map();
   const byBelow100 = new Map();
-  let latest = { ts: 0, regime: 'UNKNOWN', label: formatBtcRegimeLabel('UNKNOWN', true), close: 0, ema20: 0, ema50: 0, ema100: 0, belowEma100: true, btc15m: 0 };
-  if (!Array.isArray(btcKlines) || btcKlines.length < 55) return { byTs, byMove, byBelow100, latest };
+  const byAbove50 = new Map();
+  const byAbove100 = new Map();
+  let latest = { ts: 0, regime: 'UNKNOWN', label: formatBtcRegimeLabel('UNKNOWN', true, false), close: 0, ema20: 0, ema50: 0, ema100: 0, belowEma100: true, aboveEma50: false, aboveEma100: false, btc15m: 0 };
+  if (!Array.isArray(btcKlines) || btcKlines.length < 55) return { byTs, byMove, byBelow100, byAbove50, byAbove100, latest };
   let ema20 = parseFloat(btcKlines[0][4]) || 0;
   let ema50 = ema20;
   let ema100 = ema20;
@@ -2502,13 +2582,17 @@ function buildBtcRegimeMap15m(btcKlines) {
       const ts = Number(btcKlines[i][0]) || 0;
       const btc15m = o > 0 ? ((c - o) / o) * 100 : 0;
       const belowEma100 = c < ema100;
+      const aboveEma50 = c > ema50;
+      const aboveEma100 = c > ema100;
       byTs.set(ts, regime);
       byMove.set(ts, btc15m);
       byBelow100.set(ts, belowEma100);
-      latest = { ts, regime, label: formatBtcRegimeLabel(regime, belowEma100), close: c, ema20, ema50, ema100, belowEma100, btc15m };
+      byAbove50.set(ts, aboveEma50);
+      byAbove100.set(ts, aboveEma100);
+      latest = { ts, regime, label: formatBtcRegimeLabel(regime, belowEma100, aboveEma50), close: c, ema20, ema50, ema100, belowEma100, aboveEma50, aboveEma100, btc15m };
     }
   }
-  return { byTs, byMove, byBelow100, latest };
+  return { byTs, byMove, byBelow100, byAbove50, byAbove100, latest };
 }
 
 async function fetchKlines15mPaged(sym, totalBars, bypassCache = true) {
@@ -2721,6 +2805,8 @@ function analyzeCoinForReplay(sym, k, meta, btcRegime, cutoffTs, mode) {
     const btcReg = btcRegime.byTs.get(ts) || 'CHOP';
     const btc15m = btcRegime.byMove ? (btcRegime.byMove.get(ts) || 0) : 0;
     const btcBelow100 = btcRegime.byBelow100 ? (btcRegime.byBelow100.get(ts) !== false) : true;
+    const btcAbove50 = btcRegime.byAbove50 ? (btcRegime.byAbove50.get(ts) === true) : false;
+    const btcAbove100 = btcRegime.byAbove100 ? (btcRegime.byAbove100.get(ts) === true) : !btcBelow100;
     const q = qArr[i], tb = tbArr[i];
     const takerFast = q > 0 ? (tb / q) * 100 : 50;
     const volMultFast = avgVol20Arr[i] > 0 ? (vArr[i] / avgVol20Arr[i]) : 1;
@@ -2764,12 +2850,23 @@ function analyzeCoinForReplay(sym, k, meta, btcRegime, cutoffTs, mode) {
       }
     }
 
-    // 4. Öncelik: V10.2 10dk Trend Scout (Ana motorlar boş geçerse en iyi düşüş trendi koinini seçer · max 6 slot · %55 risk!)
+    // 4. Öncelik: V10.2 10dk Trend Scout SHORT (Ana motorlar boş geçerse en iyi düşüş trendi koinini seçer · max 6 ortak scout slot · %55 risk!)
     if (volM >= 10 && btc15m <= 0.30 && takerFast <= 45 && volMultFast >= 0.98 && cArr[i] < oArr[i] && ema20Arr[i] < ema50Arr[i]) {
       const sigSct = evaluateTrendScout15m(k, i, btc15m);
       if (sigSct && sigSct.approved) {
         seenEventKey.add(ts);
         const ev = emitEvent(sigSct, i, btcReg, btc15m, true, '-');
+        if (ev) events.push(ev);
+        continue;
+      }
+    }
+
+    // 5. Öncelik: V10.3 10dk Bull Scout LONG (BTC > EMA50 & EMA100 iken EMA20 destek sıçraması yapan en iyi boğa koinini seçer · %50 risk!)
+    if (volM >= 10 && btcAbove50 && btcAbove100 && btc15m >= -0.20 && takerFast >= 56 && volMultFast >= 1.08 && cArr[i] > oArr[i] && ema20Arr[i] > ema50Arr[i]) {
+      const sigSctL = evaluateBullPullbackScout15m(k, i, btc15m);
+      if (sigSctL && sigSctL.approved) {
+        seenEventKey.add(ts);
+        const ev = emitEvent(sigSctL, i, btcReg, btc15m, true, '-');
         if (ev) events.push(ev);
         continue;
       }
@@ -3181,10 +3278,11 @@ async function runHistoricalReplay(hours = 72, maxCoins = 120, opts = {}) {
         const maxSameSide = replaySlots >= 14 ? Math.min(12, replaySlots - 4) : (replaySlots >= 6 ? (replaySlots - 2) : (replaySlots >= 4 ? 3 : replaySlots));
         const maxRejSlots = Math.max(2, Math.min(7, Math.floor(replaySlots * 0.45)));
         const maxScoutSlots = Math.max(2, Math.min(6, Math.floor(replaySlots * 0.40)));
+        const isScoutEng = eng => eng === 'SCOUT_S' || eng === 'SCOUT_L';
         const barCoreCount = new Map();
         const barScoutTaken = new Map();
         for (const ev of workingEvents) {
-          if (ev.botApproved && ev.engine !== 'SCOUT_S') {
+          if (ev.botApproved && !isScoutEng(ev.engine)) {
             barCoreCount.set(ev.candleTs, (barCoreCount.get(ev.candleTs) || 0) + 1);
           }
         }
@@ -3200,12 +3298,12 @@ async function runHistoricalReplay(hours = 72, maxCoins = 120, opts = {}) {
           if (openSlots.some(pSlot => pSlot.symbol === ev.symbol)) continue;
           if (openSlots.filter(pSlot => pSlot.side === ev.side).length >= maxSameSide) continue;
           if (ev.engine === 'EMA_REJ' && openSlots.filter(pSlot => pSlot.engine === 'EMA_REJ').length >= maxRejSlots) continue;
-          if (ev.engine === 'SCOUT_S') {
+          if (isScoutEng(ev.engine)) {
             const coreInBar = barCoreCount.get(ev.candleTs) || 0;
             const sctLimitBar = openSlots.length < 4 ? 2 : 1;
             const sctAlreadyBar = barScoutTaken.get(ev.candleTs) || 0;
             if (coreInBar >= sctLimitBar || (coreInBar + sctAlreadyBar) >= sctLimitBar) continue;
-            if (openSlots.filter(pSlot => pSlot.engine === 'SCOUT_S').length >= maxScoutSlots) continue;
+            if (openSlots.filter(pSlot => isScoutEng(pSlot.engine)).length >= maxScoutSlots) continue;
           }
           if (ev.isAux && openSlots.filter(pSlot => pSlot.isAux).length >= maxAuxSlots) continue;
           if ((coinCd[ev.symbol] || 0) > evEntryTs) continue;
@@ -3226,7 +3324,7 @@ async function runHistoricalReplay(hours = 72, maxCoins = 120, opts = {}) {
           const rec = buildTradeRecord(ev, riskUsd, bal);
           oppNetTotal += rec.oppPnl;
           openSlots.push({ symbol: ev.symbol, side: ev.side, engine: ev.engine, isAux: !!ev.isAux, margin: actualMargin, exitTs: rec.exitTs, netPnl: rec.netPnl, ref: rec });
-          if (ev.engine === 'SCOUT_S') barScoutTaken.set(ev.candleTs, (barScoutTaken.get(ev.candleTs) || 0) + 1);
+          if (isScoutEng(ev.engine)) barScoutTaken.set(ev.candleTs, (barScoutTaken.get(ev.candleTs) || 0) + 1);
           coinCd[ev.symbol] = Math.max(coinCd[ev.symbol] || 0, rec.exitTs + (15 * 60 * 1000));
           trades.push(rec);
         }
@@ -3324,6 +3422,7 @@ async function runHistoricalReplay(hours = 72, maxCoins = 120, opts = {}) {
         'BB': '🧲 BB Dönüş 2R',
         'REJ': '📐 EMA20 Reddi 2R',
         'SCT': '🎯 Trend Scout 10m',
+        'SCTL': '🟢 Bull Scout 10m',
         'DON': '📉 Donchian Kırılım',
         'PIYASA': '⚡ Piyasa İvme (Pas)',
         'RSI_D': '📉 Aşırı RSI (Pas)'
@@ -3712,7 +3811,7 @@ async function scanLoop() {
       const windowLbl = (secIn10mNow >= 4 && secIn10mNow <= 240)
         ? '⚡ 10dk Tarama AÇIK'
         : `⏳ Sonraki 10dk tarama: ${Math.ceil((600 - secIn10mNow) / 60)} dk`;
-      addLog(`🔥 [V10.2 Turbo Scout 10m]: ${validTickers.length} Saf Kripto (${topCandidates.length} Aday ≥$5M) | ${liveBtcRegime.label} | Lider: ${topCandidates[0].symbol} (24s: %${topCandidates[0].chg.toFixed(1)}) | ${windowLbl} | Slot: ${activePositions.length}/${CONFIG.maxSlots}`);
+      addLog(`🔥 [V10.3 Dual-Scout 10m]: ${validTickers.length} Saf Kripto (${topCandidates.length} Aday ≥$5M) | ${liveBtcRegime.label} | Lider: ${topCandidates[0].symbol} (24s: %${topCandidates[0].chg.toFixed(1)}) | ${windowLbl} | Slot: ${activePositions.length}/${CONFIG.maxSlots}`);
     }
 
     if (!global.whaleEvaluatedCandles) global.whaleEvaluatedCandles = new Map();
@@ -3781,12 +3880,14 @@ async function scanLoop() {
         const btcRegNow = liveBtcRegime.regime || 'CHOP';
         const btc15mNow = Number(liveBtcRegime.btc15m) || 0;
         const btcBelow100Now = liveBtcRegime.belowEma100 !== false;
+        const btcAbove50Now = liveBtcRegime.aboveEma50 === true;
+        const btcAbove100Now = liveBtcRegime.aboveEma100 === true;
         const vol24MNow = Number(data.volM) || 0;
         let sig = null;
         let whaleDiag = null;
-        // V10.0 TURBO 3-MOTOR (Her 10dk Yuvarlanan 15m · 4/4 Veri Seti Doğrulamalı):
+        // V10.3 DUAL-SCOUT (Her 10dk Yuvarlanan 15m · 4/4 Veri Seti Doğrulamalı):
         if (vol24MNow >= 5) {
-          // 1. Öncelik: BB Z-Score Aşırı Alım Dönüşü (TÜM REJİMLER · ≥$10M LİKİT · SAF 2.0R LİMİT TP · RSI≥66, BBZ≥1.65, EMA≥1.00, tk≤47!)
+          // 1. Öncelik: BB Z-Score Aşırı Alım Dönüşü (TÜM REJİMLER · ≥$10M LİKİT · SAF 2.0R LİMİT TP · RSI≥70, BBZ≥1.90, EMA≥1.30, tk≤46!)
           if (vol24MNow >= 10) {
             const sigBb = evaluateBbSnapback15m(k15m, closedIdx, btcRegNow, btc15mNow);
             if (sigBb && sigBb.approved) sig = sigBb;
@@ -3810,10 +3911,15 @@ async function scanLoop() {
             const sigRej = evaluateEmaRejection15m(k15m, closedIdx, btc15mNow);
             if (sigRej && sigRej.approved) sig = sigRej;
           }
-          // 4. Öncelik: V10.2 10dk En İyi Koin Trend Scout (Ana motorlar boş geçerse en iyi 1-2 koini açar · RUNNER · %55 risk!)
+          // 4. Öncelik: V10.2 10dk Trend Scout SHORT (Ana motorlar boş geçerse en iyi düşüş trendi koinini seçer · RUNNER · %55 risk!)
           if (!sig && vol24MNow >= 10) {
             const sigSct = evaluateTrendScout15m(k15m, closedIdx, btc15mNow);
             if (sigSct && sigSct.approved) sig = sigSct;
+          }
+          // 5. Öncelik: V10.3 10dk Bull Scout LONG (BTC > EMA50 & EMA100 iken EMA20 destek sıçraması yapan en iyi boğa koinini seçer · RUNNER · %50 risk!)
+          if (!sig && vol24MNow >= 10 && btcAbove50Now && btcAbove100Now) {
+            const sigSctL = evaluateBullPullbackScout15m(k15m, closedIdx, btc15mNow);
+            if (sigSctL && sigSctL.approved) sig = sigSctL;
           }
         }
         if (!sig) {
@@ -3951,20 +4057,22 @@ async function scanLoop() {
         const isBbSig = sig.engine === 'BB_MR';
         const isRejSig = sig.engine === 'EMA_REJ';
         const isSctSig = sig.engine === 'SCOUT_S';
+        const isSctLSig = sig.engine === 'SCOUT_L';
         const isHdSig = sig.engine === 'HDIST';
         const isDonSig = sig.engine === 'DON_S';
         const dirEmoji = isBbSig ? '🧲 BB DÖNÜŞ SHORT'
           : (isRejSig ? '📐 EMA20 REDDİ SHORT'
           : (isSctSig ? '🎯 TREND SCOUT SHORT'
+          : (isSctLSig ? '🟢 BULL SCOUT LONG'
           : (isHdSig ? '🕵️ GİZLİ DAĞITIM SHORT'
           : (isDonSig ? '📉 DONCHIAN KIRILIM SHORT'
           : (is1hSig ? (side === 'LONG' ? '🐋🚀 BALİNA 1S LONG' : '🐋🩸 BALİNA 1S SHORT')
-          : (side === 'LONG' ? '🐋🚀 BALİNA LONG' : '🐋🩸 BALİNA SHORT'))))));
+          : (side === 'LONG' ? '🐋🚀 BALİNA LONG' : '🐋🩸 BALİNA SHORT')))))));
         const flowText = side === 'LONG' ? `Alıcı %${sig.taker.toFixed(0)}` : `Satıcı %${(100 - sig.taker).toFixed(0)}`;
         const radarTag = isBbSig
           ? `[${dirEmoji} | BBZ ${sig.bbzPrev} | RSI ${sig.rsi15.toFixed(0)} | EMA20 +%${sig.distEma20.toFixed(1)} | ${flowText}] [SL: %${tradeSlPct.toFixed(2)} | Hedef: +%${tradeMoonPct.toFixed(2)} | Risk: ~$${effectiveRiskUsd.toFixed(2)}]`
-          : ((isRejSig || isSctSig)
-            ? `[${dirEmoji} | 15dk %${sig.move.toFixed(2)} | Hacim ${sig.volMult.toFixed(1)}x | ${flowText}] [SL: %${tradeSlPct.toFixed(2)} | Hedef: +%${tradeMoonPct.toFixed(2)} | Risk: ~$${effectiveRiskUsd.toFixed(2)}]`
+          : ((isRejSig || isSctSig || isSctLSig)
+            ? `[${dirEmoji} | 15dk ${sig.move >= 0 ? '+' : ''}%${sig.move.toFixed(2)} | Hacim ${sig.volMult.toFixed(1)}x | ${flowText}] [SL: %${tradeSlPct.toFixed(2)} | Hedef: +%${tradeMoonPct.toFixed(2)} | Risk: ~$${effectiveRiskUsd.toFixed(2)}]`
             : (isHdSig
               ? `[${dirEmoji} | Yeşil +%${sig.move.toFixed(2)} | Hacim ${sig.volMult.toFixed(1)}x | ${flowText}] [SL: %${tradeSlPct.toFixed(2)} | ATR15m: %${sig.atr15.toFixed(2)} | Risk: ~$${effectiveRiskUsd.toFixed(2)}]`
               : (is1hSig
@@ -4029,17 +4137,18 @@ async function scanLoop() {
           convictionLabel: isBbSig ? '🧲 BB DÖNÜŞ 2R'
             : (isRejSig ? '📐 EMA20 REDDİ 2R'
             : (isSctSig ? '🎯 TREND SCOUT 10m'
+            : (isSctLSig ? '🟢 BULL SCOUT 10m'
             : (isHdSig ? '🕵️ GİZLİ DAĞITIM'
             : (isDonSig ? '📉 DONCHIAN KIRILIM'
             : (is1hSig ? (side === 'LONG' ? '🐋 BALİNA 1S ROKET' : '🐋 BALİNA 1S ŞELALE')
-            : (side === 'LONG' ? '🐋 BALİNA ROKET 15M' : '🐋 BALİNA ŞELALE 15M')))))),
+            : (side === 'LONG' ? '🐋 BALİNA ROKET 15M' : '🐋 BALİNA ŞELALE 15M'))))))),
           radarTag: radarTag,
           chg3h: Number(sig.chg3h.toFixed(2)),
           vol3hM: Number(vol3hM.toFixed(1)),
           chg24h: Number(chg.toFixed(2)),
           range3h: range3hStr,
           takerBuyRatio: Number(sig.taker.toFixed(1)),
-          signal: isBbSig ? '🧲 BB DÖNÜŞ' : (isRejSig ? '📐 EMA20 REDDİ' : (isSctSig ? '🎯 TREND SCOUT' : (isHdSig ? '🕵️ GİZLİ DAĞITIM' : (isDonSig ? '📉 DONCHIAN' : (side === "LONG" ? "🐋🚀 BALİNA BOĞA" : "🐋🩸 BALİNA AYI"))))),
+          signal: isBbSig ? '🧲 BB DÖNÜŞ' : (isRejSig ? '📐 EMA20 REDDİ' : (isSctSig ? '🎯 TREND SCOUT' : (isSctLSig ? '🟢 BULL SCOUT' : (isHdSig ? '🕵️ GİZLİ DAĞITIM' : (isDonSig ? '📉 DONCHIAN' : (side === "LONG" ? "🐋🚀 BALİNA BOĞA" : "🐋🩸 BALİNA AYI")))))),
           btc5mEntry: btc5mNumeric,
           btc15mEntry: btc15mNumeric
         };
@@ -4073,15 +4182,16 @@ async function scanLoop() {
     if (scanEntryCandidates.length > 0 && activePositions.length < CONFIG.maxSlots) {
       scanEntryCandidates.sort((a, b) => b.entryScore - a.entryScore);
       const taken = new Set(activePositions.map((p) => p.symbol));
-      let activeAuxCount = activePositions.filter(p => p.isAux || p.strategy === 'BB_MR' || p.strategy === 'EMA_REJ' || p.strategy === 'SCOUT_S' || p.strategy === 'HDIST').length;
+      const isScoutStrat = s => s === 'SCOUT_S' || s === 'SCOUT_L';
+      let activeAuxCount = activePositions.filter(p => p.isAux || p.strategy === 'BB_MR' || p.strategy === 'EMA_REJ' || isScoutStrat(p.strategy) || p.strategy === 'HDIST').length;
       let activeRejCount = activePositions.filter(p => p.strategy === 'EMA_REJ').length;
-      let activeScoutCount = activePositions.filter(p => p.strategy === 'SCOUT_S').length;
+      let activeScoutCount = activePositions.filter(p => isScoutStrat(p.strategy)).length;
       const curMaxS = Number(CONFIG.maxSlots) || 16;
       const maxAuxSlots = Math.max(1, curMaxS >= 12 ? (curMaxS - 2) : (curMaxS >= 6 ? (curMaxS - 2) : Math.min(3, curMaxS - 1)));
       const maxSameSide = curMaxS >= 14 ? Math.min(12, curMaxS - 4) : (curMaxS >= 6 ? (curMaxS - 2) : (curMaxS >= 4 ? 3 : curMaxS));
       const maxRejSlots = Math.max(2, Math.min(7, Math.floor(curMaxS * 0.45)));
       const maxScoutSlots = Math.max(2, Math.min(6, Math.floor(curMaxS * 0.40)));
-      const coreInScan = scanEntryCandidates.filter(c => c.position.strategy !== 'SCOUT_S').length;
+      const coreInScan = scanEntryCandidates.filter(c => !isScoutStrat(c.position.strategy)).length;
       const scoutTargetThisScan = activePositions.length < 4 ? 2 : 1;
       let scoutOpenedThisScan = 0;
       let activeLongCount = activePositions.filter(p => p.side === 'LONG').length;
@@ -4094,7 +4204,7 @@ async function scanLoop() {
         if (pick.side === 'LONG' && activeLongCount >= maxSameSide) continue;
         if (pick.side === 'SHORT' && activeShortCount >= maxSameSide) continue;
         if (pick.position.strategy === 'EMA_REJ' && activeRejCount >= maxRejSlots) continue;
-        if (pick.position.strategy === 'SCOUT_S') {
+        if (isScoutStrat(pick.position.strategy)) {
           if (activeScoutCount >= maxScoutSlots) continue;
           if ((coreInScan + scoutOpenedThisScan) >= scoutTargetThisScan) continue;
         }
@@ -4109,7 +4219,7 @@ async function scanLoop() {
         if (pick.side === 'LONG') activeLongCount++; else activeShortCount++;
         if (pick.isAux) activeAuxCount++;
         if (pick.position.strategy === 'EMA_REJ') activeRejCount++;
-        if (pick.position.strategy === 'SCOUT_S') { activeScoutCount++; scoutOpenedThisScan++; }
+        if (isScoutStrat(pick.position.strategy)) { activeScoutCount++; scoutOpenedThisScan++; }
         bookedMargin += pick.tradeMargin;
         activePositions.push(pick.position);
         activeSyms.add(pick.sym);
@@ -4669,6 +4779,9 @@ function formatSignalCompact(rTag) {
   } else if (rTag.includes('TREND SCOUT')) {
     label = '🎯 TREND SCOUT';
     badgeClass = 'badge-sig-bear';
+  } else if (rTag.includes('BULL SCOUT')) {
+    label = '🟢 BULL SCOUT';
+    badgeClass = 'badge-sig-bull';
   } else if (rTag.includes('DONCHIAN')) {
     label = '📉 DONCHIAN';
     badgeClass = 'badge-sig-bear';
@@ -5442,11 +5555,11 @@ function serveDashboardHtml() {
           </div>
         </div>
 
-        <div class="sidebar-section-title">🎯 V10.0 TURBO 10DK MOTOR</div>
+        <div class="sidebar-section-title">🎯 V10.3 DUAL-SCOUT 10DK MOTOR</div>
         <div class="sidebar-plan-card">
-          <div class="sidebar-plan-row">🧲 <b>BB Dönüş 2.0R:</b> Her 10dk tarama · Tüm rejimler · <b>≥$10M</b> · <b>Saf 2.0R Limit TP</b>.</div>
-          <div class="sidebar-plan-row">📐 <b>EMA20 Reddi 2.0R:</b> Zayıf koin EMA20 reddi · Tüm rejimler · <b>≥$10M</b> · <b>Saf 2.0R TP</b>.</div>
-          <div class="sidebar-plan-row">🐋 <b>Balina & Kalkan:</b> <b>16 Slot · %1.8 Risk</b> · <b>LONG ≥$10M</b> · <b>SHORT ≥$5M (BTC&lt;EMA100)</b>.</div>
+          <div class="sidebar-plan-row">🎯 <b>Çift Scout 10m (Boğa + Ayı):</b> Her 10dk en yüksek olasılıklı koini seçer · <b>🟢 Bull Scout L</b> (BTC&gt;EMA50/100) + <b>🎯 Trend Scout S</b>.</div>
+          <div class="sidebar-plan-row">🧲 <b>BB 2.0R &amp; EMA20 Reddi 2.0R:</b> Tüm rejimler · <b>≥$10M</b> · <b>Saf 2.0R Limit TP</b>.</div>
+          <div class="sidebar-plan-row">🐋 <b>Balina &amp; Kalkan:</b> <b>16 Slot · %1.8 Risk</b> · <b>LONG ≥$10M</b> · <b>SHORT ≥$5M (BTC&lt;EMA100)</b>.</div>
         </div>
 
         <details id="waDetails" style="margin-top:8px; background:var(--panel2); border:1px solid var(--border); border-radius:8px; padding:7px 9px;">
@@ -6031,6 +6144,9 @@ function serveDashboardHtml() {
       } else if (rTag.includes('TREND SCOUT')) {
         label = '🎯 TREND SCOUT';
         badgeClass = 'badge-sig-bear';
+      } else if (rTag.includes('BULL SCOUT')) {
+        label = '🟢 BULL SCOUT';
+        badgeClass = 'badge-sig-bull';
       } else if (rTag.includes('BALİNA BOĞA')) {
         label = '🐋 BALİNA BOĞA';
         badgeClass = 'badge-sig-bull';

@@ -247,6 +247,15 @@ class JudicialAuditCourt {
         judicialScore -= 35;
         accusations.push(`Trend Scout kırmızı teyit yok (%${chg15.toFixed(2)})`);
       }
+    } else if (strat === 'SCOUT_L') {
+      if (taker < 55.0) {
+        judicialScore -= 35;
+        accusations.push(`Bull Scout alıcı yetersiz (alıcı %${taker.toFixed(1)})`);
+      }
+      if (chg15 <= 0) {
+        judicialScore -= 35;
+        accusations.push(`Bull Scout yeşil teyit yok (%${chg15.toFixed(2)})`);
+      }
     } else if (strat === 'DON_S') {
       if (taker > 39.0) {
         judicialScore -= 35;
