@@ -118,10 +118,10 @@ function engineSnapshot() {
     userSlots: userRisk.maxSlots,
     userMargin: userRisk.marginPerTrade,
     gates: {
-      entry: 'V10.4 Equal-Risk Pro · Eşit Risk + RSI≤55 + SL≤%1.95 + Çift Scout 10m + BB/REJ 2R · 16 Slot',
+      entry: 'V10.5 Breath-Runner Pro · Nefes Alan 1.25R Trail + Max 2 Balina/Mum + Çift Scout 10m · 16 Slot',
       book: 'defter fiyatı',
       judge: 'açık',
-      flow: '10dk Yuvarlanan 15m (Gerçek %1.8 Eşit Risk · Gece 00-05 %35 · 5/5 Veri Seti Kârlı · ≥$10M)',
+      flow: '10dk Yuvarlanan 15m (Eşit Risk %1.8 · SHORT 1.25R/0.55R Trail · Max 2 Balina/Mum · Gece 00-05 %35)',
       freqai: 'kapalı',
       funding: 'kapalı',
       team: 'kapalı'
@@ -1744,7 +1744,7 @@ function evaluateWhaleSpike15m(k, idx) {
       engine: 'WHALE_15M',
       timeframe: '15m',
       isAux: false,
-      riskMult: 1.0,
+      riskMult: 0.90,
       exitMode: 'RUNNER',
       maxBars15: 32,
       side: 'LONG',
@@ -1760,7 +1760,7 @@ function evaluateWhaleSpike15m(k, idx) {
       engine: 'WHALE_15M',
       timeframe: '15m',
       isAux: false,
-      riskMult: 1.0,
+      riskMult: 0.90,
       exitMode: 'RUNNER',
       maxBars15: 32,
       side: 'SHORT',
@@ -2021,7 +2021,7 @@ function evaluateBbSnapback15m(k, idx, btcReg, btc15m = 0) {
     engine: 'BB_MR',
     timeframe: 'BB',
     isAux: true,
-    riskMult: 1.00,
+    riskMult: 0.90,
     exitMode: 'FIXED_TP',
     tpMult,
     maxBars15: 24,
@@ -2098,7 +2098,7 @@ function evaluateEmaRejection15m(k, idx, btc15m = 0) {
     engine: 'EMA_REJ',
     timeframe: 'REJ',
     isAux: true,
-    riskMult: 0.65,
+    riskMult: 0.70,
     exitMode: 'FIXED_TP',
     tpMult,
     maxBars15: 24,
@@ -2178,7 +2178,7 @@ function evaluateTrendScout15m(k, idx, btc15m = 0) {
     timeframe: 'SCT',
     isAux: true,
     isScout: true,
-    riskMult: 0.45,
+    riskMult: 0.55,
     exitMode: 'RUNNER',
     maxBars15: 24,
     side: 'SHORT',
@@ -2254,7 +2254,7 @@ function evaluateBullPullbackScout15m(k, idx, btc15m = 0) {
     timeframe: 'SCTL',
     isAux: true,
     isScout: true,
-    riskMult: 0.60,
+    riskMult: 0.65,
     exitMode: 'RUNNER',
     maxBars15: 24,
     side: 'LONG',
@@ -2506,10 +2506,10 @@ function simulateWhaleTrade15m(k, entryIdx, sig, riskUsd, forceSide = null) {
         beLocked = true;
       }
     } else {
-      const beMult = isLong ? 1.00 : 0.75;
-      const trailStartMult = isLong ? 1.20 : 0.90;
-      const trailGapMult = isLong ? 0.70 : 0.45;
-      const moonMult = isLong ? 5.00 : 3.50;
+      const beMult = isLong ? 1.00 : 0;
+      const trailStartMult = isLong ? 1.30 : 1.25;
+      const trailGapMult = isLong ? 0.65 : 0.55;
+      const moonMult = isLong ? 5.00 : 3.80;
       const tpGoal = slPct * moonMult;
       if (favMove >= tpGoal) {
         const grossPnl = nominal * (tpGoal / 100);
@@ -2521,7 +2521,7 @@ function simulateWhaleTrade15m(k, entryIdx, sig, riskUsd, forceSide = null) {
         tighten(mfe - (slPct * 0.60));
         trailing = true;
         beLocked = true;
-      } else if (!isLong && mfe >= slPct * 2.00) {
+      } else if (!isLong && mfe >= slPct * 2.20) {
         tighten(mfe - (slPct * 0.50));
         trailing = true;
         beLocked = true;
@@ -2529,7 +2529,7 @@ function simulateWhaleTrade15m(k, entryIdx, sig, riskUsd, forceSide = null) {
         tighten(mfe - (slPct * trailGapMult));
         trailing = true;
         beLocked = true;
-      } else if (!beLocked && mfe >= slPct * beMult && closeMove > 0.20) {
+      } else if (beMult > 0 && !beLocked && mfe >= slPct * beMult && closeMove > 0.20) {
         tighten(0.15);
         beLocked = true;
       }
@@ -3288,6 +3288,7 @@ async function runHistoricalReplay(hours = 72, maxCoins = 120, opts = {}) {
         const isScoutEng = eng => eng === 'SCOUT_S' || eng === 'SCOUT_L';
         const barCoreCount = new Map();
         const barScoutTaken = new Map();
+        const barWhaleTaken = new Map();
         for (const ev of workingEvents) {
           if (ev.botApproved && !isScoutEng(ev.engine)) {
             barCoreCount.set(ev.candleTs, (barCoreCount.get(ev.candleTs) || 0) + 1);
@@ -3305,6 +3306,7 @@ async function runHistoricalReplay(hours = 72, maxCoins = 120, opts = {}) {
           if (openSlots.some(pSlot => pSlot.symbol === ev.symbol)) continue;
           if (openSlots.filter(pSlot => pSlot.side === ev.side).length >= maxSameSide) continue;
           if (ev.engine === 'EMA_REJ' && openSlots.filter(pSlot => pSlot.engine === 'EMA_REJ').length >= maxRejSlots) continue;
+          if (ev.engine === 'WHALE_15M' && (barWhaleTaken.get(ev.candleTs) || 0) >= 2) continue;
           if (isScoutEng(ev.engine)) {
             if (ev.engine === 'SCOUT_S' && isNightScoutSBlocked(evEntryTs)) continue;
             const coreInBar = barCoreCount.get(ev.candleTs) || 0;
@@ -3334,6 +3336,7 @@ async function runHistoricalReplay(hours = 72, maxCoins = 120, opts = {}) {
           oppNetTotal += rec.oppPnl;
           openSlots.push({ symbol: ev.symbol, side: ev.side, engine: ev.engine, isAux: !!ev.isAux, margin: actualMargin, exitTs: rec.exitTs, netPnl: rec.netPnl, ref: rec });
           if (isScoutEng(ev.engine)) barScoutTaken.set(ev.candleTs, (barScoutTaken.get(ev.candleTs) || 0) + 1);
+          if (ev.engine === 'WHALE_15M') barWhaleTaken.set(ev.candleTs, (barWhaleTaken.get(ev.candleTs) || 0) + 1);
           coinCd[ev.symbol] = Math.max(coinCd[ev.symbol] || 0, rec.exitTs + (15 * 60 * 1000));
           trades.push(rec);
         }
@@ -3820,7 +3823,7 @@ async function scanLoop() {
       const windowLbl = (secIn10mNow >= 4 && secIn10mNow <= 240)
         ? '⚡ 10dk Tarama AÇIK'
         : `⏳ Sonraki 10dk tarama: ${Math.ceil((600 - secIn10mNow) / 60)} dk`;
-      addLog(`🔥 [V10.4 Equal-Risk 10m]: ${validTickers.length} Saf Kripto (${topCandidates.length} Aday ≥$5M) | ${liveBtcRegime.label} | Lider: ${topCandidates[0].symbol} (24s: %${topCandidates[0].chg.toFixed(1)}) | ${windowLbl} | Slot: ${activePositions.length}/${CONFIG.maxSlots}`);
+      addLog(`🔥 [V10.5 Breath-Runner 10m]: ${validTickers.length} Saf Kripto (${topCandidates.length} Aday ≥$5M) | ${liveBtcRegime.label} | Lider: ${topCandidates[0].symbol} (24s: %${topCandidates[0].chg.toFixed(1)}) | ${windowLbl} | Slot: ${activePositions.length}/${CONFIG.maxSlots}`);
     }
 
     if (!global.whaleEvaluatedCandles) global.whaleEvaluatedCandles = new Map();
@@ -4052,14 +4055,14 @@ async function scanLoop() {
         const isFixedSig = sig.exitMode === 'FIXED_TP';
         const isSnapSig = !isFixedSig && sig.exitMode === 'SNAP_RUNNER';
         const fixedTpMultSig = Number(sig.tpMult) || 2.00;
-        const tradeBePct = isFixedSig ? 0 : Number((tradeSlPct * (isSnapSig ? 0.65 : (isLongSide ? 1.00 : 0.75))).toFixed(2));
-        const tradeTp1Pct = isFixedSig ? 0 : Number((tradeSlPct * (isSnapSig ? 0.85 : (isLongSide ? 1.20 : 0.90))).toFixed(2));
-        const tradeTp2Pct = isFixedSig ? 0 : Number((tradeSlPct * (isSnapSig ? 1.15 : (isLongSide ? 3.00 : 2.00))).toFixed(2));
+        const tradeBePct = (isFixedSig || (!isSnapSig && !isLongSide)) ? 0 : Number((tradeSlPct * (isSnapSig ? 0.65 : 1.00)).toFixed(2));
+        const tradeTp1Pct = isFixedSig ? 0 : Number((tradeSlPct * (isSnapSig ? 0.85 : (isLongSide ? 1.30 : 1.25))).toFixed(2));
+        const tradeTp2Pct = isFixedSig ? 0 : Number((tradeSlPct * (isSnapSig ? 1.15 : (isLongSide ? 3.00 : 2.20))).toFixed(2));
         const tradeMoonPct = isFixedSig
           ? Number((sig.tpPctOverride || (tradeSlPct * fixedTpMultSig)).toFixed(2))
           : (isSnapSig
             ? Number((sig.tpPctOverride || (tradeSlPct * 1.35)).toFixed(2))
-            : Number((tradeSlPct * (isLongSide ? 5.00 : 3.50)).toFixed(2)));
+            : Number((tradeSlPct * (isLongSide ? 5.00 : 3.80)).toFixed(2)));
 
         const is1hSig = sig.engine === 'WHALE_1H';
         const isBbSig = sig.engine === 'BB_MR';
@@ -4202,6 +4205,7 @@ async function scanLoop() {
       const coreInScan = scanEntryCandidates.filter(c => !isScoutStrat(c.position.strategy)).length;
       const scoutTargetThisScan = activePositions.length < 4 ? 2 : 1;
       let scoutOpenedThisScan = 0;
+      let whaleOpenedThisScan = 0;
       let activeLongCount = activePositions.filter(p => p.side === 'LONG').length;
       let activeShortCount = activePositions.filter(p => p.side === 'SHORT').length;
       const room = CONFIG.maxSlots - activePositions.length;
@@ -4212,6 +4216,7 @@ async function scanLoop() {
         if (pick.side === 'LONG' && activeLongCount >= maxSameSide) continue;
         if (pick.side === 'SHORT' && activeShortCount >= maxSameSide) continue;
         if (pick.position.strategy === 'EMA_REJ' && activeRejCount >= maxRejSlots) continue;
+        if (pick.position.strategy === 'WHALE_15M' && whaleOpenedThisScan >= 2) continue;
         if (isScoutStrat(pick.position.strategy)) {
           if (activeScoutCount >= maxScoutSlots) continue;
           if ((coreInScan + scoutOpenedThisScan) >= scoutTargetThisScan) continue;
@@ -4227,6 +4232,7 @@ async function scanLoop() {
         if (pick.side === 'LONG') activeLongCount++; else activeShortCount++;
         if (pick.isAux) activeAuxCount++;
         if (pick.position.strategy === 'EMA_REJ') activeRejCount++;
+        if (pick.position.strategy === 'WHALE_15M') whaleOpenedThisScan++;
         if (isScoutStrat(pick.position.strategy)) { activeScoutCount++; scoutOpenedThisScan++; }
         bookedMargin += pick.tradeMargin;
         activePositions.push(pick.position);
@@ -4254,10 +4260,11 @@ async function scanLoop() {
         const isFixedOpen = pick.position.exitMode === 'FIXED_TP';
         const moonR = isFixedOpen
           ? `${(Number(pick.position.tpMult) || 2.0).toFixed(1)}R Limit-TP`
-          : (pick.position.exitMode === 'SNAP_RUNNER' ? 'BB' : (pick.side === 'LONG' ? '5.0R' : '3.5R'));
+          : (pick.position.exitMode === 'SNAP_RUNNER' ? 'BB' : (pick.side === 'LONG' ? '5.0R' : '3.8R'));
+        const beLogTxt = pick.position.bePct > 0 ? `BE: +%${pick.position.bePct.toFixed(2)}` : 'BE: kapalı';
         const exitDetailLog = isFixedOpen
           ? `SL: -%${pick.tradeSlPct.toFixed(2)} | 🎯 Limit TP (${moonR}): +%${pick.tradeMoonPct.toFixed(2)} (Erken BE/Trail YOK)`
-          : `SL: -%${pick.tradeSlPct.toFixed(2)} | BE: +%${pick.position.bePct.toFixed(2)} | Trail: +%${pick.tradeTp1Pct.toFixed(2)} | Moon(${moonR}): +%${pick.tradeMoonPct.toFixed(2)}`;
+          : `SL: -%${pick.tradeSlPct.toFixed(2)} | ${beLogTxt} | Trail: +%${pick.tradeTp1Pct.toFixed(2)} | Moon(${moonR}): +%${pick.tradeMoonPct.toFixed(2)}`;
         addLog(
           `🐋 POZİSYON AÇILDI: [${pick.side}] ${pick.sym} @ $${pick.curP.toFixed(4)} | ${pick.radarTag} | Teminat: $${pick.tradeMargin.toFixed(1)} (${pick.position.leverage}x) | ${exitDetailLog}`,
           'TRADE'
@@ -4333,9 +4340,9 @@ async function fastRiskLoop() {
 
       let exitReason = null;
 
-      // 🐋 MARSCOIN V4 — ASİMETRİK 15DK BALİNA RUNNER ÇIKIŞ MOTORU (Replay Backtest ile 1-e-1 Aynı!)
-      // LONG : 1.00R BE -> 1.20R+ Trail (0.70R) -> 3.00R+ Sıkı Trail (0.60R) -> 5.00R Moonshot
-      // SHORT: 0.75R BE -> 0.90R+ Trail (0.45R) -> 2.00R+ Kademeli Trail (0.50R) -> 3.50R Şelale Moonshot
+      // 🐋 MARSCOIN V10.5 — NEFES ALAN RUNNER ÇIKIŞ MOTORU (5dk Gerçekçi Sim + Replay 1-e-1 Aynı!)
+      // LONG : 1.00R BE -> 1.30R+ Trail (0.65R) -> 3.00R+ Sıkı Trail (0.60R) -> 5.00R Moonshot
+      // SHORT: Erken BE YOK -> 1.25R+ Trail (0.55R, min +0.70R kilit!) -> 2.20R+ Sıkı Trail (0.50R) -> 3.80R Moonshot
       const slBase = Math.max(0.75, Number(pos.slPct) || Number(CONFIG.slPct) || 1.50);
       const lockSpot = (pct) => isLong ? pos.entryPrice * (1 + pct / 100) : pos.entryPrice * (1 - pct / 100);
       const tightenStop = (pct) => {
@@ -4351,10 +4358,10 @@ async function fastRiskLoop() {
       const isFixedTp = pos.exitMode === 'FIXED_TP';
       const isSnapRunner = !isFixedTp && pos.exitMode === 'SNAP_RUNNER';
       const fixedTpMult = Number(pos.tpMult) || 2.00;
-      const beMult = isSnapRunner ? 0.65 : (isLong ? 1.00 : 0.75);
-      const trailStartMult = isSnapRunner ? 0.85 : (isLong ? 1.20 : 0.90);
-      const trailGapMult = isSnapRunner ? 0.40 : (isLong ? 0.70 : 0.45);
-      const moonMult = isFixedTp ? fixedTpMult : (isSnapRunner ? 1.35 : (isLong ? 5.00 : 3.50));
+      const beMult = isSnapRunner ? 0.65 : (isLong ? 1.00 : 0);
+      const trailStartMult = isSnapRunner ? 0.85 : (isLong ? 1.30 : 1.25);
+      const trailGapMult = isSnapRunner ? 0.40 : (isLong ? 0.65 : 0.55);
+      const moonMult = isFixedTp ? fixedTpMult : (isSnapRunner ? 1.35 : (isLong ? 5.00 : 3.80));
 
       const beGoal = slBase * beMult;
       const trailStart = slBase * trailStartMult;
@@ -4362,24 +4369,24 @@ async function fastRiskLoop() {
         ? (slBase * 0.40)
         : ((isLong && mfe >= slBase * 3.00)
           ? (slBase * 0.60)
-          : ((!isLong && mfe >= slBase * 2.00) ? (slBase * 0.50) : (slBase * trailGapMult)));
+          : ((!isLong && mfe >= slBase * 2.20) ? (slBase * 0.50) : (slBase * trailGapMult)));
       const moonGoal = isFixedTp
         ? (Number(pos.tpPctOverride) || Number(pos.moonPct) || (slBase * fixedTpMult))
         : (isSnapRunner ? (Number(pos.tpPctOverride) || (slBase * 1.35)) : (slBase * moonMult));
       const initMargin = pos.initialMargin || pos.margin || 20;
       const makerRate = Number(CONFIG.makerRate) || 0.0002;
 
-      // V9.0 Pro: FIXED_TP (BB 2.0R Limit-TP) pozisyonlarında erken BE/Trail ASLA kârı doğramaz!
+      // V10.5 Pro: FIXED_TP (BB/EMA_REJ 2.0R) pozisyonlarında erken BE/Trail ASLA kârı doğramaz; SHORT Runner erken 0.75R BE tuzağına düşmez!
       if (!isFixedTp) {
-        // Kademe 1: BE (LONG 1.0R / SHORT 0.75R) -> Stop +%0.15'e çekilir ($0 Risk!)
-        if (!pos.beLocked && mfe >= beGoal && move > 0.20) {
+        // Kademe 1: BE (Yalnızca LONG 1.0R -> Stop +%0.15'e çekilir; SHORT 1.25R Trail'e kadar nefes alır!)
+        if (beMult > 0 && !pos.beLocked && mfe >= beGoal && move > 0.20) {
           tightenStop(0.15);
           pos.beLocked = true;
           stateChanged = true;
           addLog(`🛡️ [${beMult.toFixed(2)}R BAŞABAŞ]: ${pos.symbol} (${pos.side}) +%${mfe.toFixed(2)} gördü ➔ Stop +%0.15 kâra çekildi ($0 Risk)!`, 'INFO');
         }
 
-        // Kademe 2: Runner İz Süren (LONG 1.2R-0.70R & 3.0R+-0.60R / SHORT 0.90R-0.45R)
+        // Kademe 2: Runner İz Süren (LONG 1.30R-0.65R & 3.0R+-0.60R / SHORT 1.25R-0.55R & 2.2R+-0.50R)
         if (mfe >= trailStart) {
           const trailPct = mfe - trailGap;
           const moved = tightenStop(trailPct);
@@ -5563,11 +5570,11 @@ function serveDashboardHtml() {
           </div>
         </div>
 
-        <div class="sidebar-section-title">🎯 V10.4 EQUAL-RISK PRO 10DK</div>
+        <div class="sidebar-section-title">🎯 V10.5 BREATH-RUNNER PRO 10DK</div>
         <div class="sidebar-plan-card">
-          <div class="sidebar-plan-row">⚖️ <b>Gerçek Eşit Risk:</b> Her işlem kendi SL'sine göre tam <b>%1.8</b> bütçeyle ölçeklenir · <b>00-05 TR %35 gece koruması</b>.</div>
-          <div class="sidebar-plan-row">🎯 <b>Çift Scout 10m (Boğa + Ayı):</b> <b>🟢 Bull Scout L (%60)</b> + <b>🎯 Trend Scout S (%45 · RSI≤55 · SL≤%1.95)</b>.</div>
-          <div class="sidebar-plan-row">🧲 <b>BB 2.0R · EMA20 Reddi 2.0R · Balina:</b> <b>16 Slot</b> · <b>≥$10M Likit</b> · <b>SHORT Balina ≥$5M (BTC&lt;EMA100)</b>.</div>
+          <div class="sidebar-plan-row">🚀 <b>Nefes Alan Çıkış:</b> SHORT erken BE yok · <b>1.25R Trail (0.55R mesafe -> min +0.70R kilit, 3.8R hedef)</b> · LONG <b>1.30R Trail</b>.</div>
+          <div class="sidebar-plan-row">⚖️ <b>Eşit Risk &amp; Korelasyon Kalkanı:</b> <b>Max 2 Balina/mum</b> · <b>%1.8 Eşit Risk</b> · <b>00-05 TR %35 gece koruması</b>.</div>
+          <div class="sidebar-plan-row">🎯 <b>5 Aktif Motor:</b> <b>Bull Scout (%65)</b> · <b>Trend Scout (%55)</b> · <b>EMA20 2R (%70)</b> · <b>BB 2R (%90)</b> · <b>Balina (%90)</b>.</div>
         </div>
 
         <details id="waDetails" style="margin-top:8px; background:var(--panel2); border:1px solid var(--border); border-radius:8px; padding:7px 9px;">
