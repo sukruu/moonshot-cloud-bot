@@ -118,10 +118,10 @@ function engineSnapshot() {
     userSlots: userRisk.maxSlots,
     userMargin: userRisk.marginPerTrade,
     gates: {
-      entry: 'V10.3 Dual-Scout · Her 10dk Boğa/Ayı En İyi Koin + BB 2R + REJ 2R + Balina · 16 Slot',
+      entry: 'V10.4 Equal-Risk Pro · Eşit Risk + RSI≤55 + SL≤%1.95 + Çift Scout 10m + BB/REJ 2R · 16 Slot',
       book: 'defter fiyatı',
       judge: 'açık',
-      flow: '10dk Yuvarlanan 15m (Boğa+Ayı Çift Scout · 4/4 Rejim Kârlı · 10dk Medyan Bekleme · ≥$10M)',
+      flow: '10dk Yuvarlanan 15m (Gerçek %1.8 Eşit Risk · Gece 00-05 %35 · 5/5 Veri Seti Kârlı · ≥$10M)',
       freqai: 'kapalı',
       funding: 'kapalı',
       team: 'kapalı'
@@ -1943,8 +1943,13 @@ function aggregate5mToRolling15m(k5m) {
 // 🧲 3. MOTOR — V10.0 TURBO BB Z-SCORE AŞIRI ALIM DÖNÜŞÜ (TÜM REJİMLER · ≥$10M · SAF 2.0R LİMİT TP · ERKEN BE/TRAİL YOK!)
 function getSessionRiskMult(tsMs = Date.now()) {
   const hourTR = new Date((Number(tsMs) || Date.now()) + (3 * 3600 * 1000)).getUTCHours();
-  if (hourTR >= 0 && hourTR < 4) return 0.50;  // 00:00–04:00 TR: %50 gece riski (diğer tüm saatler 7/24 tam aktif!)
+  if (hourTR >= 0 && hourTR < 5) return 0.35;  // V10.4: 00:00–05:00 TR ölü gece seansı %35 risk (artık $1.50 tabanı engellemiyor!)
   return 1.0;
+}
+
+function isNightScoutSBlocked(tsMs = Date.now()) {
+  const hourTR = new Date((Number(tsMs) || Date.now()) + (3 * 3600 * 1000)).getUTCHours();
+  return hourTR >= 1 && hourTR < 5;            // V10.4: 01:00–05:00 TR ölü saatte gürültülü SCOUT_S kapalı (ana motorlar + Bull Scout açık!)
 }
 
 function evaluateBbSnapback15m(k, idx, btcReg, btc15m = 0) {
@@ -2059,7 +2064,7 @@ function evaluateEmaRejection15m(k, idx, btc15m = 0) {
     if (pc > 0) trSum += (Math.max(hh - ll, Math.abs(hh - pc), Math.abs(ll - pc)) / pc) * 100;
   }
   const atr15 = trSum / 14;
-  if (atr15 < 0.60 || atr15 > 2.50) return null;
+  if (atr15 < 0.60 || atr15 > 1.30) return null;
 
   let ema20 = parseFloat(k[0][4]) || 0, ema50 = ema20;
   let rg = 0, rl = 0;
@@ -2079,11 +2084,12 @@ function evaluateEmaRejection15m(k, idx, btc15m = 0) {
     if (d > 0) rg += d; else rl -= d;
   }
   const rsi15 = rl === 0 ? 100 : 100 - (100 / (1 + rg / rl));
+  if (rsi15 > 55.0) return null;
   const move = ((c - o) / o) * 100;
   const open1h = parseFloat(k[idx - 4][1]) || o;
   const open3h = parseFloat(k[idx - 12][1]) || o;
   const open4h = parseFloat(k[idx - 16][1]) || o;
-  const slPct = Number(Math.max(0.90, Math.min(2.50, atr15 * 1.50)).toFixed(2));
+  const slPct = Number(Math.max(0.90, Math.min(1.95, atr15 * 1.50)).toFixed(2));
   const tpMult = 2.00;
   const tpPctOverride = Number((slPct * tpMult).toFixed(2));
 
@@ -2141,7 +2147,7 @@ function evaluateTrendScout15m(k, idx, btc15m = 0) {
     if (pc > 0) trSum += (Math.max(hh - ll, Math.abs(hh - pc), Math.abs(ll - pc)) / pc) * 100;
   }
   const atr15 = trSum / 14;
-  if (atr15 < 0.55 || atr15 > 2.50) return null;
+  if (atr15 < 0.55 || atr15 > 1.30) return null;
 
   let ema20 = parseFloat(k[0][4]) || 0, ema50 = ema20;
   let rg = 0, rl = 0;
@@ -2160,10 +2166,11 @@ function evaluateTrendScout15m(k, idx, btc15m = 0) {
     if (d > 0) rg += d; else rl -= d;
   }
   const rsi15 = rl === 0 ? 100 : 100 - (100 / (1 + rg / rl));
+  if (rsi15 > 55.0) return null;
   const open1h = parseFloat(k[idx - 4][1]) || o;
   const open3h = parseFloat(k[idx - 12][1]) || o;
   const open4h = parseFloat(k[idx - 16][1]) || o;
-  const slPct = Number(Math.max(0.90, Math.min(2.50, atr15 * 1.50)).toFixed(2));
+  const slPct = Number(Math.max(0.90, Math.min(1.95, atr15 * 1.50)).toFixed(2));
 
   return {
     approved: true,
@@ -2171,7 +2178,7 @@ function evaluateTrendScout15m(k, idx, btc15m = 0) {
     timeframe: 'SCT',
     isAux: true,
     isScout: true,
-    riskMult: 0.55,
+    riskMult: 0.45,
     exitMode: 'RUNNER',
     maxBars15: 24,
     side: 'SHORT',
@@ -2247,7 +2254,7 @@ function evaluateBullPullbackScout15m(k, idx, btc15m = 0) {
     timeframe: 'SCTL',
     isAux: true,
     isScout: true,
-    riskMult: 0.50,
+    riskMult: 0.60,
     exitMode: 'RUNNER',
     maxBars15: 24,
     side: 'LONG',
@@ -3299,6 +3306,7 @@ async function runHistoricalReplay(hours = 72, maxCoins = 120, opts = {}) {
           if (openSlots.filter(pSlot => pSlot.side === ev.side).length >= maxSameSide) continue;
           if (ev.engine === 'EMA_REJ' && openSlots.filter(pSlot => pSlot.engine === 'EMA_REJ').length >= maxRejSlots) continue;
           if (isScoutEng(ev.engine)) {
+            if (ev.engine === 'SCOUT_S' && isNightScoutSBlocked(evEntryTs)) continue;
             const coreInBar = barCoreCount.get(ev.candleTs) || 0;
             const sctLimitBar = openSlots.length < 4 ? 2 : 1;
             const sctAlreadyBar = barScoutTaken.get(ev.candleTs) || 0;
@@ -3311,14 +3319,15 @@ async function runHistoricalReplay(hours = 72, maxCoins = 120, opts = {}) {
           const slPctEst = ev.slPct;
           const sessionMult = getSessionRiskMult(evEntryTs);
           if (sessionMult <= 0) continue;
-          const rawRiskUsd = Math.max(1.50, bal * (replayRiskPct / 100) * (ev.riskMult || 1.0) * sessionMult);
+          // V10.4 Equal-Risk Pro: Gerçek orantılı risk ($1.50 / $4.00 taban hatası kaldırıldı · her SL aynı $ riski alır!)
+          const rawRiskUsd = Math.max(0.35, bal * (replayRiskPct / 100) * (ev.riskMult || 1.0) * sessionMult);
           const reqNominal = rawRiskUsd / ((slPctEst + 0.09) / 100);
           const reqMargin = reqNominal / replayLev;
           const bookedMargin = openSlots.reduce((acc, pSlot) => acc + (pSlot.margin || 0), 0);
-          const freeMargin = Math.max(0, bal - bookedMargin);
-          const maxSlotMargin = Math.max(5.5, bal * (0.94 / replaySlots));
+          const freeMargin = Math.max(0, (bal * 0.92) - bookedMargin);
+          const maxSlotMargin = Math.max(6.0, bal * 0.14);
           const actualMargin = Math.min(reqMargin, freeMargin, maxSlotMargin);
-          if (actualMargin < 4.0) continue;
+          if (actualMargin < 1.50) continue;
           const riskUsd = rawRiskUsd * (actualMargin / reqMargin);
 
           const rec = buildTradeRecord(ev, riskUsd, bal);
@@ -3811,7 +3820,7 @@ async function scanLoop() {
       const windowLbl = (secIn10mNow >= 4 && secIn10mNow <= 240)
         ? '⚡ 10dk Tarama AÇIK'
         : `⏳ Sonraki 10dk tarama: ${Math.ceil((600 - secIn10mNow) / 60)} dk`;
-      addLog(`🔥 [V10.3 Dual-Scout 10m]: ${validTickers.length} Saf Kripto (${topCandidates.length} Aday ≥$5M) | ${liveBtcRegime.label} | Lider: ${topCandidates[0].symbol} (24s: %${topCandidates[0].chg.toFixed(1)}) | ${windowLbl} | Slot: ${activePositions.length}/${CONFIG.maxSlots}`);
+      addLog(`🔥 [V10.4 Equal-Risk 10m]: ${validTickers.length} Saf Kripto (${topCandidates.length} Aday ≥$5M) | ${liveBtcRegime.label} | Lider: ${topCandidates[0].symbol} (24s: %${topCandidates[0].chg.toFixed(1)}) | ${windowLbl} | Slot: ${activePositions.length}/${CONFIG.maxSlots}`);
     }
 
     if (!global.whaleEvaluatedCandles) global.whaleEvaluatedCandles = new Map();
@@ -3911,8 +3920,8 @@ async function scanLoop() {
             const sigRej = evaluateEmaRejection15m(k15m, closedIdx, btc15mNow);
             if (sigRej && sigRej.approved) sig = sigRej;
           }
-          // 4. Öncelik: V10.2 10dk Trend Scout SHORT (Ana motorlar boş geçerse en iyi düşüş trendi koinini seçer · RUNNER · %55 risk!)
-          if (!sig && vol24MNow >= 10) {
+          // 4. Öncelik: V10.4 10dk Trend Scout SHORT (01:00-05:00 TR ölü gece hariç · RSI≤55 · SL≤%1.95 · %45 risk!)
+          if (!sig && vol24MNow >= 10 && !isNightScoutSBlocked(now)) {
             const sigSct = evaluateTrendScout15m(k15m, closedIdx, btc15mNow);
             if (sigSct && sigSct.approved) sig = sigSct;
           }
@@ -3987,20 +3996,19 @@ async function scanLoop() {
 
         if (activePositions.length >= CONFIG.maxSlots) continue;
 
-        // 🚀 TRINITY RİSK BÜTÇESİ: Balina (15dk+1S) %100 risk, BB Dönüş & Gizli Dağıtım %50 risk (Limitsiz Bileşik!)
+        // 🚀 V10.4 EQUAL-RISK PRO: Gerçek orantılı risk ($1.50 / $4.00 taban hatası kaldırıldı · her SL aynı $ riski alır!)
         const tradeSlPct = Number((sig.slPctOverride || Math.max(1.00, Math.min(2.80, sig.atr15 * 1.50))).toFixed(2));
         const cfgRiskPct = Math.max(1.0, Math.min(10.0, Number(CONFIG.riskPct) || 6.0));
         const sessionRiskMult = getSessionRiskMult(now);
         if (sessionRiskMult <= 0) continue;
         const engineRiskMult = (Number(sig.riskMult) || 1.0) * sessionRiskMult;
-        const equityRiskUsd = Math.max(1.50, Number((balance * (cfgRiskPct / 100) * engineRiskMult).toFixed(2)));
-        const targetRiskUsd = circuitOn ? Math.max(1.50, Number((equityRiskUsd * 0.50).toFixed(2))) : equityRiskUsd;
+        const equityRiskUsd = Math.max(0.35, Number((balance * (cfgRiskPct / 100) * engineRiskMult).toFixed(2)));
+        const targetRiskUsd = circuitOn ? Math.max(0.25, Number((equityRiskUsd * 0.50).toFixed(2))) : equityRiskUsd;
         const effectiveStopCostPct = tradeSlPct + 0.09;
         const targetNominal = targetRiskUsd / (effectiveStopCostPct / 100);
         const levNow = Math.max(5, Math.min(40, Number(CONFIG.leverage) || 15));
-        const slotCount = Math.max(1, Number(CONFIG.maxSlots) || 16);
-        const maxAllowedMargin = Math.max(5.5, balance * (0.94 / slotCount));
-        const tradeMargin = Number(Math.max(4.0, Math.min(maxAllowedMargin, targetNominal / levNow)).toFixed(2));
+        const maxAllowedMargin = Math.max(6.0, balance * 0.14);
+        const tradeMargin = Number(Math.max(1.50, Math.min(maxAllowedMargin, targetNominal / levNow)).toFixed(2));
         const effectiveRiskUsd = Number((tradeMargin * levNow * (effectiveStopCostPct / 100)).toFixed(2));
 
         let fillPx = side === "LONG" ? curP * 1.0002 : curP * 0.9998;
@@ -4209,9 +4217,9 @@ async function scanLoop() {
           if ((coreInScan + scoutOpenedThisScan) >= scoutTargetThisScan) continue;
         }
         if (pick.isAux && activeAuxCount >= maxAuxSlots) continue;
-        const curFree = Math.max(0, Number((balance - bookedMargin).toFixed(2)));
+        const curFree = Math.max(0, Number(((balance * 0.92) - bookedMargin).toFixed(2)));
         let finalMargin = Math.min(pick.tradeMargin, curFree);
-        if (finalMargin < 4.0) continue;
+        if (finalMargin < 1.50) continue;
         pick.tradeMargin = Number(finalMargin.toFixed(2));
         pick.position.margin = pick.tradeMargin;
         pick.position.initialMargin = pick.tradeMargin;
@@ -5555,11 +5563,11 @@ function serveDashboardHtml() {
           </div>
         </div>
 
-        <div class="sidebar-section-title">🎯 V10.3 DUAL-SCOUT 10DK MOTOR</div>
+        <div class="sidebar-section-title">🎯 V10.4 EQUAL-RISK PRO 10DK</div>
         <div class="sidebar-plan-card">
-          <div class="sidebar-plan-row">🎯 <b>Çift Scout 10m (Boğa + Ayı):</b> Her 10dk en yüksek olasılıklı koini seçer · <b>🟢 Bull Scout L</b> (BTC&gt;EMA50/100) + <b>🎯 Trend Scout S</b>.</div>
-          <div class="sidebar-plan-row">🧲 <b>BB 2.0R &amp; EMA20 Reddi 2.0R:</b> Tüm rejimler · <b>≥$10M</b> · <b>Saf 2.0R Limit TP</b>.</div>
-          <div class="sidebar-plan-row">🐋 <b>Balina &amp; Kalkan:</b> <b>16 Slot · %1.8 Risk</b> · <b>LONG ≥$10M</b> · <b>SHORT ≥$5M (BTC&lt;EMA100)</b>.</div>
+          <div class="sidebar-plan-row">⚖️ <b>Gerçek Eşit Risk:</b> Her işlem kendi SL'sine göre tam <b>%1.8</b> bütçeyle ölçeklenir · <b>00-05 TR %35 gece koruması</b>.</div>
+          <div class="sidebar-plan-row">🎯 <b>Çift Scout 10m (Boğa + Ayı):</b> <b>🟢 Bull Scout L (%60)</b> + <b>🎯 Trend Scout S (%45 · RSI≤55 · SL≤%1.95)</b>.</div>
+          <div class="sidebar-plan-row">🧲 <b>BB 2.0R · EMA20 Reddi 2.0R · Balina:</b> <b>16 Slot</b> · <b>≥$10M Likit</b> · <b>SHORT Balina ≥$5M (BTC&lt;EMA100)</b>.</div>
         </div>
 
         <details id="waDetails" style="margin-top:8px; background:var(--panel2); border:1px solid var(--border); border-radius:8px; padding:7px 9px;">
